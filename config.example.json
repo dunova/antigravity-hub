@@ -1,0 +1,71 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 18088,
+    "log_level": "INFO"
+  },
+  "oauth": {
+    "client_id": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+    "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
+    "token_endpoint": "https://oauth2.googleapis.com/token",
+    "quota_endpoint": "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary",
+    "user_agent": "vscode/1.X.X (Antigravity/4.3.0)"
+  },
+  "rotator": {
+    "check_interval_seconds": 60,
+    "pro_depletion_threshold": 0.05,
+    "flash_depletion_threshold": 0.05,
+    "cooldown_period_seconds": 1800,
+    "enable_hot_switch": true,
+    "enable_session_recovery": true
+  },
+  "unblock_wizard": {
+    "default_browser": "Google Chrome",
+    "profile_base_dir": "~/.antigravity_hub/browser_profiles",
+    "watch_interval_seconds": 5
+  },
+  "accounts_pool_example": [
+    {
+      "id": "acc_sample_01",
+      "email": "user1@example.com",
+      "name": "Dev Account 1",
+      "tier": "PRO",
+      "priority": 1,
+      "token": {
+        "access_token": "ya29.sample_token_mock_placeholder_1",
+        "refresh_token": "1//sample_refresh_token_mock_1",
+        "expiry_timestamp": 1770000000
+      },
+      "validation_blocked": false,
+      "gemini": {
+        "quota_5h": 1.0,
+        "quota_weekly": 0.85
+      },
+      "claude": {
+        "quota_5h": 1.0,
+        "quota_weekly": 0.90
+      }
+    },
+    {
+      "id": "acc_sample_02",
+      "email": "user2@example.com",
+      "name": "Dev Account 2",
+      "tier": "PRO",
+      "priority": 2,
+      "token": {
+        "access_token": "ya29.sample_token_mock_placeholder_2",
+        "refresh_token": "1//sample_refresh_token_mock_2",
+        "expiry_timestamp": 1770000000
+      },
+      "validation_blocked": false,
+      "gemini": {
+        "quota_5h": 0.95,
+        "quota_weekly": 0.80
+      },
+      "claude": {
+        "quota_5h": 0.92,
+        "quota_weekly": 0.88
+      }
+    }
+  ]
+}

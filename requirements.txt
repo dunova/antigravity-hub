@@ -1,0 +1,5 @@
+# Antigravity Hub 采用 Python 原生标准库实现，零强制第三方依赖。
+# 适用于 Python 3.9+ 环境 (macOS / Linux)。
+
+# 可选性能优化依赖（非强制）：
+# urllib3>=2.0.0
