@@ -96,6 +96,20 @@ class AntigravitySessionRecoveryManager:
                                 eff_mtime = sm
                         except Exception:
                             pass
+                    # 二级嵌套子代理穿透（Coordinator -> Orchestrator -> Workers）
+                    sub_nested = os.path.join(self.brain_dir, sub_id, ".system_generated", "subagents")
+                    if os.path.isdir(sub_nested):
+                        for n_fname in os.listdir(sub_nested):
+                            if n_fname.endswith(".json"):
+                                nid = n_fname[:-5]
+                                ntpath = os.path.join(self.brain_dir, nid, ".system_generated", "logs", "transcript.jsonl")
+                                if os.path.exists(ntpath):
+                                    try:
+                                        nm = os.path.getmtime(ntpath)
+                                        if nm > eff_mtime:
+                                            eff_mtime = nm
+                                    except Exception:
+                                        pass
         return eff_mtime
 
     def scan_active_sessions(self, max_idle_seconds: int = 2700) -> List[Dict[str, Any]]:
