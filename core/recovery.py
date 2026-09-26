@@ -76,9 +76,31 @@ class AntigravitySessionRecoveryManager:
             logger.debug(f"嗅探 language_server 进程异常: {e}")
         return env
 
-    def scan_active_sessions(self, max_idle_seconds: int = 1800) -> List[Dict[str, Any]]:
+    def get_effective_session_mtime(self, session_dir: str, root_mtime: float) -> float:
         """
-        扫描 brain 目录，识别最近活跃的会话。
+        【子代理活跃向上穿透】
+        在 Teamwork / 多智能体架构下，主会话等待子代理时自身 transcript 不会频繁更新；
+        必须向上穿透统计其所有在途 Subagents 的最新活跃时间。
+        """
+        eff_mtime = root_mtime
+        sub_dir = os.path.join(session_dir, ".system_generated", "subagents")
+        if os.path.isdir(sub_dir):
+            for fname in os.listdir(sub_dir):
+                if fname.endswith(".json"):
+                    sub_id = fname[:-5]
+                    sub_tpath = os.path.join(self.brain_dir, sub_id, ".system_generated", "logs", "transcript.jsonl")
+                    if os.path.exists(sub_tpath):
+                        try:
+                            sm = os.path.getmtime(sub_tpath)
+                            if sm > eff_mtime:
+                                eff_mtime = sm
+                        except Exception:
+                            pass
+        return eff_mtime
+
+    def scan_active_sessions(self, max_idle_seconds: int = 2700) -> List[Dict[str, Any]]:
+        """
+        扫描 brain 目录，识别最近活跃的会话（默认 45 分钟窗口，已实装子代理活跃穿透）。
         """
         if not os.path.exists(self.brain_dir):
             return []
@@ -100,14 +122,15 @@ class AntigravitySessionRecoveryManager:
 
             try:
                 mtime = os.path.getmtime(transcript_path)
-                if (now - mtime) > max_idle_seconds:
+                eff_mtime = self.get_effective_session_mtime(sess_path, mtime)
+                if (now - eff_mtime) > max_idle_seconds:
                     continue
 
                 active_sessions.append({
                     "session_id": session_id,
                     "session_dir": sess_path,
                     "transcript_path": transcript_path,
-                    "last_modified": mtime
+                    "last_modified": eff_mtime
                 })
             except Exception:
                 continue
