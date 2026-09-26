@@ -43,6 +43,7 @@ class AntigravityQuotaRotator:
         self.data_dir = data_dir
         self.switcher = AntigravityPhysicalManager(data_dir=self.data_dir)
         self.recovery = AntigravitySessionRecoveryManager()
+        self.exhausted_cooldown_map: Dict[str, float] = {}
 
     def get_manual_lock(self) -> Optional[Dict[str, Any]]:
         """检查是否存在有效的人工干预保护锁"""
@@ -60,14 +61,18 @@ class AntigravityQuotaRotator:
     def pick_best_standby_account(self, accounts: Dict[str, Any], current_email: str) -> Optional[str]:
         """
         级联瀑布选号算法：
-        1. 排除当前正在使用的账号；
+        1. 排除当前正在使用的账号及处于 30 分钟枯竭冷却期内的账号；
         2. 排除处于 validation_blocked 风控拦截态的账号；
-        3. 排除 5 小时配额已耗尽 (< 0.05) 的账号；
+        3. 排除 5 小时配额 (< 0.05) 或周度配额 (< 0.005) 已耗尽的账号；
         4. 综合打分：优先健康账号，按优先级 (priority) 与剩余配额综合排序。
         """
+        now_ts = time.time()
         candidates = []
         for email, acc in accounts.items():
             if email == current_email:
+                continue
+
+            if self.exhausted_cooldown_map.get(email, 0) > now_ts:
                 continue
 
             if acc.get("validation_blocked"):
@@ -77,7 +82,7 @@ class AntigravityQuotaRotator:
             g_5h = _safe_float(gemini_info.get("quota_5h", 1.0))
             g_weekly = _safe_float(gemini_info.get("quota_weekly", 1.0))
 
-            if g_5h < self.depletion_threshold:
+            if g_5h < self.depletion_threshold or g_weekly < 0.005:
                 continue
 
             priority = acc.get("priority", 999)
@@ -135,11 +140,14 @@ class AntigravityQuotaRotator:
             self.switcher.save_hub_accounts(hub_data)
 
             # 配额充沛无需轮换
-            if g_5h >= self.depletion_threshold:
-                logger.info(f"🟢 [配额健康] 账号: {active_email} · 5h 配额: {round(g_5h * 100, 1)}%")
+            if g_5h >= self.depletion_threshold and g_wk >= 0.005:
+                logger.info(f"🟢 [配额健康] 账号: {active_email} · 5h 配额: {round(g_5h * 100, 1)}% · 周配额: {round(g_wk * 100, 1)}%")
                 return False
 
-            logger.warning(f"⚠️ [配额耗尽预警] 账号: {active_email} · 5h 配额剩余 {round(g_5h * 100, 1)}% < 阈值，准备轮换！")
+            logger.warning(f"⚠️ [配额耗尽预警] 账号: {active_email} · 5h={round(g_5h * 100, 1)}%, 周={round(g_wk * 100, 1)}%，准备轮换！")
+
+        # 记录 30 分钟防乒乓冷却锁
+        self.exhausted_cooldown_map[active_email] = time.time() + 1800.0
 
         # 3. 寻找最佳备用候选
         next_email = self.pick_best_standby_account(accounts, active_email)
