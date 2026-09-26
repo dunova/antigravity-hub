@@ -12,6 +12,14 @@
   <img src="https://img.shields.io/badge/License-MIT-black?style=flat-square" alt="License" />
 </p>
 
+<p align="center">
+  <img src="docs/assets/preview.png" alt="Antigravity Hub Neo-Brutalism Dashboard UI Preview" width="100%" />
+</p>
+
+<p align="center">
+  <em>图：Antigravity Hub 生产级实际 UI 界面（基于新野兽派 Neo-Brutalism 设计规范，呈现 15 账号并发纳管、双模型 5h/周度双轨配额条、精确恢复倒计时、实时状态标签、一键隔离解封与安全锁定）</em>
+</p>
+
 ---
 
 ## 📖 诞生背景与核心痛点
