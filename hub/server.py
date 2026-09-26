@@ -30,10 +30,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.29.0"
-__canonical_version_tag__ = "20260926-v2.29.0-OAUTH_AUTO_INGEST_AND_RELAY_FIX"
-__last_updated__ = "2026-09-26 15:05:00"
-__canonical_doctrine__ = "Google OAuth 浏览器一键授权自动取 Token + 钥匙串一键吸纳 + 连续换号防乒乓接力"
+__version__ = "2.30.0"
+__canonical_version_tag__ = "20260926-v2.30.0-SORT_TRI_STATE_QUOTA"
+__last_updated__ = "2026-09-26 15:25:00"
+__canonical_doctrine__ = "Gemini/Claude 配额表头三态循环排序 (周升序→5h升序→恢复默认) + Google OAuth 自动授权"
 
 
 # 配置常量
@@ -965,6 +965,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             draggable="true"
             style="background-color: {row_bg};"
             data-email="{email}"
+            data-orig-idx="{idx}"
             data-gemini-5h="{g_5h}"
             data-gemini-w="{g_w}"
             data-claude-5h="{c_5h}"
@@ -1457,6 +1458,42 @@ def render_dashboard_html() -> str:
         .th-claude {{ background: #FB923C; text-align: center; }}
         .th-warmup {{ background: #C084FC; text-align: center; }}
         .th-action {{ background: #4ADE80; text-align: center; }}
+
+        /* 🔀 Gemini / Claude 表头三态循环排序交互与角标 */
+        .th-sortable {{
+            cursor: pointer;
+            user-select: none;
+            transition: filter 0.12s ease;
+        }}
+        .th-sortable:hover {{
+            filter: brightness(0.92);
+        }}
+        .th-sortable:active {{
+            filter: brightness(0.85);
+        }}
+        .th-sort-inner {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            width: 100%;
+            box-sizing: border-box;
+        }}
+        .sort-badge {{
+            display: inline-flex;
+            align-items: center;
+            background: #000000;
+            color: #FFFFFF;
+            font-size: 9px;
+            font-weight: 900;
+            padding: 0 4px;
+            height: 16px;
+            line-height: 16px;
+            border-radius: 3px;
+            box-shadow: 1px 1px 0px rgba(0,0,0,0.3);
+            letter-spacing: 0;
+            white-space: nowrap;
+        }}
 
         tbody tr {{
             height: 33px;
@@ -2369,7 +2406,7 @@ def render_dashboard_html() -> str:
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                     ANTIGRAVITY HUB
                 </span>
-                <span class="version-badge font-mono">v2.27.0</span>
+                <span class="version-badge font-mono">v{__version__}</span>
             </div>
             <div class="top-center">
                 {active_pill_html}
@@ -2432,8 +2469,18 @@ def render_dashboard_html() -> str:
                         <th class="col-center th-num" title="拖拽手柄与序号">#</th>
                         <th class="col-center th-status">状态</th>
                         <th class="th-email">账号 (点击复制)</th>
-                        <th class="th-gemini">Gemini 配额 (5h / 周)</th>
-                        <th class="th-claude">Claude 配额 (5h / 周)</th>
+                        <th class="th-gemini th-sortable" onclick="cycleGeminiSort()" title="点击切换排序：周额度 (少→多) → 5h额度 (少→多) → 恢复默认">
+                            <div class="th-sort-inner">
+                                <span>Gemini 配额 (5h / 周)</span>
+                                <span id="sort-gemini-badge" class="sort-badge font-mono" style="display:none;"></span>
+                            </div>
+                        </th>
+                        <th class="th-claude th-sortable" onclick="cycleClaudeSort()" title="点击切换排序：周额度 (少→多) → 5h额度 (少→多) → 恢复默认">
+                            <div class="th-sort-inner">
+                                <span>Claude 配额 (5h / 周)</span>
+                                <span id="sort-claude-badge" class="sort-badge font-mono" style="display:none;"></span>
+                            </div>
+                        </th>
                         <th class="col-center th-action" title="切换账号与上下微调顺序">操作</th>
                     </tr>
                 </thead>
@@ -3000,6 +3047,73 @@ def render_dashboard_html() -> str:
         let currentPage = 1;
         const PAGE_SIZE = 15;
         let __cachedTbodyHTML = '';
+        let currentSortMode = 'default'; // 'default' | 'gemini_w_asc' | 'gemini_5h_asc' | 'claude_w_asc' | 'claude_5h_asc'
+
+        // 🔀 更新 Gemini / Claude 表头排序角标指示器
+        function updateSortBadges() {{
+            const gBadge = document.getElementById('sort-gemini-badge');
+            const cBadge = document.getElementById('sort-claude-badge');
+
+            if (gBadge) {{
+                if (currentSortMode === 'gemini_w_asc') {{
+                    gBadge.textContent = '周少→多';
+                    gBadge.style.display = 'inline-flex';
+                }} else if (currentSortMode === 'gemini_5h_asc') {{
+                    gBadge.textContent = '5h少→多';
+                    gBadge.style.display = 'inline-flex';
+                }} else {{
+                    gBadge.textContent = '';
+                    gBadge.style.display = 'none';
+                }}
+            }}
+
+            if (cBadge) {{
+                if (currentSortMode === 'claude_w_asc') {{
+                    cBadge.textContent = '周少→多';
+                    cBadge.style.display = 'inline-flex';
+                }} else if (currentSortMode === 'claude_5h_asc') {{
+                    cBadge.textContent = '5h少→多';
+                    cBadge.style.display = 'inline-flex';
+                }} else {{
+                    cBadge.textContent = '';
+                    cBadge.style.display = 'none';
+                }}
+            }}
+        }}
+
+        // 🎯 Gemini 表头三态循环点击排序：周额度(少→多) → 5h额度(少→多) → 恢复默认
+        function cycleGeminiSort() {{
+            if (currentSortMode === 'default' || currentSortMode.startsWith('claude_')) {{
+                currentSortMode = 'gemini_w_asc';
+                showToast("📊 已按 Gemini 周额度 (从少到多) 升序排列", "info");
+            }} else if (currentSortMode === 'gemini_w_asc') {{
+                currentSortMode = 'gemini_5h_asc';
+                showToast("📊 已按 Gemini 5h 额度 (从少到多) 升序排列", "info");
+            }} else {{
+                currentSortMode = 'default';
+                showToast("🔄 已恢复账号列表默认排序", "info");
+            }}
+            currentPage = 1;
+            updateSortBadges();
+            filterTable();
+        }}
+
+        // 🎯 Claude 表头三态循环点击排序：周额度(少→多) → 5h额度(少→多) → 恢复默认
+        function cycleClaudeSort() {{
+            if (currentSortMode === 'default' || currentSortMode.startsWith('gemini_')) {{
+                currentSortMode = 'claude_w_asc';
+                showToast("📊 已按 Claude 周额度 (从少到多) 升序排列", "info");
+            }} else if (currentSortMode === 'claude_w_asc') {{
+                currentSortMode = 'claude_5h_asc';
+                showToast("📊 已按 Claude 5h 额度 (从少到多) 升序排列", "info");
+            }} else {{
+                currentSortMode = 'default';
+                showToast("🔄 已恢复账号列表默认排序", "info");
+            }}
+            currentPage = 1;
+            updateSortBadges();
+            filterTable();
+        }}
 
         // 页面初始加载时备份原始行数据
         window.addEventListener('DOMContentLoaded', function() {{
@@ -3007,6 +3121,7 @@ def render_dashboard_html() -> str:
             if (tbody && tbody.children.length > 0) {{
                 __cachedTbodyHTML = tbody.innerHTML;
             }}
+            updateSortBadges();
             filterTable();
         }});
 
@@ -3050,15 +3165,50 @@ def render_dashboard_html() -> str:
 
         function filterTable() {{
             ensureDataResilience();
+            const tbody = document.getElementById('account-tbody');
+            if (!tbody) return;
+
+            const allRows = Array.from(tbody.querySelectorAll('tr.account-row'));
+            if (allRows.length === 0) return;
+
+            // 1. 🔀 根据 currentSortMode 对全量账号行进行排序并重排 DOM
+            allRows.sort((a, b) => {{
+                if (currentSortMode !== 'default') {{
+                    let valA = 0;
+                    let valB = 0;
+                    if (currentSortMode === 'gemini_w_asc') {{
+                        valA = parseFloat(a.getAttribute('data-gemini-w') || '0');
+                        valB = parseFloat(b.getAttribute('data-gemini-w') || '0');
+                    }} else if (currentSortMode === 'gemini_5h_asc') {{
+                        valA = parseFloat(a.getAttribute('data-gemini-5h') || '0');
+                        valB = parseFloat(b.getAttribute('data-gemini-5h') || '0');
+                    }} else if (currentSortMode === 'claude_w_asc') {{
+                        valA = parseFloat(a.getAttribute('data-claude-w') || '0');
+                        valB = parseFloat(b.getAttribute('data-claude-w') || '0');
+                    }} else if (currentSortMode === 'claude_5h_asc') {{
+                        valA = parseFloat(a.getAttribute('data-claude-5h') || '0');
+                        valB = parseFloat(b.getAttribute('data-claude-5h') || '0');
+                    }}
+                    if (valA !== valB) {{
+                        return valA - valB; // 严格从小到大升序
+                    }}
+                }}
+                // 默认模式或数值相同时按原始入库索引稳定对齐
+                const origA = parseInt(a.getAttribute('data-orig-idx') || '0', 10);
+                const origB = parseInt(b.getAttribute('data-orig-idx') || '0', 10);
+                return origA - origB;
+            }});
+            allRows.forEach(tr => tbody.appendChild(tr));
+
+            // 2. 搜索框实时过滤
             const input = document.getElementById('account-search');
             const q = input ? input.value.toLowerCase().trim() : '';
             const clearBtn = document.getElementById('clear-search');
             if (clearBtn) clearBtn.style.display = q ? 'inline-block' : 'none';
 
-            const rows = Array.from(document.querySelectorAll('#account-tbody tr.account-row'));
+            // 3. 分类 Tab 过滤
             const matchedRows = [];
-
-            rows.forEach(tr => {{
+            allRows.forEach(tr => {{
                 const email = tr.getAttribute('data-email') || '';
                 const matchQuery = !q || email.toLowerCase().includes(q);
 
@@ -3084,7 +3234,7 @@ def render_dashboard_html() -> str:
                 }}
             }});
 
-            // 🎯 单页上限 15 个的分页算法
+            // 4. 🎯 单页上限 15 个的分页算法
             const totalMatched = matchedRows.length;
             const totalPages = Math.max(1, Math.ceil(totalMatched / PAGE_SIZE));
             if (currentPage > totalPages) currentPage = totalPages;
@@ -3101,13 +3251,12 @@ def render_dashboard_html() -> str:
                 }}
             }});
 
-            // 顶栏计数器
+            // 5. 顶栏计数器与底部分页栏
             const counter = document.getElementById('filter-counter');
             if (counter) {{
-                counter.innerHTML = `显示: <b>${{Math.min(PAGE_SIZE, totalMatched)}}</b> / ${{rows.length}}`;
+                counter.innerHTML = `显示: <b>${{Math.min(PAGE_SIZE, totalMatched)}}</b> / ${{allRows.length}}`;
             }}
 
-            // 底部分页控制栏状态同步
             const pageIndicator = document.getElementById('page-indicator');
             if (pageIndicator) {{
                 pageIndicator.innerHTML = `第 <b>${{currentPage}}</b> / ${{totalPages}} 页`;
@@ -3121,16 +3270,28 @@ def render_dashboard_html() -> str:
             if (btnPrev) btnPrev.disabled = (currentPage <= 1);
             if (btnNext) btnNext.disabled = (currentPage >= totalPages);
 
-            // 🎯 尊重用户绝对控制权：彻底停发 resizeWindow，完全交由用户自由拖拉设置窗口尺寸！
+            updateSortBadges();
         }}
 
-        // 支持 URL 参数 ?filter=usable 自动触发筛选
+        // 支持 URL 参数 ?filter=usable 自动触发筛选与 ?sort=gemini_w 自动触发排序
         window.addEventListener('DOMContentLoaded', () => {{
             const urlParams = new URLSearchParams(window.location.search);
             const f = urlParams.get('filter');
             if (f) {{
                 const btn = document.querySelector(`.filter-tab[data-filter="${{f}}"]`);
                 if (btn) setFilter(f, btn);
+            }}
+            const s = urlParams.get('sort');
+            if (s === 'gemini_w') {{
+                cycleGeminiSort();
+            }} else if (s === 'gemini_5h') {{
+                cycleGeminiSort();
+                cycleGeminiSort();
+            }} else if (s === 'claude_w') {{
+                cycleClaudeSort();
+            }} else if (s === 'claude_5h') {{
+                cycleClaudeSort();
+                cycleClaudeSort();
             }}
         }});
 
@@ -3163,6 +3324,10 @@ def render_dashboard_html() -> str:
 
         // 🔼🔽 一键上下微调行顺序
         function moveAccountRow(email, direction) {{
+            if (currentSortMode !== 'default') {{
+                showToast("⚠️ 当前处于排序模式，请先点击表头恢复默认排序后再调序", "warning");
+                return;
+            }}
             isReordering = true;
             const tbody = document.getElementById('account-tbody');
             if (!tbody) return;
@@ -3187,8 +3352,9 @@ def render_dashboard_html() -> str:
             const tbody = document.getElementById('account-tbody');
             if (!tbody) return;
 
-            // 1. 即时平滑更新前端行号
+            // 1. 即时平滑更新前端行号与原始索引
             tbody.querySelectorAll('tr.account-row').forEach((r, i) => {{
+                r.setAttribute('data-orig-idx', i + 1);
                 const numEl = r.querySelector('.row-num');
                 if (numEl) numEl.textContent = i + 1;
             }});
@@ -3226,6 +3392,11 @@ def render_dashboard_html() -> str:
                 row.setAttribute('draggable', 'true');
 
                 row.ondragstart = function(e) {{
+                    if (currentSortMode !== 'default') {{
+                        e.preventDefault();
+                        showToast("⚠️ 当前处于排序模式，请先点击表头恢复默认排序后再拖拽", "warning");
+                        return;
+                    }}
                     isReordering = true;
                     dragSrcRow = row;
                     row.style.opacity = '0.35';
@@ -3351,7 +3522,7 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps(data).encode("utf-8"))
         elif parsed.path == "/api/export":
-            from .importer import export_accounts_backup
+            from import_accounts_hub import export_accounts_backup
             backup_data = export_accounts_backup(ACCOUNTS_HUB_FILE)
             resp_bytes = json.dumps(backup_data, indent=2, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
@@ -3371,7 +3542,7 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(info, ensure_ascii=False).encode("utf-8"))
             return
         elif parsed.path == "/oauth-callback":
-            from .importer import exchange_oauth_code_and_ingest
+            from import_accounts_hub import exchange_oauth_code_and_ingest
             qs = urllib.parse.parse_qs(parsed.query)
             code = qs.get("code", [""])[0]
             state = qs.get("state", [""])[0]
@@ -3571,7 +3742,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             self.wfile.write(html.encode("utf-8"))
 
         elif parsed.path == "/api/oauth/start":
-            from .importer import build_google_oauth_url
+            from import_accounts_hub import build_google_oauth_url
             isolated = False
             open_browser = True
             try:
@@ -3618,7 +3789,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             return
 
         elif parsed.path == "/api/oauth/manual_code":
-            from .importer import exchange_oauth_code_and_ingest
+            from import_accounts_hub import exchange_oauth_code_and_ingest
             code_or_url = ""
             try:
                 if post_data.strip().startswith("{"):
@@ -3640,7 +3811,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             return
 
         elif parsed.path == "/api/ingest_active":
-            from .importer import ingest_system_keychain_or_creds
+            from import_accounts_hub import ingest_system_keychain_or_creds
             ok, email, msg = ingest_system_keychain_or_creds(ACCOUNTS_HUB_FILE)
             if ok:
                 threading.Thread(target=ENGINE.refresh_all_quotas, daemon=True).start()
@@ -3651,7 +3822,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             return
 
         elif parsed.path == "/api/import":
-            from .importer import import_accounts_payload
+            from import_accounts_hub import import_accounts_payload
             payload_str = ""
             try:
                 if post_data.strip().startswith("{") or post_data.strip().startswith("["):
