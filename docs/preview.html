@@ -1,0 +1,2744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity Hub · Neo-Brutalism</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        :root {
+            --bg-color: #F4F0EA;
+            --text-color: #000000;
+            --border-black: 2px solid #000000;
+            --border-thick: 2.5px solid #000000;
+            --shadow-hard: 4px 4px 0px #000000;
+            --shadow-card: 5px 5px 0px #000000;
+            --shadow-btn: 2.5px 2.5px 0px #000000;
+            --shadow-sm: 1.5px 1.5px 0px #000000;
+            --radius-card: 10px;
+            --radius-btn: 6px;
+            --radius-pill: 4px;
+            --radius-modal: 12px;
+            --yellow-main: #FFE600;
+            --cyan-accent: #00F0FF;
+            --pink-accent: #FF2A85;
+            --green-accent: #22C55E;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            min-height: 100% !important;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Space Grotesk", sans-serif;
+            padding: 16px 0 24px 0;
+            margin: 0;
+            font-size: 12px;
+            line-height: 1.2;
+            -webkit-font-smoothing: antialiased;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        /* 彻底根除滚动条，绝不允许 WebKit 垂直滚动条挤压视口导致居中偏心 */
+        ::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+        }
+
+        .font-mono {
+            font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 🚀 弹性全自适应版心：宽度自由撑开，两翼 16px 舒适呼吸留白，支持用户自由拖拽缩放任意尺寸 */
+        .app-container {
+            width: 100%;
+            max-width: 1040px;
+            min-width: 580px;
+            margin: 0 auto;
+            box-sizing: border-box;
+            padding: 0 16px;
+            flex-shrink: 0;
+        }
+
+        /* 顶部黑黄斜纹加载条 */
+        #loading-bar {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: repeating-linear-gradient(45deg, #000, #000 8px, #FFE600 8px, #FFE600 16px);
+            z-index: 9999;
+        }
+        .htmx-request#loading-bar, .htmx-request #loading-bar {
+            display: block;
+        }
+
+        /* 顶栏控制条：新野兽派高饱和柠檬黄底 + 3px 纯黑粗框 + 4px 硬投影 + 10px 微圆角 (弹性撑满版心) */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: var(--border-thick);
+            border-radius: var(--radius-card);
+            background: var(--yellow-main);
+            padding: 10px 16px;
+            box-shadow: var(--shadow-hard);
+            margin-bottom: 8px;
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box;
+            white-space: nowrap !important;
+        }
+
+        .top-left {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            flex: 1 1 0;
+        }
+
+        .top-center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 2 1 0;
+        }
+
+        .top-right {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 1 1 0;
+        }
+
+        .brand-title {
+            background: #FFFFFF;
+            color: #000000;
+            font-size: 12.5px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            padding: 0 12px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        .active-pill {
+            background: #FFFFFF;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            padding: 0 16px;
+            height: 30px;
+            min-width: 185px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 900;
+            box-shadow: 2.5px 2.5px 0px #000000;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            cursor: pointer;
+            box-sizing: border-box;
+            transition: all 0.08s ease;
+        }
+        .active-pill:hover {
+            background: #FFE600;
+            transform: translate(-1px, -1px);
+            box-shadow: 3.5px 3.5px 0px #000000;
+        }
+
+        .active-pill.locked-manual {
+            background: #FFE4E6;
+            border-color: #E11D48;
+        }
+        .active-pill.locked-manual:hover {
+            background: #FECDD3;
+        }
+        .lock-tag {
+            font-size: 11px;
+            color: #E11D48;
+            font-weight: 800;
+        }
+        .auto-tag {
+            font-size: 11px;
+            color: #16A34A;
+            font-weight: 800;
+        }
+        .btn-unlock-pill {
+            margin-left: 6px;
+            background: #E11D48;
+            color: #FFFFFF;
+            border: 1.5px solid #000000;
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 10px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 1px 1px 0px #000000;
+            transition: all 0.08s ease;
+        }
+        .btn-unlock-pill:hover {
+            background: #BE123C;
+            transform: translate(-0.5px, -0.5px);
+            box-shadow: 1.5px 1.5px 0px #000000;
+        }
+
+        .stats-strip {
+            display: none;
+        }
+
+        .btn-top {
+            padding: 0 14px;
+            height: 30px;
+            font-size: 12px;
+            font-weight: 900;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2.5px 2.5px 0px #000000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            cursor: pointer;
+            box-sizing: border-box;
+            transition: all 0.08s ease;
+        }
+        .btn-top:hover {
+            transform: translate(-1px, -1px);
+            box-shadow: 3.5px 3.5px 0px #000000;
+        }
+        .btn-top:active {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #000000;
+        }
+        .btn-refresh-all { background: #22C55E; color: #000000; }
+        .btn-warmup-all { background: #FF4D4D; color: #FFFFFF; }
+
+        .control-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #FFFFFF;
+            border: var(--border-thick);
+            border-radius: var(--radius-card);
+            box-shadow: var(--shadow-hard);
+            padding: 5px 12px;
+            margin-bottom: 8px;
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box;
+            gap: 8px;
+            flex-wrap: nowrap !important;
+            white-space: nowrap !important;
+        }
+        .search-box {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #F4F0EA;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            padding: 0 8px;
+            height: 26px;
+            width: 150px;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            position: relative;
+        }
+        .search-icon {
+            font-size: 11px;
+            user-select: none;
+        }
+        .search-input {
+            border: none;
+            background: transparent;
+            outline: none;
+            font-size: 11px;
+            font-weight: 800;
+            width: 100%;
+            color: #000000;
+        }
+        .kbd-hint {
+            font-size: 10px;
+            font-weight: 900;
+            background: #E5E7EB;
+            color: #4B5563;
+            border: 1px solid #9CA3AF;
+            border-radius: 3px;
+            padding: 0 4px;
+            line-height: 14px;
+            height: 14px;
+            user-select: none;
+            margin-left: auto;
+        }
+        .btn-clear {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 900;
+            padding: 0 2px;
+            color: #6B7280;
+        }
+        .btn-clear:hover {
+            color: #DC2626;
+        }
+        .filter-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+        .filter-tab {
+            background: #F4F0EA;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            font-size: 10.5px;
+            font-weight: 900;
+            padding: 0 8px;
+            height: 26px;
+            flex-shrink: 0;
+            cursor: pointer;
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: all 0.08s ease;
+        }
+        .filter-tab:hover {
+            background: #E5E7EB;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000000;
+        }
+        .filter-tab:active {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #000000;
+        }
+        .filter-tab.active {
+            background: #FFE600;
+            color: #000000;
+            box-shadow: 2px 2px 0px #000000;
+            font-weight: 900;
+        }
+        .filter-tab.tab-has-warning {
+            border-color: #DC2626 !important;
+            color: #DC2626 !important;
+            background: #FEF2F2 !important;
+            box-shadow: 2px 2px 0px #DC2626 !important;
+        }
+        .tab-cnt {
+            font-size: 10px;
+            opacity: 0.95;
+            font-weight: 800;
+        }
+        .filter-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            border: 1.5px solid #000000;
+            display: inline-block;
+            margin-right: 4px;
+            vertical-align: middle;
+            box-sizing: border-box;
+        }
+        .dot-green { background: #22C55E; }
+        .dot-red { background: #EF4444; }
+        .dot-blue { background: #0EA5E9; }
+        .dot-gray { background: #9CA3AF; }
+        .filter-tab[data-filter="usable"].active {
+            background: #00F0FF;
+            color: #000000;
+        }
+        .stats-counter {
+            background: #FFFFFF;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            font-size: 11px;
+            font-weight: 900;
+            padding: 0 10px;
+            height: 26px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            white-space: nowrap;
+            box-sizing: border-box;
+        }
+        .stats-counter b {
+            color: #000000;
+        }
+
+        /* 表格总容器：3px 纯黑外边框 + 4px 硬投影 + 10px 微圆角 + 彻底消除无意义横向滚动条 */
+        .table-wrap {
+            border: var(--border-thick);
+            background: #FFFFFF;
+            box-shadow: var(--shadow-hard);
+            border-radius: var(--radius-card);
+            overflow: hidden;
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box;
+        }
+
+        /* 核心铁律：table-layout: fixed，严格等宽贴合容器，彻底消灭横向滑块 */
+        table {
+            width: 100%;
+            table-layout: fixed;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        /* 表头新野兽派全撞色系统 (规范大小写，5h/4h 精准原样呈现) */
+        thead th {
+            padding: 7px 6px;
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            border-right: 2px solid #000000;
+            border-bottom: 3px solid #000000;
+            color: #000000;
+            overflow: hidden;
+            white-space: nowrap;
+            box-sizing: border-box;
+        }
+        thead th:last-child { border-right: none; }
+
+        .th-num { background: #FFFFFF; text-align: center; }
+        .th-status { background: #38BDF8; text-align: center; }
+        .th-email { background: #FDE047; text-align: left; padding-left: 10px; }
+        .th-gemini { background: #7DD3FC; text-align: center; }
+        .th-claude { background: #FB923C; text-align: center; }
+        .th-warmup { background: #C084FC; text-align: center; }
+        .th-action { background: #4ADE80; text-align: center; }
+
+        tbody tr {
+            height: 33px;
+        }
+
+        /* 所有单元格：实线 2px 纯黑分割网格，严格统一 box-sizing */
+        tbody td {
+            padding: 3px 6px;
+            border-right: 2px solid #000000;
+            border-bottom: 2px solid #000000;
+            vertical-align: middle;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        tbody td:last-child {
+            border-right: none;
+        }
+        tbody tr:last-child td {
+            border-bottom: none !important;
+        }
+
+        /* 活跃账号行纯色高亮 (告别黑框叠加黑框，仅保留鲜明背景色，与其他行结构无任何差异) */
+        tbody tr.row-active td {
+            background-color: #FEF08A !important;
+        }
+
+        /* 鼠标悬停色阶加深微动效 */
+        tbody tr:hover td {
+            filter: brightness(0.95);
+        }
+
+        .col-center { text-align: center; }
+        .num-col { font-size: 11px; font-weight: 900; color: #000000; }
+
+        /* 状态单元格：0 内边距 + flex 完全居中，彻底根除边框重叠 */
+        .col-status {
+            padding: 0 !important;
+            text-align: center;
+            vertical-align: middle;
+            box-sizing: border-box;
+        }
+        .status-cell-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+        }
+
+        /* 状态徽章：严格定宽 60px × 20px + 1.5px 描边与投影，在 78px 列内两翼拥有 9px 安全呼吸空间，零边框重叠 */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 20px;
+            font-size: 10px;
+            font-weight: 900;
+            border: 1.5px solid #000000;
+            border-radius: var(--radius-pill);
+            box-shadow: 1.5px 1.5px 0px #000000;
+            line-height: 1;
+            letter-spacing: 0.5px;
+            box-sizing: border-box;
+            gap: 3px;
+        }
+        .badge-active { background: #22C55E; color: #000000; }
+        .badge-standby { background: #38BDF8; color: #000000; }
+        .badge-blocked { background: #EF4444; color: #FFFFFF; }
+
+        .pulse-dot-green {
+            width: 5px;
+            height: 5px;
+            background: #15803D;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse-dot 1.5s infinite;
+        }
+        @keyframes pulse-dot {
+            0% { transform: scale(0.9); opacity: 0.6; }
+            50% { transform: scale(1.3); opacity: 1; }
+            100% { transform: scale(0.9); opacity: 0.6; }
+        }
+
+        /* 账号邮箱与 PRO 徽章紧凑贴合 (左内边距 10px 远离分隔线，紧跟名字 6px 间隙) */
+        .col-email {
+            padding: 0 10px !important;
+            white-space: nowrap !important;
+            box-sizing: border-box;
+            overflow: hidden;
+            vertical-align: middle;
+        }
+        .email-cell-inner {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            vertical-align: middle;
+        }
+        .email-text {
+            font-size: 12px;
+            font-weight: 900;
+            display: inline-block;
+            color: #000000;
+            vertical-align: middle;
+            white-space: nowrap !important;
+            cursor: pointer;
+            padding: 1px 3px;
+            border-radius: 3px;
+            transition: background 0.1s ease;
+        }
+        .email-text:hover { 
+            text-decoration: underline; 
+            background: #FFE600; 
+        }
+        
+        .pro-tag {
+            font-size: 9px;
+            font-weight: 900;
+            background: var(--pink-accent);
+            color: #FFFFFF;
+            width: 34px !important;
+            min-width: 34px !important;
+            max-width: 34px !important;
+            height: 17px;
+            border: 1.5px solid #000000;
+            border-radius: 3px;
+            box-shadow: 1.5px 1.5px 0px #000000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            letter-spacing: 0.5px;
+            box-sizing: border-box;
+            flex-shrink: 0 !important;
+        }
+
+        /* 配额单元格：双轨绝对等长 + 52px 绝对对称槽位 */
+        .col-quota {
+            padding: 3px 8px !important;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .q-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 2.5px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .q-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 10.5px;
+            font-weight: 900;
+            width: 100%;
+            box-sizing: border-box;
+            white-space: nowrap !important;
+        }
+        .q-lbl {
+            width: 20px !important;
+            min-width: 20px !important;
+            max-width: 20px !important;
+            flex-shrink: 0 !important;
+            font-size: 9px;
+            font-weight: 900;
+            text-align: center;
+            padding: 0.5px 0;
+            border: 1px solid #000000;
+            border-radius: 3px;
+            box-shadow: 1px 1px 0px #000000;
+            line-height: 1;
+            box-sizing: border-box;
+            white-space: nowrap !important;
+        }
+        .tag-5h-g { background: #38BDF8; color: #000000; }
+        .tag-w-g { background: #38BDF8; color: #000000; }
+        .tag-5h-c { background: #FB923C; color: #000000; }
+        .tag-w-c { background: #FB923C; color: #000000; }
+
+        /* 进度条：两行等宽 flex: 1 1 auto，上下垂直绝对等长！ */
+        .q-track {
+            flex: 1 1 auto !important;
+            height: 7px;
+            background: #FFFFFF;
+            border: 1.5px solid #000000;
+            border-radius: var(--radius-pill);
+            box-shadow: 1px 1px 0px #000000;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+        .q-fill { height: 100%; transition: width 0.3s ease; }
+        
+        /* 百分比数值：严格定宽 44px，居右对齐，等宽防抖 */
+        .q-val {
+            width: 44px !important;
+            min-width: 44px !important;
+            max-width: 44px !important;
+            flex-shrink: 0 !important;
+            text-align: right;
+            font-weight: 900;
+            font-size: 10.5px;
+            box-sizing: border-box;
+            white-space: nowrap !important;
+        }
+
+        /* 52px 固定重置时间槽 */
+        .q-slot {
+            width: 52px !important;
+            min-width: 52px !important;
+            max-width: 52px !important;
+            flex-shrink: 0 !important;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+        }
+        .q-reset {
+            width: 50px !important;
+            min-width: 50px !important;
+            max-width: 50px !important;
+            flex-shrink: 0 !important;
+            font-size: 9px;
+            font-weight: 900;
+            padding: 1px 0;
+            border: 1.5px solid #000000;
+            border-radius: 3px;
+            box-shadow: 1px 1px 0px #000000;
+            white-space: nowrap !important;
+            text-align: center;
+            box-sizing: border-box;
+            display: inline-block;
+        }
+        .q-reset-5h {
+            color: #0369A1 !important;
+            background: #BAE6FD !important;
+            border-color: #000000 !important;
+        }
+        .q-reset-w {
+            color: #854D0E !important;
+            background: #FEF08A !important;
+            border-color: #000000 !important;
+        }
+        .q-reset-ready {
+            color: #15803D !important;
+            background: #DCFCE7 !important;
+            border-color: #000000 !important;
+        }
+        .q-reset-exhausted {
+            color: #991B1B !important;
+            background: #FECACA !important;
+            border-color: #000000 !important;
+        }
+        .q-reset-empty {
+            background: transparent;
+            color: transparent;
+            border-color: transparent;
+            box-shadow: none;
+        }
+        .q-reset-none {
+            visibility: hidden !important;
+            opacity: 0 !important;
+            border-color: transparent !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+
+        /* 预热药丸与上次时间胶囊 */
+        .warmup-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            box-sizing: border-box;
+            white-space: nowrap !important;
+        }
+        .warmup-pill {
+            background: #C084FC;
+            border: 1.5px solid #000000;
+            border-radius: var(--radius-pill);
+            width: 62px !important;
+            min-width: 62px !important;
+            max-width: 62px !important;
+            flex-shrink: 0 !important;
+            height: 20px;
+            font-size: 9.5px;
+            font-weight: 900;
+            box-shadow: 1.5px 1.5px 0px #000000;
+            color: #000000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            white-space: nowrap !important;
+            overflow: hidden;
+        }
+        .warmup-sub {
+            font-size: 9px;
+            color: #000000;
+            font-weight: 900;
+            width: 52px !important;
+            min-width: 52px !important;
+            max-width: 52px !important;
+            flex-shrink: 0 !important;
+            height: 20px;
+            background: #FFFFFF;
+            border: 1.5px solid #000000;
+            border-radius: var(--radius-pill);
+            box-shadow: 1.5px 1.5px 0px #000000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            white-space: nowrap !important;
+            box-sizing: border-box;
+        }
+        .warmup-sub .sub-icon {
+            font-size: 9px;
+        }
+        .warmup-sub.sub-empty {
+            color: #6B7280;
+            background: #F3F4F6;
+            border-style: dashed;
+        }
+
+        /* 操作按钮容器与定宽按键 */
+        .col-actions {
+            padding: 0 !important;
+            text-align: center;
+            vertical-align: middle;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .actions-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            white-space: nowrap !important;
+        }
+        .btn {
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            height: 24px;
+            font-size: 11px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 2px 2px 0px #000000;
+            transition: all 0.08s ease-in-out;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            white-space: nowrap !important;
+        }
+        .btn:hover {
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000000;
+        }
+        .btn:active {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #000000;
+        }
+        .btn.htmx-request {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        .btn.htmx-request::after {
+            content: " ⏳";
+        }
+        
+        /* 切换按键与权威锁定徽章：严格定宽 60px × 24px，在 84px 列内完全绝对居中（两翼留白 12px，彻底根除右侧溢出） */
+        .btn-switch { 
+            width: 60px !important; 
+            min-width: 60px !important; 
+            max-width: 60px !important; 
+            height: 24px;
+            flex-shrink: 0 !important; 
+            background: var(--cyan-accent); 
+            color: #000000; 
+            font-size: 11px;
+            font-weight: 900;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            padding: 0 !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .btn-unblock { 
+            width: 60px !important; 
+            min-width: 60px !important; 
+            max-width: 60px !important; 
+            height: 24px;
+            flex-shrink: 0 !important; 
+            background: #FF4B4B; 
+            color: #FFFFFF; 
+            font-size: 11px;
+            font-weight: 900;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            padding: 0 !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .btn-unblock:hover {
+            background: #E11D48;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000000;
+        }
+        .btn-unblock:active {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #000000;
+        }
+
+        /* 🏷️ 顶栏版本号指示标牌 */
+        .version-badge {
+            display: inline-block;
+            background: #000000;
+            color: #FFE600;
+            font-size: 10px;
+            font-weight: 900;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            vertical-align: 1px;
+            border: 1.5px solid #000000;
+            letter-spacing: 0.5px;
+        }
+
+        /* 🔀 序号列拖拽手柄与序号布局 */
+        .num-cell-inner {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            cursor: grab;
+            user-select: none;
+            -webkit-user-select: none;
+            width: 100%;
+        }
+        .num-cell-inner:active {
+            cursor: grabbing;
+        }
+        .drag-handle {
+            color: #888888;
+            font-size: 13px;
+            font-weight: 900;
+            line-height: 1;
+            padding: 0 1px;
+            transition: color 0.1s;
+        }
+        .account-row:hover .drag-handle {
+            color: #000000;
+        }
+
+        /* 🔀 拖拽排序视觉反馈与选择保护 */
+        .account-row {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .account-row.drag-over-top {
+            border-top: 3px solid #00F0FF !important;
+            box-shadow: 0 -2px 0 0 #00F0FF;
+        }
+        .account-row.drag-over-bottom {
+            border-bottom: 3px solid #00F0FF !important;
+            box-shadow: 0 2px 0 0 #00F0FF;
+        }
+        .account-row[draggable="true"]:hover {
+            cursor: grab;
+        }
+        .account-row[draggable="true"]:active {
+            cursor: grabbing;
+        }
+
+        /* 🔀 操作列：主按钮 + 上下微调微型箭头 */
+        .actions-flex {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        .reorder-arrows {
+            display: inline-flex;
+            flex-direction: column;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+        .btn-arrow {
+            width: 16px;
+            height: 11px;
+            line-height: 9px;
+            font-size: 8px;
+            font-weight: 900;
+            background: #FFFFFF;
+            color: #000000;
+            border: 1.5px solid #000000;
+            border-radius: 2px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            box-shadow: 1px 1px 0px #000000;
+            transition: all 0.05s;
+        }
+        .btn-arrow:hover {
+            background: var(--yellow-main);
+            transform: translate(-0.5px, -0.5px);
+        }
+        .btn-arrow:active {
+            transform: translate(0.5px, 0.5px);
+            box-shadow: 0px 0px 0px #000000;
+        }
+
+        .active-badge-action {
+            width: 60px !important;
+            min-width: 60px !important;
+            max-width: 60px !important;
+            height: 24px;
+            background: #000000;
+            color: #FFFFFF;
+            font-size: 11px;
+            font-weight: 900;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            letter-spacing: 0.5px;
+            cursor: default;
+            user-select: none;
+            box-sizing: border-box;
+            padding: 0 !important;
+        }
+
+        .toast {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            background: #FFE600;
+            color: #000000;
+            padding: 10px 18px;
+            font-size: 12px;
+            font-weight: 900;
+            border: 2.5px solid #000000;
+            border-radius: var(--radius-card);
+            box-shadow: 4px 4px 0px #000000;
+            display: none;
+            z-index: 999999;
+            letter-spacing: 0.5px;
+            max-width: 400px;
+            animation: slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            cursor: pointer;
+        }
+        .toast-success {
+            background: #10B981 !important;
+            color: #000000 !important;
+            border-color: #000000 !important;
+        }
+        .toast-warmup {
+            background: #F472B6 !important;
+            color: #000000 !important;
+            border-color: #000000 !important;
+        }
+        .toast-info {
+            background: #FFE600 !important;
+            color: #000000 !important;
+            border-color: #000000 !important;
+        }
+        .toast-error {
+            background: #EF4444 !important;
+            color: #FFFFFF !important;
+            border-color: #000000 !important;
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(50px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        /* Neo-Brutalism 自绘确认弹窗 (100% 解决 macOS WKWebView 拦截 window.confirm 的死锁) */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(2px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999999;
+        }
+        .modal-backdrop.show {
+            display: flex !important;
+        }
+        .modal-box {
+            background: #F4F0EA;
+            width: 440px;
+            max-width: 90vw;
+            border: 3px solid #000000;
+            border-radius: var(--radius-modal);
+            box-shadow: 6px 6px 0px #000000;
+            animation: popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow: hidden;
+        }
+        .modal-header {
+            background: #FFE600;
+            color: #000000;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            border-bottom: 2.5px solid #000000;
+        }
+        .modal-close {
+            color: #000000;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 900;
+            line-height: 1;
+            padding: 0 4px;
+        }
+        .modal-close:hover {
+            color: #EF4444;
+        }
+        .modal-body {
+            padding: 18px 16px;
+            font-size: 12.5px;
+            font-weight: 700;
+            line-height: 1.6;
+            color: #111827;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .modal-actions {
+            padding: 12px 16px;
+            background: #E5E7EB;
+            border-top: 2px solid #000000;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        .btn-modal-cancel {
+            background: #FFFFFF;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2.5px 2.5px 0px #000000;
+            padding: 6px 14px;
+            font-size: 11.5px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .btn-modal-confirm {
+            background: var(--cyan-accent);
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2.5px 2.5px 0px #000000;
+            padding: 6px 18px;
+            font-size: 11.5px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .btn-modal-cancel:hover, .btn-modal-confirm:hover {
+            transform: translate(-1px, -1px);
+            box-shadow: 3.5px 3.5px 0px #000000;
+        }
+        .btn-modal-cancel:active, .btn-modal-confirm:active {
+            transform: translate(1.5px, 1.5px);
+            box-shadow: 1px 1px 0px #000000;
+        }
+        /* 新野兽派底部分页控制栏 (粗黑框 + 硬投影 + 紧凑微圆角) */
+        .pagination-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #FFFFFF;
+            border: var(--border-thick);
+            border-radius: var(--radius-card);
+            box-shadow: var(--shadow-hard);
+            padding: 4px 12px;
+            margin-top: 12px;
+            width: 100% !important;
+            min-width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box;
+            height: 34px;
+        }
+        .page-info {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            font-weight: 800;
+            color: #111827;
+        }
+        .page-dot {
+            color: #9CA3AF;
+            font-weight: 900;
+        }
+        .page-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-page {
+            background: #F4F0EA;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            font-size: 10.5px;
+            font-weight: 900;
+            padding: 0 10px;
+            height: 24px;
+            cursor: pointer;
+            box-sizing: border-box;
+            transition: all 0.08s ease;
+        }
+        .btn-page:hover:not(:disabled) {
+            background: #FFE600;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000000;
+        }
+        .btn-page:active:not(:disabled) {
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #000000;
+        }
+        .btn-page:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: transparent;
+            box-shadow: none;
+            border: 1.5px solid #D1D5DB;
+            color: #9CA3AF;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-bar"></div>
+    <div id="toast" class="toast font-mono"></div>
+
+    <div class="app-container">
+        <!-- 新野兽派顶栏控制条 (宽阔微高 + 三点平衡居中) -->
+        <div class="top-bar">
+            <div class="top-left">
+                <span class="brand-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    ANTIGRAVITY HUB
+                </span>
+                <span class="version-badge font-mono">v2.27.0</span>
+            </div>
+            <div class="top-center">
+                <span id="active-email-pill" class="active-pill font-mono auto-mode" title="自动轮转模式中 (点击快速复制完整账号: alex.dev@corp.internal)" onclick="copyText('alex.dev@corp.internal')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>活跃: <span class="active-email-val">alex.dev</span> <span class="auto-tag font-mono">(自动)</span>
+        </span>
+            </div>
+            <div id="top-bar-stats" class="stats-strip font-mono" style="display:none;"></div>
+            <div class="top-right">
+                <button class="btn btn-top btn-refresh-all font-mono"
+                        onclick="doRefreshQuota(this); event.preventDefault(); event.stopPropagation();"
+                        title="立即同步最新活跃状态并触发全池配额并发刷新">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                    刷新配额
+                </button>
+            </div>
+        </div>
+
+        <!-- 搜索与多维过滤控制条 (客户端 0ms 即时响应) -->
+        <div class="control-bar font-mono">
+            <div class="search-box">
+                <span class="search-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                <input type="text" id="account-search" class="search-input font-mono" placeholder="搜索账号..." oninput="filterTable()" autocomplete="off">
+                <button id="clear-search" class="btn-clear" onclick="clearSearch()" style="display:none;" title="清空搜索">✕</button>
+            </div>
+            <div class="filter-group">
+                <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">全部 (15)</button>
+                <button class="filter-tab" data-filter="usable" onclick="setFilter('usable', this)" title="仅展示 Gemini 周额度大于 0 的可用轮换账号"><span class="filter-dot dot-blue"></span>可用账号 (G&gt;0)</button>
+                <button class="filter-tab" data-filter="healthy" onclick="setFilter('healthy', this)"><span class="filter-dot dot-green"></span>充足 (&gt;50%)</button>
+                <button class="filter-tab" data-filter="warning" onclick="setFilter('warning', this)"><span class="filter-dot dot-red"></span>告急 (&lt;15%)</button>
+                <button class="filter-tab" data-filter="exhausted" onclick="setFilter('exhausted', this)" title="仅展示 Gemini 周额度已彻底归零的枯竭账号"><span class="filter-dot dot-gray"></span>已枯竭 (G=0)</button>
+            </div>
+            <div class="stats-counter" id="filter-counter">
+                显示: <b>15</b> / 15
+            </div>
+        </div>
+
+        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 横向滚动防护) -->
+        <div class="table-wrap">
+            <table>
+                <colgroup>
+                    <col style="width: 40px;">   <!-- # 序号+拖拽手柄 (40px) -->
+                    <col style="width: 74px;">   <!-- 状态 (74px) -->
+                    <col style="width: 226px;">  <!-- 账号+PRO (226px，自适应充沛呼吸空间，彻底根除截断) -->
+                    <col style="width: 234px;">  <!-- Gemini 配额 (234px) -->
+                    <col style="width: 234px;">  <!-- Claude 配额 (234px) -->
+                    <col style="width: 92px;">   <!-- 切换+调序操作 (92px) -->
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th class="col-center th-num" title="拖拽手柄与序号">#</th>
+                        <th class="col-center th-status">状态</th>
+                        <th class="th-email">账号 (点击复制)</th>
+                        <th class="th-gemini">Gemini 配额 (5h / 周)</th>
+                        <th class="th-claude">Claude 配额 (5h / 周)</th>
+                        <th class="col-center th-action" title="切换账号与上下微调顺序">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="account-tbody">
+                    
+        <tr class="account-row is-active-row" 
+            draggable="true"
+            style="background-color: #FFF066;"
+            data-email="alex.dev@corp.internal"
+            data-gemini-5h="0.924"
+            data-gemini-w="0.88"
+            data-claude-5h="0.95"
+            data-claude-w="0.912"
+            data-is-active="1">
+            <td class="col-center font-mono num-col" style="background-color: #FFF066;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">1</span></div></td>
+            <td class="col-status" style="background-color: #FFF066;"><div class="status-cell-wrap"><span class="badge badge-active"><span class="pulse-dot-green"></span>ACTIVE</span></div></td>
+            <td class="col-email" style="background-color: #FFF066;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('alex.dev@corp.internal')" title="点击复制完整账号凭据: alex.dev@corp.internal">alex.dev</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #FFF066;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 92.4%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">92.4%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 88.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">88.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 4d 12h">4d 12h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #FFF066;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 95.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">95.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 91.2%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">91.2%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 4d 12h">4d 12h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #FFF066;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><div class="active-badge-action font-mono" title="当前主程序正在使用此账号护航">在用</div><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('alex.dev@corp.internal', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('alex.dev@corp.internal', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #FCE7F3;"
+            data-email="core.lead@ai-lab.io"
+            data-gemini-5h="1.0"
+            data-gemini-w="0.965"
+            data-claude-5h="1.0"
+            data-claude-w="0.94"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #FCE7F3;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">2</span></div></td>
+            <td class="col-status" style="background-color: #FCE7F3;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #FCE7F3;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('core.lead@ai-lab.io')" title="点击复制完整账号凭据: core.lead@ai-lab.io">core.lead</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #FCE7F3;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 100%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">100.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 96.5%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">96.5%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 5d 08h">5d 08h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #FCE7F3;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 100%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">100.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 94.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">94.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 5d 08h">5d 08h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #FCE7F3;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('core.lead@ai-lab.io'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('core.lead@ai-lab.io', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('core.lead@ai-lab.io', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #DCFCE7;"
+            data-email="sarah.infra@cloud.net"
+            data-gemini-5h="0.742"
+            data-gemini-w="0.82"
+            data-claude-5h="0.68"
+            data-claude-w="0.85"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #DCFCE7;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">3</span></div></td>
+            <td class="col-status" style="background-color: #DCFCE7;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #DCFCE7;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('sarah.infra@cloud.net')" title="点击复制完整账号凭据: sarah.infra@cloud.net">sarah.infra</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #DCFCE7;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 74.2%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">74.2%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 1h 15m">1h 15m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 82.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">82.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 3d 14h">3d 14h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #DCFCE7;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 68.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">68.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 1h 15m">1h 15m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 85.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">85.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 3d 14h">3d 14h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #DCFCE7;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('sarah.infra@cloud.net'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('sarah.infra@cloud.net', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('sarah.infra@cloud.net', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #F3E8FF;"
+            data-email="subagent.pool.01@agent.org"
+            data-gemini-5h="0.55"
+            data-gemini-w="0.705"
+            data-claude-5h="0.62"
+            data-claude-w="0.76"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #F3E8FF;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">4</span></div></td>
+            <td class="col-status" style="background-color: #F3E8FF;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #F3E8FF;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('subagent.pool.01@agent.org')" title="点击复制完整账号凭据: subagent.pool.01@agent.org">subagent.pool.01</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #F3E8FF;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 55.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">55.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 2h 40m">2h 40m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 70.5%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">70.5%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 2d 18h">2d 18h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #F3E8FF;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 62.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">62.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 2h 40m">2h 40m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 76.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">76.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 2d 18h">2d 18h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #F3E8FF;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('subagent.pool.01@agent.org'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('subagent.pool.01@agent.org', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('subagent.pool.01@agent.org', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #FFEDD5;"
+            data-email="quantum.opt@matrix.ai"
+            data-gemini-5h="0.385"
+            data-gemini-w="0.64"
+            data-claude-5h="0.42"
+            data-claude-w="0.68"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #FFEDD5;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">5</span></div></td>
+            <td class="col-status" style="background-color: #FFEDD5;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #FFEDD5;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('quantum.opt@matrix.ai')" title="点击复制完整账号凭据: quantum.opt@matrix.ai">quantum.opt</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #FFEDD5;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 38.5%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">38.5%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 3h 10m">3h 10m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 64.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">64.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 1d 22h">1d 22h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #FFEDD5;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 42.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">42.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 3h 10m">3h 10m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 68.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">68.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 1d 22h">1d 22h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #FFEDD5;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('quantum.opt@matrix.ai'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('quantum.opt@matrix.ai', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('quantum.opt@matrix.ai', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #E0F2FE;"
+            data-email="vector.search@cluster.io"
+            data-gemini-5h="0.15"
+            data-gemini-w="0.52"
+            data-claude-5h="0.18"
+            data-claude-w="0.55"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #E0F2FE;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">6</span></div></td>
+            <td class="col-status" style="background-color: #E0F2FE;"><div class="status-cell-wrap"><span class="badge badge-blocked" title="Google账号需网页验证">⚠️待验证</span></div></td>
+            <td class="col-email" style="background-color: #E0F2FE;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('vector.search@cluster.io')" title="点击复制完整账号凭据: vector.search@cluster.io">vector.search</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #E0F2FE;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 15.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">15.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 3h 55m">3h 55m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 52.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">52.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 2d 06h">2d 06h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #E0F2FE;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 18.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">18.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 3h 55m">3h 55m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 55.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">55.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 2d 06h">2d 06h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #E0F2FE;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-unblock font-mono" 
+                            onclick="doUnblockAccount('vector.search@cluster.io'); event.preventDefault(); event.stopPropagation();"
+                            title="拉起专属隔离Chrome容器并自动定向对应账号解封（彻底防500）">解封</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('vector.search@cluster.io', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('vector.search@cluster.io', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #FCE7F3;"
+            data-email="pipeline.runner@ci-cd.org"
+            data-gemini-5h="0.88"
+            data-gemini-w="0.84"
+            data-claude-5h="0.9"
+            data-claude-w="0.865"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #FCE7F3;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">7</span></div></td>
+            <td class="col-status" style="background-color: #FCE7F3;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #FCE7F3;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('pipeline.runner@ci-cd.org')" title="点击复制完整账号凭据: pipeline.runner@ci-cd.org">pipeline.runner</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #FCE7F3;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 88.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">88.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 84.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">84.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 4d 02h">4d 02h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #FCE7F3;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 90.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">90.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 86.5%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">86.5%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 4d 02h">4d 02h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #FCE7F3;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('pipeline.runner@ci-cd.org'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('pipeline.runner@ci-cd.org', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('pipeline.runner@ci-cd.org', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #DCFCE7;"
+            data-email="deep.thinker@research.net"
+            data-gemini-5h="0.65"
+            data-gemini-w="0.75"
+            data-claude-5h="0.58"
+            data-claude-w="0.72"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #DCFCE7;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">8</span></div></td>
+            <td class="col-status" style="background-color: #DCFCE7;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #DCFCE7;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('deep.thinker@research.net')" title="点击复制完整账号凭据: deep.thinker@research.net">deep.thinker</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #DCFCE7;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 65.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">65.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 1h 55m">1h 55m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 75.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">75.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 3d 09h">3d 09h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #DCFCE7;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 58.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">58.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 1h 55m">1h 55m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 72.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">72.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 3d 09h">3d 09h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #DCFCE7;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('deep.thinker@research.net'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('deep.thinker@research.net', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('deep.thinker@research.net', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #F3E8FF;"
+            data-email="kernel.daemon@system.io"
+            data-gemini-5h="1.0"
+            data-gemini-w="0.92"
+            data-claude-5h="0.96"
+            data-claude-w="0.89"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #F3E8FF;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">9</span></div></td>
+            <td class="col-status" style="background-color: #F3E8FF;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #F3E8FF;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('kernel.daemon@system.io')" title="点击复制完整账号凭据: kernel.daemon@system.io">kernel.daemon</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #F3E8FF;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 100%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">100.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 92.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">92.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 5d 16h">5d 16h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #F3E8FF;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 96.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">96.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 89.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">89.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 5d 16h">5d 16h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #F3E8FF;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('kernel.daemon@system.io'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('kernel.daemon@system.io', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('kernel.daemon@system.io', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #FFEDD5;"
+            data-email="vision.multimodal@ai-lab.io"
+            data-gemini-5h="0.48"
+            data-gemini-w="0.6"
+            data-claude-5h="0.52"
+            data-claude-w="0.65"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #FFEDD5;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">10</span></div></td>
+            <td class="col-status" style="background-color: #FFEDD5;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #FFEDD5;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('vision.multimodal@ai-lab.io')" title="点击复制完整账号凭据: vision.multimodal@ai-lab.io">vision.multimodal</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #FFEDD5;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 48.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">48.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 2h 20m">2h 20m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 60.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">60.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 1d 15h">1d 15h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #FFEDD5;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 52.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">52.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 2h 20m">2h 20m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 65.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">65.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 1d 15h">1d 15h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #FFEDD5;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('vision.multimodal@ai-lab.io'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('vision.multimodal@ai-lab.io', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('vision.multimodal@ai-lab.io', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #E0F2FE;"
+            data-email="teamwork.sync@collab.net"
+            data-gemini-5h="0.82"
+            data-gemini-w="0.79"
+            data-claude-5h="0.85"
+            data-claude-w="0.81"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #E0F2FE;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">11</span></div></td>
+            <td class="col-status" style="background-color: #E0F2FE;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #E0F2FE;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('teamwork.sync@collab.net')" title="点击复制完整账号凭据: teamwork.sync@collab.net">teamwork.sync</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #E0F2FE;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 82.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">82.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 79.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">79.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 4d 20h">4d 20h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #E0F2FE;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 85.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">85.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 81.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">81.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 4d 20h">4d 20h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #E0F2FE;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('teamwork.sync@collab.net'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('teamwork.sync@collab.net', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('teamwork.sync@collab.net', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #FCE7F3;"
+            data-email="benchmark.suite@perf.org"
+            data-gemini-5h="0.25"
+            data-gemini-w="0.45"
+            data-claude-5h="0.3"
+            data-claude-w="0.48"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #FCE7F3;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">12</span></div></td>
+            <td class="col-status" style="background-color: #FCE7F3;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #FCE7F3;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('benchmark.suite@perf.org')" title="点击复制完整账号凭据: benchmark.suite@perf.org">benchmark.suite</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #FCE7F3;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 25.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">25.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 4h 05m">4h 05m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 45.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">45.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 1d 04h">1d 04h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #FCE7F3;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 30.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">30.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 4h 05m">4h 05m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 48.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">48.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 1d 04h">1d 04h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #FCE7F3;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('benchmark.suite@perf.org'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('benchmark.suite@perf.org', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('benchmark.suite@perf.org', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #DCFCE7;"
+            data-email="audit.guardian@sec.io"
+            data-gemini-5h="1.0"
+            data-gemini-w="0.98"
+            data-claude-5h="1.0"
+            data-claude-w="0.975"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #DCFCE7;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">13</span></div></td>
+            <td class="col-status" style="background-color: #DCFCE7;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #DCFCE7;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('audit.guardian@sec.io')" title="点击复制完整账号凭据: audit.guardian@sec.io">audit.guardian</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #DCFCE7;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 100%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">100.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 98.0%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">98.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 6d 10h">6d 10h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #DCFCE7;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 100%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">100.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 97.5%; background: #16A34A;"></div></div>
+            <span class="q-val font-mono" style="color: #16A34A;">97.5%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 6d 10h">6d 10h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #DCFCE7;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('audit.guardian@sec.io'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('audit.guardian@sec.io', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('audit.guardian@sec.io', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #F3E8FF;"
+            data-email="token.arbiter@quota.net"
+            data-gemini-5h="0.12"
+            data-gemini-w="0.38"
+            data-claude-5h="0.15"
+            data-claude-w="0.4"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #F3E8FF;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">14</span></div></td>
+            <td class="col-status" style="background-color: #F3E8FF;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #F3E8FF;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('token.arbiter@quota.net')" title="点击复制完整账号凭据: token.arbiter@quota.net">token.arbiter</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #F3E8FF;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 12.0%; background: #DC2626;"></div></div>
+            <span class="q-val font-mono" style="color: #DC2626;">12.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 3h 50m">3h 50m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 38.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">38.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 18h 30m">18h 30m</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #F3E8FF;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 15.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">15.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: 3h 50m">3h 50m</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 40.0%; background: #EA580C;"></div></div>
+            <span class="q-val font-mono" style="color: #EA580C;">40.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 18h 30m">18h 30m</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #F3E8FF;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('token.arbiter@quota.net'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('token.arbiter@quota.net', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('token.arbiter@quota.net', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+
+        <tr class="account-row " 
+            draggable="true"
+            style="background-color: #FFEDD5;"
+            data-email="fallback.standby@backup.org"
+            data-gemini-5h="0.0"
+            data-gemini-w="0.0"
+            data-claude-5h="0.0"
+            data-claude-w="0.0"
+            data-is-active="0">
+            <td class="col-center font-mono num-col" style="background-color: #FFEDD5;"><div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">15</span></div></td>
+            <td class="col-status" style="background-color: #FFEDD5;"><div class="status-cell-wrap"><span class="badge badge-standby">STANDBY</span></div></td>
+            <td class="col-email" style="background-color: #FFEDD5;">
+                <div class="email-cell-inner">
+                    <span class="email-text font-mono" onclick="copyText('fallback.standby@backup.org')" title="点击复制完整账号凭据: fallback.standby@backup.org">fallback.standby</span>
+                    <span class="pro-tag font-mono">PRO</span>
+                </div>
+            </td>
+            <td class="col-quota" style="background-color: #FFEDD5;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-g">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 0%; background: #DC2626;"></div></div>
+            <span class="q-val font-mono" style="color: #DC2626;">0.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-exhausted font-mono" title="周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: 2d 05h">周枯竭</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-g">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 0%; background: #DC2626;"></div></div>
+            <span class="q-val font-mono" style="color: #DC2626;">0.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 2d 05h">2d 05h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-quota" style="background-color: #FFEDD5;">
+    <div class="q-cell">
+        <div class="q-row">
+            <span class="q-lbl tag-5h-c">5h</span>
+            <div class="q-track"><div class="q-fill" style="width: 0%; background: #DC2626;"></div></div>
+            <span class="q-val font-mono" style="color: #DC2626;">0.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-exhausted font-mono" title="周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: 2d 05h">周枯竭</span></div>
+        </div>
+        <div class="q-row">
+            <span class="q-lbl tag-w-c">周</span>
+            <div class="q-track"><div class="q-fill" style="width: 0%; background: #DC2626;"></div></div>
+            <span class="q-val font-mono" style="color: #DC2626;">0.0%</span>
+            <div class="q-slot"><span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: 2d 05h">2d 05h</span></div>
+        </div>
+    </div>
+    </td>
+            <td class="col-actions" style="background-color: #FFEDD5;">
+                <div class="actions-wrap">
+                    <div class="actions-flex"><button class="btn btn-switch font-mono" 
+                                onclick="doSwitchAccount('fallback.standby@backup.org'); event.preventDefault(); event.stopPropagation();"
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button><div class="reorder-arrows">
+            <button class="btn-arrow" onclick="moveAccountRow('fallback.standby@backup.org', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
+            <button class="btn-arrow" onclick="moveAccountRow('fallback.standby@backup.org', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
+        </div></div>
+                </div>
+            </td>
+        </tr>
+        
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 新野兽派底部分页与状态指示条 (单页上限 15 个，自适应翻页) -->
+        <div class="pagination-bar font-mono" id="pagination-bar">
+            <div class="page-info">
+                <span>单页上限: <b>15</b> 个</span>
+                <span class="page-dot">·</span>
+                <span id="page-indicator">第 <b>1</b> / 1 页</span>
+                <span class="page-dot">·</span>
+                <span id="page-total">共 15 个账号</span>
+            </div>
+            <div class="page-actions">
+                <button class="btn btn-page font-mono" id="btn-prev-page" onclick="changePage(-1)" disabled title="上一页">← 上一页</button>
+                <button class="btn btn-page font-mono" id="btn-next-page" onclick="changePage(1)" disabled title="下一页">下一页 →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentFilter = 'all';
+
+        function copyText(text) {
+            if (!text || text === '未激活') return;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("已复制账号: " + text, "success");
+            }).catch(() => {
+                showToast("复制失败，请手动选择复制", "error");
+            });
+        }
+
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById("toast");
+            if (!t) return;
+            t.innerText = msg;
+            t.className = "toast font-mono toast-" + type;
+            t.style.display = "block";
+            clearTimeout(window.__toastTimer);
+            window.__toastTimer = setTimeout(() => {
+                t.style.display = "none";
+            }, 3200);
+        }
+
+        // ========================================================
+        // 🔒 自绘 Neo-Brutalism 确认对话框 (彻底解决 WKWebView confirm 死锁)
+        // ========================================================
+        let __pendingConfirmCallback = null;
+
+        function openNeoModal(title, bodyText, onConfirm) {
+            const backdrop = document.getElementById('neo-modal-backdrop');
+            const titleEl = document.getElementById('modal-title');
+            const bodyEl = document.getElementById('modal-body');
+            const confirmBtn = document.getElementById('modal-btn-confirm');
+            
+            // 🛡️ 稳态兜底：若 DOM 弹窗因任何原因不可用，立即调用系统原生 NSAlert 弹窗
+            if (!backdrop || !titleEl || !bodyEl) {
+                if (window.confirm(title + "\n\n" + bodyText)) {
+                    onConfirm();
+                }
+                return;
+            }
+
+            titleEl.innerText = title;
+            bodyEl.innerText = bodyText;
+            __pendingConfirmCallback = onConfirm;
+
+            backdrop.classList.add('show');
+            setTimeout(() => {
+                if (confirmBtn) confirmBtn.focus();
+            }, 50);
+        }
+
+        function closeNeoModal(confirmed = false) {
+            const backdrop = document.getElementById('neo-modal-backdrop');
+            if (backdrop) backdrop.classList.remove('show');
+            if (confirmed && typeof __pendingConfirmCallback === 'function') {
+                const fn = __pendingConfirmCallback;
+                __pendingConfirmCallback = null;
+                fn();
+            } else {
+                __pendingConfirmCallback = null;
+            }
+        }
+
+        function confirmNeoModal() {
+            closeNeoModal(true);
+        }
+
+        // 键盘快捷键交互：ESC 取消，Enter 确认
+        window.addEventListener('keydown', function(e) {
+            const backdrop = document.getElementById('neo-modal-backdrop');
+            if (!backdrop || !backdrop.classList.contains('show')) return;
+            if (e.key === 'Escape') {
+                closeNeoModal(false);
+            } else if (e.key === 'Enter') {
+                closeNeoModal(true);
+            }
+        });
+
+        // 🚀 通用响应更新器：基于 DOMParser 在 table 语法树中严格提取合法 tr 节点，杜绝 WebKit 剥离！
+        function applyTbodyAndOOB(html) {
+            const parser = new DOMParser();
+
+            // 1. 处理所有 hx-swap-oob 元素 (如顶栏药丸与统计数据)
+            const docAll = parser.parseFromString(html, 'text/html');
+            const oobs = docAll.querySelectorAll('[hx-swap-oob="true"]');
+            oobs.forEach(oob => {
+                const targetId = oob.id;
+                if (targetId) {
+                    const targetEl = document.getElementById(targetId);
+                    if (targetEl) {
+                        targetEl.outerHTML = oob.outerHTML;
+                    }
+                }
+            });
+
+            // 2. 严格在 table/tbody 上下文中解析 tr 标签，杜绝 WebKit 剥离 tr/td 结构
+            const tableDoc = parser.parseFromString(`<table><tbody>${html}</tbody></table>`, 'text/html');
+            const trs = tableDoc.querySelectorAll('tbody > tr.account-row, tr.account-row');
+            const tbody = document.getElementById('account-tbody');
+            if (tbody && trs.length > 0) {
+                tbody.innerHTML = '';
+                trs.forEach(tr => {
+                    tbody.appendChild(document.importNode(tr, true));
+                });
+                __cachedTbodyHTML = tbody.innerHTML;
+                filterTable();
+                if (typeof initDragSort === 'function') {
+                    initDragSort();
+                }
+            }
+        }
+
+        // 🔄 安全静默拉取最新表格与状态（0 冲突，0 剥离，稳态更新）
+        async function fetchTableSafely() {
+            if (isReordering) return;
+            try {
+                const resp = await fetch('/api/table');
+                if (!resp.ok) return;
+                const html = await resp.text();
+                applyTbodyAndOOB(html);
+            } catch (e) {
+                console.warn("静默同步跳过:", e);
+            }
+        }
+
+        // ⚡ 刷新配额直通函数：0 弹窗阻断，0 外部依赖，点击 100% 物理触发！
+        async function doRefreshQuota(btn) {
+            showToast("⏳ 正在并发刷新全池配额与重置时间...", "info");
+            const loadingBar = document.getElementById('loading-bar');
+            if (loadingBar) loadingBar.style.display = 'block';
+            if (btn) {
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+            }
+
+            try {
+                const resp = await fetch('/api/refresh', { method: 'POST' });
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const html = await resp.text();
+                applyTbodyAndOOB(html);
+                showToast("⚡ 全池最新配额与重置时间并发同步成功！", "success");
+            } catch (err) {
+                console.error("刷新失败:", err);
+                showToast("❌ 刷新失败: " + err.message, "error");
+            } finally {
+                if (loadingBar) loadingBar.style.display = 'none';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }
+            }
+        }
+
+        // 🔄 切换账号直通函数：一键直通物理原子切换，脱壳重启 Antigravity 并自动发送接力提示词！
+        async function doSwitchAccount(email) {
+            showToast("⏳ 正在注入凭据并脱壳拉起 Antigravity 重启接力...", "info");
+            const loadingBar = document.getElementById('loading-bar');
+            if (loadingBar) loadingBar.style.display = 'block';
+
+            try {
+                const resp = await fetch('/api/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'email=' + encodeURIComponent(email)
+                });
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const html = await resp.text();
+                applyTbodyAndOOB(html);
+                showToast("✅ 物理切换成功！Antigravity 正在重启并由 agentapi 自动发送接力提示词！", "success");
+            } catch (err) {
+                console.error("切换失败:", err);
+                showToast("❌ 切换失败: " + err.message, "error");
+            } finally {
+                if (loadingBar) loadingBar.style.display = 'none';
+            }
+        }
+
+        // 🔓 解除人工锁定直通函数：一键直通解除保护
+        async function doUnlockProtection() {
+            showToast("⏳ 正在解除人工锁定并恢复自动轮转...", "info");
+            try {
+                const resp = await fetch('/api/unlock', { method: 'POST' });
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const html = await resp.text();
+                applyTbodyAndOOB(html);
+                showToast("🔓 人工保护已解除！已恢复后台看门狗自动轮转", "success");
+            } catch (err) {
+                showToast("❌ 解除失败: " + err.message, "error");
+            }
+        }
+
+        // 🛡️ 一键隔离解封向导：拉起专属Chrome独立容器并自动定向对应账号，彻底防500！
+        async function doUnblockAccount(email) {
+            showToast("🚀 正在获取最新令牌并拉起专属隔离浏览器窗口...", "info");
+            try {
+                const resp = await fetch('/api/unblock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'email=' + encodeURIComponent(email)
+                });
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const html = await resp.text();
+                applyTbodyAndOOB(html);
+                showToast("✅ 已拉起专属无污染窗口！请在该窗口登录并确认，后台将自动监听解锁！", "success");
+            } catch (err) {
+                showToast("❌ 启动解封失败: " + err.message, "error");
+            }
+        }
+
+        // 🔥 静默预热直通函数
+        async function doWarmupAccount(email) {
+            showToast("⏳ 正在向 Google 探针节点发送单账号静默预热...", "info");
+            try {
+                const resp = await fetch('/api/warmup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'email=' + encodeURIComponent(email)
+                });
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const html = await resp.text();
+                applyTbodyAndOOB(html);
+                showToast("🔥 静默预热探针触发完成！模型已激活", "warmup");
+            } catch (err) {
+                showToast("❌ 预热失败: " + err.message, "error");
+            }
+        }
+
+        let currentPage = 1;
+        const PAGE_SIZE = 15;
+        let __cachedTbodyHTML = '';
+
+        // 页面初始加载时备份原始行数据
+        window.addEventListener('DOMContentLoaded', function() {
+            const tbody = document.getElementById('account-tbody');
+            if (tbody && tbody.children.length > 0) {
+                __cachedTbodyHTML = tbody.innerHTML;
+            }
+            filterTable();
+        });
+
+        // 🛡️ 客户端数据稳态看门狗：杜绝任何原因导致的误清空
+        function ensureDataResilience() {
+            const tbody = document.getElementById('account-tbody');
+            if (!tbody) return;
+            const rows = tbody.querySelectorAll('tr.account-row');
+            const searchInput = document.getElementById('account-search');
+            const q = searchInput ? searchInput.value.trim() : '';
+            if (rows.length === 0 && !q && __cachedTbodyHTML) {
+                console.warn("🛡️ 看门狗触发：检测到 tbody 数据异常丢失，立即从稳态镜像恢复！");
+                tbody.innerHTML = __cachedTbodyHTML;
+            }
+        }
+
+        function changePage(delta) {
+            currentPage += delta;
+            filterTable();
+        }
+
+        function setFilter(filterType, btn) {
+            currentFilter = filterType;
+            currentPage = 1;
+            document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            filterTable();
+        }
+
+        function clearSearch() {
+            const input = document.getElementById('account-search');
+            if (input) {
+                input.value = '';
+                input.focus();
+            }
+            const clearBtn = document.getElementById('clear-search');
+            if (clearBtn) clearBtn.style.display = 'none';
+            currentPage = 1;
+            filterTable();
+        }
+
+        function filterTable() {
+            ensureDataResilience();
+            const input = document.getElementById('account-search');
+            const q = input ? input.value.toLowerCase().trim() : '';
+            const clearBtn = document.getElementById('clear-search');
+            if (clearBtn) clearBtn.style.display = q ? 'inline-block' : 'none';
+
+            const rows = Array.from(document.querySelectorAll('#account-tbody tr.account-row'));
+            const matchedRows = [];
+
+            rows.forEach(tr => {
+                const email = tr.getAttribute('data-email') || '';
+                const matchQuery = !q || email.toLowerCase().includes(q);
+
+                const gw = parseFloat(tr.getAttribute('data-gemini-w') || '1.0');
+                const cw = parseFloat(tr.getAttribute('data-claude-w') || '1.0');
+                let matchTab = true;
+                if (currentFilter === 'usable') {
+                    // 🎯 严格执行用户最高指令：只要 Gemini 周额度 > 0 (未彻底归零)，就必须保留在可用池中
+                    matchTab = (gw > 0.0001);
+                } else if (currentFilter === 'healthy') {
+                    matchTab = (gw >= 0.5 && cw >= 0.5);
+                } else if (currentFilter === 'warning') {
+                    matchTab = (gw < 0.15 || cw < 0.15);
+                } else if (currentFilter === 'exhausted') {
+                    // 仅查看 Gemini 周额度已彻底归零 (== 0) 的枯竭账号
+                    matchTab = (gw <= 0.0001);
+                }
+
+                if (matchQuery && matchTab) {
+                    matchedRows.push(tr);
+                } else {
+                    tr.style.display = 'none';
+                }
+            });
+
+            // 🎯 单页上限 15 个的分页算法
+            const totalMatched = matchedRows.length;
+            const totalPages = Math.max(1, Math.ceil(totalMatched / PAGE_SIZE));
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            const startIndex = (currentPage - 1) * PAGE_SIZE;
+            const endIndex = startIndex + PAGE_SIZE;
+
+            matchedRows.forEach((tr, index) => {
+                if (index >= startIndex && index < endIndex) {
+                    tr.style.display = '';
+                } else {
+                    tr.style.display = 'none';
+                }
+            });
+
+            // 顶栏计数器
+            const counter = document.getElementById('filter-counter');
+            if (counter) {
+                counter.innerHTML = `显示: <b>${Math.min(PAGE_SIZE, totalMatched)}</b> / ${rows.length}`;
+            }
+
+            // 底部分页控制栏状态同步
+            const pageIndicator = document.getElementById('page-indicator');
+            if (pageIndicator) {
+                pageIndicator.innerHTML = `第 <b>${currentPage}</b> / ${totalPages} 页`;
+            }
+            const pageTotal = document.getElementById('page-total');
+            if (pageTotal) {
+                pageTotal.innerHTML = `共 ${totalMatched} 个账号`;
+            }
+            const btnPrev = document.getElementById('btn-prev-page');
+            const btnNext = document.getElementById('btn-next-page');
+            if (btnPrev) btnPrev.disabled = (currentPage <= 1);
+            if (btnNext) btnNext.disabled = (currentPage >= totalPages);
+
+            // 🎯 尊重用户绝对控制权：彻底停发 resizeWindow，完全交由用户自由拖拉设置窗口尺寸！
+        }
+
+        // 支持 URL 参数 ?filter=usable 自动触发筛选
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const f = urlParams.get('filter');
+            if (f) {
+                const btn = document.querySelector(`.filter-tab[data-filter="${f}"]`);
+                if (btn) setFilter(f, btn);
+            }
+        });
+
+        // 窗口重新获得焦点时立即静默触发一次最新状态同步
+        window.addEventListener('focus', () => {
+            fetchTableSafely();
+        });
+
+        // 每 5 秒静默同步全池最新状态（0 冲突、0 剥离、绝对稳态）
+        setInterval(fetchTableSafely, 5000);
+
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                const c = document.querySelector('.app-container');
+                const tb = document.querySelector('.top-bar');
+                const cb = document.querySelector('.control-bar');
+                const tw = document.querySelector('.table-wrap');
+                const pb = document.querySelector('.pagination-bar');
+                const getR = el => el ? `left:${el.getBoundingClientRect().left},right:${el.getBoundingClientRect().right},w:${el.getBoundingClientRect().width}` : 'null';
+                const msg = `WIN:${window.innerWidth}|TOP:${getR(tb)}|CTRL:${getR(cb)}|TBL:${getR(tw)}|PAG:${getR(pb)}`;
+                fetch('/api/diag?msg=' + encodeURIComponent(msg));
+            }, 300);
+        });
+
+        // ═══════════════════════════════════════════════════════════
+        // 🔀 账号顺序双轨调节系统（原生拖拽 + 一键微调箭头，零依赖高稳态）
+        // ═══════════════════════════════════════════════════════════
+        let isReordering = false;
+        let dragSrcRow = null;
+
+        // 🔼🔽 一键上下微调行顺序
+        function moveAccountRow(email, direction) {
+            isReordering = true;
+            const tbody = document.getElementById('account-tbody');
+            if (!tbody) return;
+            const rows = Array.from(tbody.querySelectorAll('tr.account-row'));
+            const idx = rows.findIndex(r => r.getAttribute('data-email') === email);
+            if (idx === -1) return;
+            const targetIdx = idx + direction;
+            if (targetIdx < 0 || targetIdx >= rows.length) return;
+
+            if (direction === -1) {
+                tbody.insertBefore(rows[idx], rows[targetIdx]);
+            } else {
+                tbody.insertBefore(rows[targetIdx], rows[idx]);
+            }
+
+            saveCurrentAccountOrder();
+        }
+
+        // 💾 保存当前账号新顺序至后端数据库
+        async function saveCurrentAccountOrder() {
+            isReordering = true;
+            const tbody = document.getElementById('account-tbody');
+            if (!tbody) return;
+
+            // 1. 即时平滑更新前端行号
+            tbody.querySelectorAll('tr.account-row').forEach((r, i) => {
+                const numEl = r.querySelector('.row-num');
+                if (numEl) numEl.textContent = i + 1;
+            });
+
+            // 2. 构造新序列参数
+            const emails = Array.from(tbody.querySelectorAll('tr.account-row'))
+                .map(r => r.getAttribute('data-email'));
+
+            const body = emails.map(e => `order[]=${encodeURIComponent(e)}`).join('&');
+            try {
+                const resp = await fetch('/api/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: body
+                });
+                if (resp.ok) {
+                    showToast('✅ 账号顺序已持久化保存', 'success');
+                    __cachedTbodyHTML = tbody.innerHTML;
+                } else {
+                    showToast('❌ 保存顺序失败 (HTTP ' + resp.status + ')', 'error');
+                }
+            } catch (err) {
+                showToast('❌ 保存顺序网络异常: ' + err.message, 'error');
+            } finally {
+                setTimeout(() => { isReordering = false; }, 2000);
+            }
+        }
+
+        // 🖱️ 原生拖拽排序监听器初始化
+        function initDragSort() {
+            const tbody = document.getElementById('account-tbody');
+            if (!tbody) return;
+
+            tbody.querySelectorAll('tr.account-row').forEach(row => {
+                row.setAttribute('draggable', 'true');
+
+                row.ondragstart = function(e) {
+                    isReordering = true;
+                    dragSrcRow = row;
+                    row.style.opacity = '0.35';
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', row.getAttribute('data-email') || '');
+                };
+
+                row.ondragend = function() {
+                    row.style.opacity = '';
+                    tbody.querySelectorAll('tr.account-row').forEach(r => {
+                        r.classList.remove('drag-over-top', 'drag-over-bottom');
+                    });
+                    setTimeout(() => { isReordering = false; }, 2000);
+                };
+
+                row.ondragover = function(e) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (!dragSrcRow || dragSrcRow === row) return;
+                    const rect = row.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    tbody.querySelectorAll('tr.account-row').forEach(r => r.classList.remove('drag-over-top', 'drag-over-bottom'));
+                    if (e.clientY < midY) {
+                        row.classList.add('drag-over-top');
+                    } else {
+                        row.classList.add('drag-over-bottom');
+                    }
+                };
+
+                row.ondragleave = function() {
+                    row.classList.remove('drag-over-top', 'drag-over-bottom');
+                };
+
+                row.ondrop = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!dragSrcRow || dragSrcRow === row) return;
+
+                    const rect = row.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    const insertBefore = e.clientY < midY;
+
+                    if (insertBefore) {
+                        tbody.insertBefore(dragSrcRow, row);
+                    } else {
+                        tbody.insertBefore(dragSrcRow, row.nextSibling);
+                    }
+
+                    row.classList.remove('drag-over-top', 'drag-over-bottom');
+                    saveCurrentAccountOrder();
+                };
+            });
+        }
+
+        // 初始化等待与自动重绑
+        function waitAndInitDragSort() {
+            const tbody = document.getElementById('account-tbody');
+            if (tbody && tbody.querySelectorAll('tr.account-row').length > 0) {
+                initDragSort();
+            } else {
+                setTimeout(waitAndInitDragSort, 200);
+            }
+        }
+        window.addEventListener('DOMContentLoaded', () => setTimeout(waitAndInitDragSort, 200));
+
+    </script>
+
+</body>
+</html>

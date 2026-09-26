@@ -906,11 +906,10 @@ def render_table_rows(include_oob: bool = False) -> str:
             badge_html = '<span class="badge badge-active"><span class="pulse-dot-green"></span>ACTIVE</span>'
             main_btn_html = f"""<div class="active-badge-action font-mono" title="当前主程序正在使用此账号护航">在用</div>"""
         elif is_blocked:
-            badge_html = '<span class="badge" style="background:#EF4444;color:#FFFFFF;border:2px solid #000;font-weight:900;" title="Google账号需网页验证">⚠️待验证</span>'
-            main_btn_html = f"""<button class="btn font-mono" 
-                            style="background:#FF4B4B;color:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;font-size:11px;font-weight:900;border:2px solid #000;box-shadow:2px 2px 0px #000;cursor:pointer;"
+            badge_html = '<span class="badge badge-blocked" title="Google账号需网页验证">⚠️待验证</span>'
+            main_btn_html = f"""<button class="btn btn-unblock font-mono" 
                             onclick="doUnblockAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                            title="拉起专属隔离Chrome容器并自动定向对应账号解封（彻底防500）">一键解封</button>"""
+                            title="拉起专属隔离Chrome容器并自动定向对应账号解封（彻底防500）">解封</button>"""
         else:
             badge_html = '<span class="badge badge-standby">STANDBY</span>'
             has_refresh_token = bool(acc.get("refresh_token", ""))
@@ -1519,6 +1518,7 @@ def render_dashboard_html() -> str:
         }}
         .badge-active {{ background: #22C55E; color: #000000; }}
         .badge-standby {{ background: #38BDF8; color: #000000; }}
+        .badge-blocked {{ background: #EF4444; color: #FFFFFF; }}
 
         .pulse-dot-green {{
             width: 5px;
@@ -1842,6 +1842,35 @@ def render_dashboard_html() -> str:
             align-items: center;
             justify-content: center;
             cursor: pointer;
+        }}
+
+        .btn-unblock {{ 
+            width: 60px !important; 
+            min-width: 60px !important; 
+            max-width: 60px !important; 
+            height: 24px;
+            flex-shrink: 0 !important; 
+            background: #FF4B4B; 
+            color: #FFFFFF; 
+            font-size: 11px;
+            font-weight: 900;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            padding: 0 !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }}
+        .btn-unblock:hover {{
+            background: #E11D48;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000000;
+        }}
+        .btn-unblock:active {{
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #000000;
         }}
 
         /* 🏷️ 顶栏版本号指示标牌 */
@@ -2225,12 +2254,12 @@ def render_dashboard_html() -> str:
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 44px;">   <!-- # 序号+拖拽手柄 (44px) -->
-                    <col style="width: 76px;">   <!-- 状态 (76px) -->
-                    <col style="width: 148px;">  <!-- 账号+PRO (148px) -->
-                    <col style="width: 260px;">  <!-- Gemini 配额 (260px) -->
-                    <col style="width: 260px;">  <!-- Claude 配额 (260px) -->
-                    <col style="width: 104px;">  <!-- 切换+调序操作 (104px) -->
+                    <col style="width: 40px;">   <!-- # 序号+拖拽手柄 (40px) -->
+                    <col style="width: 74px;">   <!-- 状态 (74px) -->
+                    <col style="width: 226px;">  <!-- 账号+PRO (226px，自适应充沛呼吸空间，彻底根除截断) -->
+                    <col style="width: 234px;">  <!-- Gemini 配额 (234px) -->
+                    <col style="width: 234px;">  <!-- Claude 配额 (234px) -->
+                    <col style="width: 92px;">   <!-- 切换+调序操作 (92px) -->
                 </colgroup>
                 <thead>
                     <tr>
