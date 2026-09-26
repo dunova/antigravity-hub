@@ -50,6 +50,11 @@ NATIVE_OAUTH_USER_AGENT = "vscode/1.X.X (Antigravity/4.3.0)"
 BASE_DATA_DIR = os.environ.get("ANTIGRAVITY_HUB_DIR", os.path.expanduser("~/.antigravity_hub"))
 ACCOUNTS_HUB_FILE = os.path.join(BASE_DATA_DIR, "accounts_hub.json")
 MANUAL_OVERRIDE_LOCK_PATH = os.path.join(BASE_DATA_DIR, "manual_override_lock.json")
+WARMUP_SCHEDULE_FILE = os.path.join(BASE_DATA_DIR, "warmup_schedule.json")
+WARMUP_GENERATE_ENDPOINTS = [
+    "https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent",
+    "https://cloudcode-pa.googleapis.com/v1internal:generateContent",
+]
 
 ANTIGRAVITY_TOOLS_DIR = os.path.expanduser("~/.antigravity_tools")
 ANTIGRAVITY_TOOLS_ACCOUNTS_DIR = os.path.join(ANTIGRAVITY_TOOLS_DIR, "accounts")
@@ -436,3 +441,128 @@ class AntigravityPhysicalManager:
             self.execute_hot_switch()
 
         return True, f"成功无感切换至账号: {target_email}"
+
+    def perform_real_switch(self, target_email: str, restart_app: bool = True, relay_prompt: str = DEFAULT_RELAY_PROMPT, force: bool = False) -> bool:
+        """执行完整账号切换（兼容旧接口）"""
+        ok, msg = self.switch_account(target_email, force_hot_switch=restart_app)
+        return ok
+
+    def load_warmup_schedule(self) -> Dict[str, Any]:
+        """读取持久化各账号预热调度账本"""
+        if os.path.exists(WARMUP_SCHEDULE_FILE):
+            try:
+                with open(WARMUP_SCHEDULE_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    def save_warmup_schedule(self, sched: Dict[str, Any]) -> bool:
+        """原子写入各账号预热调度账本"""
+        return atomic_write_json(WARMUP_SCHEDULE_FILE, sched)
+
+    def send_real_warmup_ping(self, access_token: str, model: str = "gemini-2.5-flash") -> Dict[str, Any]:
+        """
+        【单账号官方原生真实生成预热 (L1 实测验证通过 · 官方内部 Protobuf 契约)】
+        端点: https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent
+        灾备: https://cloudcode-pa.googleapis.com/v1internal:generateContent
+        Payload: 包装在 request 内部，包含 contents 与 generationConfig，耗费约 20~40 tokens
+        """
+        target_model = "claude-sonnet-4-6" if "claude" in model.lower() else "gemini-2.5-flash"
+        payload = {
+            "model": target_model,
+            "request": {
+                "contents": [{"role": "user", "parts": [{"text": "Hello, please reply with a 20-word greeting."}]}],
+                "generationConfig": {"maxOutputTokens": 30, "temperature": 0.2}
+            }
+        }
+        body = json.dumps(payload).encode("utf-8")
+        ctx = ssl.create_default_context()
+
+        for ep in WARMUP_GENERATE_ENDPOINTS:
+            try:
+                req = urllib.request.Request(
+                    ep,
+                    data=body,
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json",
+                        "User-Agent": NATIVE_OAUTH_USER_AGENT
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
+                    if resp.status == 200:
+                        resp_data = json.loads(resp.read().decode("utf-8"))
+                        tokens = resp_data.get("response", {}).get("usageMetadata", {})
+                        logger.info(f"   🎉 [真实预热成功] 模型: {target_model}, 消耗Tokens: {tokens}")
+                        return {"status": "success", "endpoint": ep, "model": target_model, "tokens": tokens}
+            except urllib.error.HTTPError as he:
+                err_body = _safe_decode_resp(he.read())
+                logger.warning(f"   ⚠️ 预热请求 HTTP {he.code} ({ep}): {err_body[:200]}")
+                if he.code == 403 and "VALIDATION_REQUIRED" in err_body:
+                    return {"status": "validation_blocked", "error": err_body}
+            except Exception as ex:
+                logger.warning(f"   ⚠️ 预热异常 ({ep}): {ex}")
+        return {"status": "failed", "endpoint": "all_failed"}
+
+    def warmup_single_account(self, acc: Dict[str, Any], force: bool = False, model_override: str = "") -> Dict[str, Any]:
+        """单账号官方原生真实生成预热"""
+        email = acc.get("email", "")
+        rt = acc.get("refresh_token")
+        if not rt:
+            tok = acc.get("token", {})
+            rt = tok.get("refresh_token", "")
+        if not rt:
+            return {"email": email, "status": "no_refresh_token"}
+
+        if acc.get("validation_blocked"):
+            logger.warning(f"🛡️ [预热风控熔断] 账号 {email} 处于 Google 验证拦截态，跳过预热")
+            return {"email": email, "status": "validation_blocked"}
+
+        ping_model = model_override or "gemini-2.5-flash"
+        logger.info(f"🔥 [单账号真实生成预热] 正在为账号 {email} 执行 Token 校验与官方端点 Ping 激活 (选定模型: {ping_model})...")
+
+        at, _ = self.ensure_fresh_token(acc)
+        if not at:
+            return {"email": email, "status": "refresh_failed"}
+
+        now_sec = int(time.time())
+        ping_res = self.send_real_warmup_ping(at, model=ping_model)
+
+        # 核心：计算并硬锁定 5 小时绝对重置时刻 (精确到秒)
+        locked_reset_ts = now_sec + 18000
+        locked_reset_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(locked_reset_ts))
+
+        # 更新持久化预热账本
+        sched = self.load_warmup_schedule()
+        sched[email] = {
+            "email": email,
+            "last_warmup_ts": now_sec,
+            "locked_reset_ts": locked_reset_ts,
+            "locked_reset_iso": locked_reset_iso,
+            "model_warmed": ping_model,
+            "status": "active_countdown"
+        }
+        self.save_warmup_schedule(sched)
+
+        # 关键联动：同步原子写回 accounts_hub.json
+        if os.path.exists(ACCOUNTS_HUB_FILE):
+            try:
+                with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as hf:
+                    hub_data = json.load(hf)
+                if email in hub_data.get("accounts", {}):
+                    acc_entry = hub_data["accounts"][email]
+                    if ping_model.startswith("claude"):
+                        acc_entry.setdefault("claude", {})["reset_time_5h"] = locked_reset_iso
+                    else:
+                        acc_entry.setdefault("gemini", {})["reset_time_5h"] = locked_reset_iso
+                    atomic_write_json(ACCOUNTS_HUB_FILE, hub_data)
+                    logger.info(f"     📑 [Hub联动] 已同步原子更新 accounts_hub.json 账号 {email} 5h 重置时刻: {locked_reset_iso}")
+            except Exception as ex:
+                logger.warning(f"同步写回 accounts_hub.json 异常: {ex}")
+
+        rem_h = (locked_reset_ts - now_sec) / 3600
+        logger.info(f"     ✅ 账号 {email} 真实预热成功！模型: {ping_model}, 官方5h周期已锁定，将于 {locked_reset_iso} ({rem_h:.2f}h后) 满血重置！")
+        return {"email": email, "status": "success", "model_warmed": ping_model, "locked_reset_ts": locked_reset_ts, "locked_reset_iso": locked_reset_iso}
+

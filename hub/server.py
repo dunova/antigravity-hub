@@ -30,10 +30,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.31.0"
-__canonical_version_tag__ = "20260926-v2.31.0-FIX_5H_FULL_READY_DISPLAY"
-__last_updated__ = "2026-09-26 15:25:00"
-__canonical_doctrine__ = "Gemini/Claude 配额表头三态循环排序 (周升序→5h升序→恢复默认) + Google OAuth 自动授权"
+__version__ = "2.32.0"
+__canonical_version_tag__ = "20260926-v2.32.0-REAL_WARMUP_PIPELINE"
+__last_updated__ = "2026-09-26 20:30:00"
+__canonical_doctrine__ = "单账号极轻量真实预热 + 全池阶梯错峰流水线 + 5h倒计时锁定就绪"
 
 
 # 配置常量
@@ -606,95 +606,31 @@ class HubEngine:
         finally:
             self.refreshing_now = False
 
-    def trigger_warmup(self, email: str, acc: Dict[str, Any]) -> bool:
-        # 【零风控安全铁律 · 2026-09-26 拍板】彻底停用任何后台伪造生成 Ping 预热，保障账号绝对安全！
-        logger.info(f"🛡️ [安全拦截] 账号 {email} 伪造预热已被安全拦截（零请求），保障账号绝对安全！")
-        return True
-
-        now = int(time.time())
-        at = acc.get("access_token")
-        exp = acc.get("expires_at", 0)
-        acc_id = acc.get("id", "")
-
-        # 临期 15 分钟安全偏置
-        if not at or exp <= (now + TOKEN_REFRESH_SKEW_SECONDS):
-            rt = acc.get("refresh_token", "")
-            if rt:
-                refreshed = self.refresh_google_token(rt)
-                if refreshed:
-                    at = refreshed.get("access_token")
-                    expires_in = refreshed.get("expires_in", 3600)
-                    exp = now + expires_in
-                    acc["access_token"] = at
-                    acc["expires_at"] = exp
-                    self._sync_antigravity_tools_cache(acc_id, access_token=at, refresh_token=rt, expiry_ts=exp)
-
-        if not at:
-            logger.error(f"账号 {email} 缺失有效 Token，无法预热")
+    def trigger_warmup(self, email: str, acc: Dict[str, Any], model_override: str = "") -> bool:
+        """
+        【Hub 预热单账号直通入口 · 对齐物理中枢 AntigravityPhysicalManager】
+        """
+        try:
+            from core.switcher import AntigravityPhysicalManager
+            mgr = AntigravityPhysicalManager()
+            acc_entry = dict(acc)
+            acc_entry["email"] = email
+            res = mgr.warmup_single_account(acc_entry, force=True, model_override=model_override)
+            st = res.get("status")
+            if st in ("success", "cooldown_active"):
+                logger.info(f"🔥 Hub 触发预热成功: {email} -> {res}")
+                now = int(time.time())
+                acc["last_warmup_ts"] = now
+                acc["next_warmup_ts"] = now + 14400 + random.randint(600, 2400)
+                # 触发配额刷新并写回
+                self.refresh_single_account_quota(email, acc)
+                return True
+            else:
+                logger.warning(f"⚠️ Hub 触发预热非成功: {email} -> {res}")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Hub 触发预热异常 {email}: {e}")
             return False
-
-        payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": f"Ping warmup at {int(time.time())}"}]
-                }
-            ],
-            "generationConfig": {
-                "maxOutputTokens": 1,
-                "temperature": 0.0
-            }
-        }
-        body = json.dumps(payload).encode("utf-8")
-        ctx = ssl.create_default_context()
-
-        success = False
-        for ep in WARMUP_ENDPOINTS:
-            try:
-                url = f"{ep}?model=gemini-3-flash"
-                req = urllib.request.Request(
-                    url,
-                    data=body,
-                    headers={
-                        "Authorization": f"Bearer {at}",
-                        "Content-Type": "application/json",
-                        "User-Agent": NATIVE_OAUTH_USER_AGENT
-                    },
-                    method="POST"
-                )
-                with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
-                    if resp.status in (200, 204):
-                        success = True
-                        break
-            except urllib.error.HTTPError as he:
-                if he.code == 403:
-                    body_err = he.read().decode("utf-8", errors="ignore")
-                    val_url = None
-                    try:
-                        err_j = json.loads(body_err)
-                        for det in err_j.get("error", {}).get("details", []):
-                            if det.get("reason") == "VALIDATION_REQUIRED":
-                                val_url = det.get("metadata", {}).get("validation_url", "")
-                    except Exception:
-                        pass
-                    if val_url:
-                        acc["validation_blocked"] = True
-                        acc["validation_url"] = val_url
-                        acc["validation_blocked_reason"] = "VALIDATION_REQUIRED"
-                        self._sync_antigravity_tools_cache(acc_id, validation_blocked=True, val_url=val_url)
-                        logger.error(f"🚨 [预热风控熔断] 账号 {email} 触发 Google VALIDATION_REQUIRED: {val_url}")
-                        return False
-            except Exception:
-                continue
-
-        now = int(time.time())
-        acc["last_warmup_ts"] = now
-        # 4 小时基准 + 随机 10~40 分钟抖动
-        jitter = random.randint(600, 2400)
-        acc["next_warmup_ts"] = now + 14400 + jitter
-
-        logger.info(f"🔥 账号 {email} 预热{'成功' if success else '触发完成'}，下次随机预热时间: {time.strftime('%H:%M:%S', time.localtime(acc['next_warmup_ts']))}")
-        return True
 
     def switch_account(self, target_email: str) -> Tuple[bool, str]:
         # 物理中枢无缝接入：与额度用尽自动轮换 100% 共享完全一致的底层物理切换与脱壳接力唤醒
@@ -938,7 +874,10 @@ def render_table_rows(include_oob: bool = False) -> str:
             if has_refresh_token:
                 main_btn_html = f"""<button class="btn btn-switch font-mono" 
                                 onclick="doSwitchAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button>"""
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button>
+                                <button class="btn btn-warmup font-mono" 
+                                onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
+                                title="向该账号发送极轻量真实生成，提前锁定5h倒计时错峰就绪">预热</button>"""
             else:
                 main_btn_html = f"""<button class="btn btn-switch font-mono" 
                                 style="opacity:0.35;cursor:not-allowed;background:#ccc;"
@@ -1902,7 +1841,35 @@ def render_dashboard_html() -> str:
             display: inline-flex;
             align-items: center;
             justify-content: center;
+        }}
+        
+        .btn-warmup {{ 
+            width: 44px !important; 
+            min-width: 44px !important; 
+            max-width: 44px !important; 
+            height: 24px;
+            flex-shrink: 0 !important; 
+            background: #FF9900; 
+            color: #000000; 
+            font-size: 11px;
+            font-weight: 900;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            padding: 0 !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
+        }}
+        .btn-warmup:hover {{
+            background: #FF7700;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000000;
+        }}
+        .btn-warmup:active {{
+            transform: translate(1px, 1px);
+            box-shadow: 1px 1px 0px #000000;
         }}
 
         .btn-unblock {{ 
@@ -2447,6 +2414,12 @@ def render_dashboard_html() -> str:
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
                     刷新
                 </button>
+                <button class="btn btn-top btn-warmup-all font-mono"
+                        onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
+                        title="启动全池阶梯错峰预热流水线，提前激活备用账号 5h 倒计时">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    错峰预热
+                </button>
             </div>
         </div>
 
@@ -2475,10 +2448,10 @@ def render_dashboard_html() -> str:
                 <colgroup>
                     <col style="width: 40px;">   <!-- # 序号+拖拽手柄 (40px) -->
                     <col style="width: 74px;">   <!-- 状态 (74px) -->
-                    <col style="width: 226px;">  <!-- 账号+PRO (226px，自适应充沛呼吸空间，彻底根除截断) -->
+                    <col style="width: 186px;">  <!-- 账号+PRO (186px，自适应充沛呼吸空间，彻底根除截断) -->
                     <col style="width: 234px;">  <!-- Gemini 配额 (234px) -->
                     <col style="width: 234px;">  <!-- Claude 配额 (234px) -->
-                    <col style="width: 92px;">   <!-- 切换+调序操作 (92px) -->
+                    <col style="width: 136px;">  <!-- 切换+预热+调序操作 (136px 充沛空间，消除切边) -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -3055,8 +3028,21 @@ def render_dashboard_html() -> str:
                 const html = await resp.text();
                 applyTbodyAndOOB(html);
                 showToast("🔥 静默预热探针触发完成！模型已激活", "warmup");
+        }}
+
+        // 🔥 全池阶梯错峰预热直通函数
+        async function doWarmupAll() {{
+            showToast("⏳ 正在启动全池阶梯错峰预热流水线...", "info");
+            try {{
+                const resp = await fetch('/api/warmup-all', {{
+                    method: 'POST'
+                }});
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const html = await resp.text();
+                applyTbodyAndOOB(html);
+                showToast("🎉 全池阶梯错峰预热已完成！各账号 5h 倒计时已锁定启动", "warmup");
             }} catch (err) {{
-                showToast("❌ 预热失败: " + err.message, "error");
+                showToast("❌ 错峰预热失败: " + err.message, "error");
             }}
         }}
 
