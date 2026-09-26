@@ -48,5 +48,6 @@ data/
 browser_profiles/
 profiles/
 run/
+docs/preview.html
 cache/
 logs/

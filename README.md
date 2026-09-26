@@ -143,6 +143,47 @@ python3 start_hub.py --open-browser
 
 ---
 
+## 📥 多账号纳管、导入导出与彻底独立运维指南
+
+Antigravity Hub 具备 **100% 原生独立的账号纳管引擎**，彻底脱离对任何外部第三方工具（如 `Antigravity Tools` 等）的依赖。新用户无论是仅有 1 个账号还是拥有数十个账号，均可通过以下极简途径完成纳管与备份：
+
+### 途径一：零门槛首选 · IDE 切换并一键吸纳 (Sync Active)
+对于普通开发者，无需手动复制复杂的 OAuth Token：
+1. 打开官方 **Antigravity IDE**，点击右上角头像退出当前账号，登录您的第 2 个（或更多）Google 账号；
+2. 登录成功后，打开 Antigravity Hub 看板，点击顶栏右侧的 **`📥 导入`** 按钮；
+3. 在弹出的模态中心点击 **`⚡ 立即从 IDE 钥匙串检测并吸纳新账号`**；
+4. Hub 将自动调用底层接口提取安全钥匙串凭据，自动初始化双模型配额，瞬间扩充账号池！
+
+### 途径二：批量导入 JSON 备份 (Import JSON)
+如果您手头有跨设备备份或账号凭据列表：
+1. 点击看板顶栏右侧 **`📥 导入`** 按钮，切换到 **`📁 批量导入 JSON 备份`** 选项卡；
+2. 支持点击上传 `.json` 备份文件，或直接在文本框中粘贴 JSON 数据；
+3. **弹性格式兼容**：
+   - Hub 官方全量备份包：`{"accounts": {"user@gmail.com": {...}}}`
+   - 账号列表数组：`[{"email": "user@gmail.com", "refresh_token": "1//04..."}, ...]`
+   - 字典映射：`{"user@gmail.com": {"refresh_token": "1//04..."}}`
+   - 单账号对象：`{"email": "user@gmail.com", "refresh_token": "1//04..."}`
+4. 点击 **`📥 开始解析并合并入库`**，系统将自动清洗、去重合并，并异步向 Google 官方端点并发拉取最新配额。
+
+### 途径三：一键全量导出备份 (Export Backup)
+- 点击看板顶栏右侧的 **`📤 导出`** 按钮，浏览器将立即生成并下载 `antigravity_accounts_backup.json` 文件；
+- 导出文件包含全池账号的完整凭据与健康元数据，方便随时在新电脑上秒级迁移复原。
+
+### 途径四：命令行 (CLI) 自动化运维
+对于脚本编写与自动化集成场景，支持直接通过命令行执行导入导出与吸纳：
+```bash
+# 1. 立即从当前 IDE/系统安全钥匙串吸纳新登录账号并退出
+python3 start_hub.py --sync-active
+
+# 2. 导出全量账号备份到指定文件并退出
+python3 start_hub.py --export /path/to/my_accounts_backup.json
+
+# 3. 从指定 JSON 文件批量导入/合并账号并退出
+python3 start_hub.py --import /path/to/my_accounts_backup.json
+```
+
+---
+
 ## 🛠️ 命令行运维工具指南
 
 ### 1. 启动选项

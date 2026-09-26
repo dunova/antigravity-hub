@@ -1243,6 +1243,8 @@ def render_dashboard_html() -> str:
             transform: translate(1px, 1px);
             box-shadow: 1px 1px 0px #000000;
         }}
+        .btn-import {{ background: #00F0FF; color: #000000; margin-right: 6px; }}
+        .btn-export {{ background: #FFE600; color: #000000; margin-right: 6px; }}
         .btn-refresh-all {{ background: #22C55E; color: #000000; }}
         .btn-warmup-all {{ background: #FF4D4D; color: #FFFFFF; }}
 
@@ -2136,6 +2138,152 @@ def render_dashboard_html() -> str:
             transform: translate(1.5px, 1.5px);
             box-shadow: 1px 1px 0px #000000;
         }}
+
+        /* 导入与纳管中心模态弹窗样式 */
+        .import-modal-box {{
+            background: #F4F0EA;
+            width: 530px;
+            max-width: 92vw;
+            border: 3px solid #000000;
+            border-radius: var(--radius-modal);
+            box-shadow: 6px 6px 0px #000000;
+            animation: popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow: hidden;
+            box-sizing: border-box;
+        }}
+        .import-tabs {{
+            display: flex;
+            background: #E5E7EB;
+            border-bottom: 2.5px solid #000000;
+            padding: 8px 12px 0 12px;
+            gap: 6px;
+            box-sizing: border-box;
+            user-select: none;
+        }}
+        .import-tab-btn {{
+            background: #D1D5DB;
+            color: #4B5563;
+            border: 2px solid #000000;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 900;
+            cursor: pointer;
+            transition: all 0.1s;
+        }}
+        .import-tab-btn.active {{
+            background: #F4F0EA;
+            color: #000000;
+            border-bottom: 2.5px solid #F4F0EA;
+            margin-bottom: -2.5px;
+            box-shadow: 2px -2px 0px #000000;
+        }}
+        .import-body-content {{
+            padding: 16px 18px;
+            background: #F4F0EA;
+            box-sizing: border-box;
+        }}
+        .import-tip-box {{
+            background: #FFFFFF;
+            border: 2px solid #000000;
+            border-radius: 6px;
+            box-shadow: 2px 2px 0px #000000;
+            padding: 10px 12px;
+            font-size: 11.5px;
+            font-weight: 700;
+            line-height: 1.6;
+            margin-bottom: 14px;
+            color: #111827;
+        }}
+        .form-label {{
+            display: block;
+            font-size: 11px;
+            font-weight: 900;
+            margin-bottom: 4px;
+            color: #000000;
+        }}
+        .form-input, .form-textarea {{
+            width: 100%;
+            border: 2px solid #000000;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 11.5px;
+            font-weight: 700;
+            background: #FFFFFF;
+            box-sizing: border-box;
+            box-shadow: 2px 2px 0px #000000;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }}
+        .form-input:focus, .form-textarea:focus {{
+            outline: none;
+            border-color: #000000;
+            background: #FFFBEB;
+        }}
+        .form-input-file {{
+            width: 100%;
+            border: 2px dashed #000000;
+            border-radius: 6px;
+            padding: 8px;
+            background: #FFFFFF;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+        }}
+        .btn-submit-action {{
+            width: 100%;
+            height: 36px;
+            background: var(--cyan-accent);
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            font-size: 12px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 3px 3px 0px #000000;
+            transition: all 0.08s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }}
+        .btn-submit-action:hover {{
+            transform: translate(-1px, -1px);
+            box-shadow: 4px 4px 0px #000000;
+        }}
+        .btn-submit-action:active {{
+            transform: translate(1.5px, 1.5px);
+            box-shadow: 1px 1px 0px #000000;
+        }}
+        .btn-sync-action {{
+            width: 100%;
+            height: 40px;
+            background: #FFE600;
+            color: #000000;
+            border: 2.5px solid #000000;
+            border-radius: var(--radius-btn);
+            font-size: 12.5px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 3.5px 3.5px 0px #000000;
+            transition: all 0.08s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }}
+        .btn-sync-action:hover {{
+            transform: translate(-1px, -1px);
+            box-shadow: 4.5px 4.5px 0px #000000;
+            background: #FFED4A;
+        }}
+        .btn-sync-action:active {{
+            transform: translate(1.5px, 1.5px);
+            box-shadow: 1px 1px 0px #000000;
+        }}
         /* 新野兽派底部分页控制栏 (粗黑框 + 硬投影 + 紧凑微圆角) */
         .pagination-bar {{
             display: flex;
@@ -2222,11 +2370,23 @@ def render_dashboard_html() -> str:
             </div>
             {stats_html}
             <div class="top-right">
+                <button class="btn btn-top btn-import font-mono"
+                        onclick="openImportModal(); event.preventDefault(); event.stopPropagation();"
+                        title="导入账号备份、批量添加或从 IDE 钥匙串一键吸纳">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    导入
+                </button>
+                <button class="btn btn-top btn-export font-mono"
+                        onclick="doExportAccounts(); event.preventDefault(); event.stopPropagation();"
+                        title="导出全池账号备份 JSON">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    导出
+                </button>
                 <button class="btn btn-top btn-refresh-all font-mono"
                         onclick="doRefreshQuota(this); event.preventDefault(); event.stopPropagation();"
                         title="立即同步最新活跃状态并触发全池配额并发刷新">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-                    刷新配额
+                    刷新
                 </button>
             </div>
         </div>
@@ -2293,8 +2453,226 @@ def render_dashboard_html() -> str:
         </div>
     </div>
 
+    <!-- 📥 Neo-Brutalism 账号纳管与导入中心模态弹窗 -->
+    <div id="import-modal-backdrop" class="modal-backdrop font-mono" onclick="if(event.target===this)closeImportModal()">
+        <div class="import-modal-box">
+            <div class="modal-header">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <span>账号导入与纳管中心</span>
+                </div>
+                <span class="modal-close" onclick="closeImportModal()" title="关闭窗口">✕</span>
+            </div>
+
+            <div class="import-tabs">
+                <button class="import-tab-btn active" id="tab-btn-sync" onclick="switchImportTab('sync')">⚡ 从当前 IDE 一键吸纳</button>
+                <button class="import-tab-btn" id="tab-btn-file" onclick="switchImportTab('file')">📁 批量导入 JSON 备份</button>
+                <button class="import-tab-btn" id="tab-btn-manual" onclick="switchImportTab('manual')">➕ 手动添加账号</button>
+            </div>
+
+            <div class="import-body-content">
+                <!-- TAB 1: 钥匙串一键吸纳 -->
+                <div id="import-pane-sync" class="import-pane">
+                    <div class="import-tip-box">
+                        <b>💡 最简纳管指南：</b><br>
+                        1. 在官方 Antigravity IDE 右上角退出当前账号，登录您的第 2 个谷歌账号；<br>
+                        2. 登录完成后回到此页面，点击下方黄色大按钮；<br>
+                        3. Hub 将从系统安全钥匙串自动吸纳新凭据并初始化配额，零门槛完成多账号扩充！
+                    </div>
+                    <button class="btn-sync-action font-mono" id="btn-sync-active" onclick="doSyncActiveAccount(this)">
+                        ⚡ 立即从 IDE 钥匙串检测并吸纳新账号
+                    </button>
+                </div>
+
+                <!-- TAB 2: JSON 备份导入 -->
+                <div id="import-pane-file" class="import-pane" style="display:none;">
+                    <div class="import-tip-box">
+                        <b>📋 兼容格式：</b>支持 Hub 导出备份包、账号数组列表或单账号字典。系统自动去重合并并拉取最新配额。
+                    </div>
+                    <label class="form-label">选择 JSON 备份文件：</label>
+                    <input type="file" id="import-file-input" accept=".json" class="form-input-file" onchange="handleFileUpload(event)">
+                    <label class="form-label">或在此直接粘贴 JSON 文本：</label>
+                    <textarea id="import-text-input" class="form-textarea font-mono" rows="5" placeholder='[&#10;  {{ "email": "user@gmail.com", "refresh_token": "1//04..." }}&#10;]'></textarea>
+                    <button class="btn-submit-action font-mono" onclick="doSubmitJsonImport(this)">
+                        📥 开始解析并合并入库
+                    </button>
+                </div>
+
+                <!-- TAB 3: 手动输入凭据 -->
+                <div id="import-pane-manual" class="import-pane" style="display:none;">
+                    <div class="import-tip-box">
+                        <b>🔑 凭据直录：</b>输入 Google 账号邮箱与 Refresh Token，系统将核验有效性并初始化配额。
+                    </div>
+                    <label class="form-label">Google 邮箱地址 (Email)：</label>
+                    <input type="email" id="manual-email" class="form-input font-mono" placeholder="developer@gmail.com">
+                    <label class="form-label">OAuth Refresh Token (必填)：</label>
+                    <input type="text" id="manual-refresh-token" class="form-input font-mono" placeholder="1//04xxxxxxxx...">
+                    <button class="btn-submit-action font-mono" onclick="doSubmitManualAccount(this)">
+                        ➕ 添加到账号池
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔒 自绘 Neo-Brutalism 通用确认模态弹窗 -->
+    <div id="neo-modal-backdrop" class="modal-backdrop font-mono" onclick="if(event.target===this)closeNeoModal(false)">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span id="modal-title">操作确认</span>
+                <span class="modal-close" onclick="closeNeoModal(false)">✕</span>
+            </div>
+            <div id="modal-body" class="modal-body"></div>
+            <div class="modal-actions">
+                <button class="btn-modal-cancel font-mono" onclick="closeNeoModal(false)">取消</button>
+                <button id="modal-btn-confirm" class="btn-modal-confirm font-mono" onclick="confirmNeoModal()">确定</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentFilter = 'all';
+
+        // 📥 账号导入与纳管中心交互逻辑
+        function openImportModal() {{
+            const backdrop = document.getElementById('import-modal-backdrop');
+            if (backdrop) backdrop.classList.add('show');
+        }}
+
+        function closeImportModal() {{
+            const backdrop = document.getElementById('import-modal-backdrop');
+            if (backdrop) backdrop.classList.remove('show');
+        }}
+
+        function switchImportTab(tabName) {{
+            ['sync', 'file', 'manual'].forEach(t => {{
+                const btn = document.getElementById('tab-btn-' + t);
+                const pane = document.getElementById('import-pane-' + t);
+                if (btn) btn.classList.toggle('active', t === tabName);
+                if (pane) pane.style.display = (t === tabName) ? 'block' : 'none';
+            }});
+        }}
+
+        // 📤 导出全量账号备份 JSON
+        function doExportAccounts() {{
+            showToast("📤 正在生成全量账号备份 JSON...", "info");
+            window.location.href = '/api/export';
+        }}
+
+        // ⚡ 一键从 IDE 钥匙串吸纳当前活跃账号
+        async function doSyncActiveAccount(btn) {{
+            if (btn) {{
+                btn.disabled = true;
+                btn.innerText = "⏳ 正在探测钥匙串凭据...";
+            }}
+            try {{
+                const resp = await fetch('/api/ingest_active', {{ method: 'POST' }});
+                const data = await resp.json();
+                if (resp.ok && data.status === 'ok') {{
+                    showToast("🎉 " + data.message, "success");
+                    closeImportModal();
+                    fetchTableSafely();
+                }} else {{
+                    showToast("❌ " + (data.message || "吸纳失败"), "error");
+                }}
+            }} catch (err) {{
+                showToast("❌ 网络异常: " + err.message, "error");
+            }} finally {{
+                if (btn) {{
+                    btn.disabled = false;
+                    btn.innerText = "⚡ 立即从 IDE 钥匙串检测并吸纳新账号";
+                }}
+            }}
+        }}
+
+        // 处理文件上传读取
+        function handleFileUpload(event) {{
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {{
+                const textarea = document.getElementById('import-text-input');
+                if (textarea) textarea.value = e.target.result;
+            }};
+            reader.readAsText(file);
+        }}
+
+        // 📥 提交 JSON 文本/文件导入
+        async function doSubmitJsonImport(btn) {{
+            const textarea = document.getElementById('import-text-input');
+            const content = textarea ? textarea.value.trim() : '';
+            if (!content) {{
+                showToast("❌ 请先上传文件或粘贴 JSON 数据", "error");
+                return;
+            }}
+            if (btn) {{
+                btn.disabled = true;
+                btn.innerText = "⏳ 正在解析并合并入库...";
+            }}
+            try {{
+                const resp = await fetch('/api/import', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ json_data: content }})
+                }});
+                const data = await resp.json();
+                if (resp.ok && data.status === 'ok') {{
+                    showToast("🎉 " + data.message, "success");
+                    if (textarea) textarea.value = '';
+                    closeImportModal();
+                    fetchTableSafely();
+                }} else {{
+                    showToast("❌ " + (data.message || "导入失败"), "error");
+                }}
+            }} catch (err) {{
+                showToast("❌ 导入请求失败: " + err.message, "error");
+            }} finally {{
+                if (btn) {{
+                    btn.disabled = false;
+                    btn.innerText = "📥 开始解析并合并入库";
+                }}
+            }}
+        }}
+
+        // ➕ 手动提交添加账号
+        async function doSubmitManualAccount(btn) {{
+            const emailInput = document.getElementById('manual-email');
+            const rtInput = document.getElementById('manual-refresh-token');
+            const email = emailInput ? emailInput.value.trim() : '';
+            const rt = rtInput ? rtInput.value.trim() : '';
+            if (!email || !rt) {{
+                showToast("❌ 邮箱和 Refresh Token 均不能为空", "error");
+                return;
+            }}
+            if (btn) {{
+                btn.disabled = true;
+                btn.innerText = "⏳ 正在核验并入库...";
+            }}
+            try {{
+                const resp = await fetch('/api/add_account', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ email: email, refresh_token: rt }})
+                }});
+                const data = await resp.json();
+                if (resp.ok && data.status === 'ok') {{
+                    showToast("🎉 " + data.message, "success");
+                    if (emailInput) emailInput.value = '';
+                    if (rtInput) rtInput.value = '';
+                    closeImportModal();
+                    fetchTableSafely();
+                }} else {{
+                    showToast("❌ " + (data.message || "添加失败"), "error");
+                }}
+            }} catch (err) {{
+                showToast("❌ 请求失败: " + err.message, "error");
+            }} finally {{
+                if (btn) {{
+                    btn.disabled = false;
+                    btn.innerText = "➕ 添加到账号池";
+                }}
+            }}
+        }}
 
         function copyText(text) {{
             if (!text || text === '未激活') return;
@@ -2872,6 +3250,17 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(data).encode("utf-8"))
+        elif parsed.path == "/api/export":
+            from .importer import export_accounts_backup
+            backup_data = export_accounts_backup(ACCOUNTS_HUB_FILE)
+            resp_bytes = json.dumps(backup_data, indent=2, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="antigravity_accounts_backup.json"')
+            self.send_header("Content-Length", str(len(resp_bytes)))
+            self.end_headers()
+            self.wfile.write(resp_bytes)
+            return
         else:
             self.send_response(404)
             self.end_headers()
@@ -3024,6 +3413,66 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(html.encode("utf-8"))
+
+        elif parsed.path == "/api/ingest_active":
+            from .importer import ingest_system_keychain_or_creds
+            ok, email, msg = ingest_system_keychain_or_creds(ACCOUNTS_HUB_FILE)
+            if ok:
+                threading.Thread(target=ENGINE.refresh_all_quotas, daemon=True).start()
+            self.send_response(200 if ok else 400)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok" if ok else "error", "email": email, "message": msg}).encode("utf-8"))
+            return
+
+        elif parsed.path == "/api/import":
+            from .importer import import_accounts_payload
+            payload_str = ""
+            try:
+                if post_data.strip().startswith("{") or post_data.strip().startswith("["):
+                    req_json = json.loads(post_data)
+                    payload_str = req_json.get("json_data") if (isinstance(req_json, dict) and "json_data" in req_json) else req_json
+                else:
+                    payload_str = params.get("json_data", [""])[0] or post_data
+            except Exception:
+                payload_str = post_data
+
+            ok, added, updated, msg = import_accounts_payload(payload_str, accounts_file=ACCOUNTS_HUB_FILE)
+            if ok:
+                threading.Thread(target=ENGINE.refresh_all_quotas, daemon=True).start()
+            self.send_response(200 if ok else 400)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok" if ok else "error", "added": added, "updated": updated, "message": msg}).encode("utf-8"))
+            return
+
+        elif parsed.path == "/api/add_account":
+            from .importer import import_accounts_payload
+            email = params.get("email", [""])[0]
+            rt = params.get("refresh_token", [""])[0]
+            if not email or not rt:
+                try:
+                    req_json = json.loads(post_data)
+                    email = email or req_json.get("email", "")
+                    rt = rt or req_json.get("refresh_token", "")
+                except Exception:
+                    pass
+            if not email or not rt:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "error", "message": "邮箱与 Refresh Token 均不能为空"}).encode("utf-8"))
+                return
+
+            record = {"email": email, "refresh_token": rt, "tier": "PRO"}
+            ok, added, updated, msg = import_accounts_payload([record], accounts_file=ACCOUNTS_HUB_FILE)
+            if ok:
+                threading.Thread(target=ENGINE.refresh_all_quotas, daemon=True).start()
+            self.send_response(200 if ok else 400)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok" if ok else "error", "message": msg}).encode("utf-8"))
+            return
 
         else:
             self.send_response(404)

@@ -9,6 +9,7 @@ scripts/render_mock_preview.py - 生成带 15 个虚拟账号的高密看板 UI 
 import os
 import sys
 import time
+import subprocess
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -185,3 +186,23 @@ with open(output_path, "w", encoding="utf-8") as f:
     f.write(html)
 
 print(f"✅ 成功生成 15 账号测试页面: {output_path}")
+
+# 自动调用 Chrome Headless 生成 2x 视网膜高清截图并裁切
+assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "docs", "assets"))
+os.makedirs(assets_dir, exist_ok=True)
+png_path = os.path.join(assets_dir, "preview.png")
+
+chrome_bin = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+if os.path.exists(chrome_bin):
+    cmd = [
+        chrome_bin,
+        "--headless=new",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        "--force-device-scale-factor=2",
+        "--window-size=1100,810",
+        f"--screenshot={png_path}",
+        f"file://{output_path}"
+    ]
+    subprocess.run(cmd, check=True)
+    print(f"✅ 成功生成 2x 视网膜高清截图: {png_path}")

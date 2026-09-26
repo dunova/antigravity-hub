@@ -37,10 +37,41 @@ def main():
     parser.add_argument("--data-dir", type=str, default=BASE_DATA_DIR, help="数据存储目录 (默认: ~/.antigravity_hub)")
     parser.add_argument("--no-rotator", action="store_true", help="不启动后台配额看门狗守护线程")
     parser.add_argument("--open-browser", action="store_true", help="启动后自动打开浏览器访问看板")
+    parser.add_argument("--export", dest="export_file", type=str, help="导出全量账号备份到指定 JSON 文件并退出")
+    parser.add_argument("--import", dest="import_file", type=str, help="从指定 JSON 文件导入账号并退出")
+    parser.add_argument("--sync-active", action="store_true", help="从当前系统钥匙串/IDE吸纳活跃账号并退出")
     args = parser.parse_args()
 
     os.environ["ANTIGRAVITY_HUB_DIR"] = os.path.abspath(os.path.expanduser(args.data_dir))
     os.makedirs(os.environ["ANTIGRAVITY_HUB_DIR"], exist_ok=True)
+    hub_accounts_file = os.path.join(os.environ["ANTIGRAVITY_HUB_DIR"], "data", "accounts_hub.json")
+
+    # CLI 独立操作模式
+    if args.export_file:
+        from hub.importer import export_accounts_backup
+        import json
+        data = export_accounts_backup(hub_accounts_file)
+        with open(args.export_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        print(f"✅ 账号数据已成功导出至: {args.export_file} (包含 {len(data.get('accounts', {}))} 个账号)")
+        sys.exit(0)
+
+    if args.import_file:
+        from hub.importer import import_accounts_payload
+        if not os.path.exists(args.import_file):
+            print(f"❌ 导入文件不存在: {args.import_file}")
+            sys.exit(1)
+        with open(args.import_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        ok, added, updated, msg = import_accounts_payload(content, accounts_file=hub_accounts_file)
+        print(f"{'✅' if ok else '❌'} {msg}")
+        sys.exit(0 if ok else 1)
+
+    if args.sync_active:
+        from hub.importer import ingest_system_keychain_or_creds
+        ok, email, msg = ingest_system_keychain_or_creds(accounts_file=hub_accounts_file)
+        print(f"{'✅' if ok else '❌'} {msg}")
+        sys.exit(0 if ok else 1)
 
     banner = """
     ╔═══════════════════════════════════════════════════════════╗
