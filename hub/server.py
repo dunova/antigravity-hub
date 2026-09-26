@@ -30,8 +30,8 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.30.0"
-__canonical_version_tag__ = "20260926-v2.30.0-SORT_TRI_STATE_QUOTA"
+__version__ = "2.31.0"
+__canonical_version_tag__ = "20260926-v2.31.0-FIX_5H_FULL_READY_DISPLAY"
 __last_updated__ = "2026-09-26 15:25:00"
 __canonical_doctrine__ = "Gemini/Claude 配额表头三态循环排序 (周升序→5h升序→恢复默认) + Google OAuth 自动授权"
 
@@ -789,11 +789,27 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     if is_weekly_exhausted:
         tip = f"周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
+    elif val_5h >= 99.9:
+        # 当 5 小时配额为 100% 满额时：
+        # Google 官方 API 在配额未被消耗时物理动态返回 now+5h (格式化后呈现为 4h59m 动态漂移)。
+        # 该状态代表配额完全满血可用、处于就绪待命态，绝非遇到失败等待恢复！
+        # 仅当后台预热锁定了真正的倒计时且剩余时间显著进入倒数窗口 (< 4h 45m) 时呈现倒计时，其余一律呈现绿色「就绪」！
+        is_warmup_in_progress = (
+            reset_5h_info 
+            and reset_5h_info not in ("--", "已就绪") 
+            and not reset_5h_info.startswith("4h 5") 
+            and not reset_5h_info.startswith("4h 4") 
+            and not reset_5h_info.startswith("5h")
+        )
+        if is_warmup_in_progress:
+            reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="预热阶梯倒计时: {reset_5h_info}">{reset_5h_info}</span>'
+        else:
+            reset_5h_html = '<span class="q-reset q-reset-ready font-mono" title="满血待命，随时可用">就绪</span>'
     elif reset_5h_info and reset_5h_info not in ("--", "已就绪"):
         # 只要存在有效恢复倒计时，直接呈现时间（如 3h 23m、45m）！无论是否100%，绝不覆盖！
         reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
-    elif val_5h >= 99.9 or reset_5h_info == "已就绪":
-        reset_5h_html = '<span class="q-reset q-reset-ready font-mono" title="未激活或已就绪">已就绪</span>'
+    elif reset_5h_info == "已就绪":
+        reset_5h_html = '<span class="q-reset q-reset-ready font-mono" title="已恢复就绪">就绪</span>'
     else:
         reset_5h_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
 
