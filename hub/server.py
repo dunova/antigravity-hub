@@ -30,10 +30,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.32.0"
-__canonical_version_tag__ = "20260926-v2.32.0-REAL_WARMUP_PIPELINE"
-__last_updated__ = "2026-09-26 20:30:00"
-__canonical_doctrine__ = "单账号极轻量真实预热 + 全池阶梯错峰流水线 + 5h倒计时锁定就绪"
+__version__ = "2.33.0"
+__canonical_version_tag__ = "20261004-v2.33.0-AUTO_ROTATION_SWITCH_AND_DUAL_MODEL_GUARD"
+__last_updated__ = "2026-10-04 12:50:00"
+__canonical_doctrine__ = "全局轮换开关物理阻断 + 双模防误切守卫 + 消除Gemini/Claude倒置Bug"
 
 
 # 配置常量
@@ -42,6 +42,7 @@ HUB_DIR = os.path.join(BASE_DATA_DIR, "data")
 ACCOUNTS_HUB_FILE = os.path.join(HUB_DIR, "accounts_hub.json")
 WARMUP_HUB_FILE = os.path.join(HUB_DIR, "warmup_hub.json")
 WARMUP_SCHEDULE_PATH = os.path.join(HUB_DIR, "warmup_schedule.json")
+AUTO_ROTATION_CONFIG_PATH = os.path.join(BASE_DATA_DIR, "auto_rotation_config.json")
 MANUAL_OVERRIDE_LOCK_PATH = os.path.join(BASE_DATA_DIR, "manual_override_lock.json")
 
 OAUTH_CREDS_PATH = os.path.expanduser("~/.gemini/oauth_creds.json")
@@ -157,6 +158,35 @@ def clear_manual_override_lock() -> bool:
     return False
 
 
+def get_auto_rotation_config() -> Dict[str, Any]:
+    """
+    【全局自动轮换配置】读取自动轮换开关与策略配置。
+    若文件不存在，默认返回开启 (enabled=True, policy='both_exhausted')。
+    """
+    if os.path.exists(AUTO_ROTATION_CONFIG_PATH):
+        try:
+            with open(AUTO_ROTATION_CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"enabled": True, "policy": "both_exhausted", "updated_at": 0}
+
+
+def set_auto_rotation_config(enabled: bool, policy: str = "both_exhausted") -> Dict[str, Any]:
+    """
+    【全局自动轮换配置】持久化原子保存自动轮换开关状态。
+    """
+    cfg = {
+        "enabled": bool(enabled),
+        "policy": policy,
+        "updated_at": int(time.time()),
+        "updated_by": "hub_ui"
+    }
+    atomic_write_json(AUTO_ROTATION_CONFIG_PATH, cfg)
+    logger.info(f"💾 [轮换配置持久化] 状态已保存: enabled={enabled}, policy={policy} -> {AUTO_ROTATION_CONFIG_PATH}")
+    return cfg
+
+
 class KeychainFileLock:
     LOCK_PATH = "/tmp/antigravity_keychain_hub.lock"
 
@@ -195,7 +225,7 @@ class HubEngine:
         os.makedirs(HUB_DIR, exist_ok=True)
         if not os.path.exists(ACCOUNTS_HUB_FILE):
             # 自动只读导入一次
-            from .importer import import_accounts_read_only
+            from import_accounts_hub import import_accounts_read_only
             import_accounts_read_only()
 
     def load_accounts(self) -> Dict[str, Any]:
@@ -963,6 +993,19 @@ def render_dashboard_html() -> str:
     avg_c = round(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     cur_time = time.strftime("%H:%M:%S")
 
+    rot_cfg = get_auto_rotation_config()
+    rot_enabled = rot_cfg.get("enabled", True)
+    rot_btn_cls = "btn-rotation-on" if rot_enabled else "btn-rotation-off"
+    rot_btn_text = "自动轮换: 开启" if rot_enabled else "自动轮换: 暂停"
+    rot_btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>' if rot_enabled else '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+    rot_title = "自动轮换运行中 (点击暂停)" if rot_enabled else "自动轮换已暂停 (点击开启)"
+    rot_btn_html = f"""<button id="btn-rotation-toggle" class="btn btn-top {rot_btn_cls} font-mono"
+                        onclick="toggleAutoRotation(this); event.preventDefault(); event.stopPropagation();"
+                        title="{rot_title}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;">{rot_btn_icon}</svg>
+                    {rot_btn_text}
+                </button>"""
+
     table_rows = render_table_rows(include_oob=False)
     stats_html = render_top_bar_stats_html(total_count, pro_count, avg_g, avg_c, cur_time, oob=False)
     active_pill_html = render_active_pill_html(active_email, oob=False)
@@ -1207,8 +1250,11 @@ def render_dashboard_html() -> str:
         }}
         .btn-import {{ background: #00F0FF; color: #000000; margin-right: 6px; }}
         .btn-export {{ background: #FFE600; color: #000000; margin-right: 6px; }}
-        .btn-refresh-all {{ background: #22C55E; color: #000000; }}
-        .btn-warmup-all {{ background: #FF4D4D; color: #FFFFFF; }}
+        .btn-refresh-all {{ background: #22C55E; color: #000000; margin-right: 6px; }}
+        .btn-warmup-all {{ background: #FF4D4D; color: #FFFFFF; margin-right: 6px; }}
+        .btn-rotation-on {{ background: #22C55E; color: #000000; font-weight: 900; }}
+        .btn-rotation-off {{ background: #FF9900; color: #000000; font-weight: 900; }}
+        .btn-rotation-off:hover {{ background: #FF7700; }}
 
         .control-bar {{
             display: flex;
@@ -1841,6 +1887,7 @@ def render_dashboard_html() -> str:
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
         }}
         
         .btn-warmup {{ 
@@ -2396,6 +2443,7 @@ def render_dashboard_html() -> str:
             </div>
             {stats_html}
             <div class="top-right">
+                {rot_btn_html}
                 <button class="btn btn-top btn-import font-mono"
                         onclick="openImportModal(); event.preventDefault(); event.stopPropagation();"
                         title="导入账号备份、批量添加或从 IDE 钥匙串一键吸纳">
@@ -3028,6 +3076,9 @@ def render_dashboard_html() -> str:
                 const html = await resp.text();
                 applyTbodyAndOOB(html);
                 showToast("🔥 静默预热探针触发完成！模型已激活", "warmup");
+            }} catch (err) {{
+                showToast("❌ 预热失败: " + err.message, "error");
+            }}
         }}
 
         // 🔥 全池阶梯错峰预热直通函数
@@ -3043,6 +3094,33 @@ def render_dashboard_html() -> str:
                 showToast("🎉 全池阶梯错峰预热已完成！各账号 5h 倒计时已锁定启动", "warmup");
             }} catch (err) {{
                 showToast("❌ 错峰预热失败: " + err.message, "error");
+            }}
+        }}
+
+        // 🔄 切换自动轮换开关直通函数
+        async function toggleAutoRotation(btn) {{
+            btn.disabled = true;
+            try {{
+                const resp = await fetch('/api/toggle-rotation', {{
+                    method: 'POST'
+                }});
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const res = await resp.json();
+                if (res.enabled) {{
+                    btn.className = "btn btn-top btn-rotation-on font-mono";
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>自动轮换: 开启';
+                    btn.title = "自动轮换运行中 (点击暂停)";
+                    showToast("🟢 自动轮换已开启：看门狗恢复自动巡检换号", "success");
+                }} else {{
+                    btn.className = "btn btn-top btn-rotation-off font-mono";
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>自动轮换: 暂停';
+                    btn.title = "自动轮换已暂停 (点击开启)";
+                    showToast("⏸️ 自动轮换已暂停：看门狗已冻结切号，仅监控不换号", "warning");
+                }}
+            }} catch (err) {{
+                showToast("❌ 切换轮换状态失败: " + err.message, "error");
+            }} finally {{
+                btn.disabled = false;
             }}
         }}
 
@@ -3523,6 +3601,13 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(data).encode("utf-8"))
+        elif parsed.path == "/api/rotation-status":
+            cfg = get_auto_rotation_config()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(cfg).encode("utf-8"))
+            return
         elif parsed.path == "/api/export":
             from import_accounts_hub import export_accounts_backup
             backup_data = export_accounts_backup(ACCOUNTS_HUB_FILE)
@@ -3636,15 +3721,30 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             self.wfile.write(html.encode("utf-8"))
 
         elif parsed.path == "/api/warmup-all":
-            data = ENGINE.load_accounts()
-            for email, acc in data.get("accounts", {}).items():
-                ENGINE.trigger_warmup(email, acc)
-            ENGINE.save_accounts(data)
+            try:
+                from core.switcher import AntigravityPhysicalManager
+                mgr = AntigravityPhysicalManager()
+                count = mgr.check_and_warmup_idle_accounts()
+                logger.info(f"🔥 [全池阶梯错峰预热] 触发完成，已成功拉入 {count} 个账号进入倒计时流水线")
+            except Exception as e:
+                logger.error(f"全池错峰预热异常: {e}")
             html = render_table_rows(include_oob=True)
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(html.encode("utf-8"))
+
+        elif parsed.path == "/api/toggle-rotation":
+            cfg = get_auto_rotation_config()
+            new_enabled = not cfg.get("enabled", True)
+            new_cfg = set_auto_rotation_config(new_enabled, policy=cfg.get("policy", "both_exhausted"))
+            logger.info(f"🔄 [轮换开关切换] 用户通过 Web UI 切换自动轮换状态 -> {'开启' if new_enabled else '暂停'}")
+            resp_bytes = json.dumps(new_cfg).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(resp_bytes)
+            return
 
         elif parsed.path == "/api/refresh":
             try:
