@@ -6,8 +6,8 @@ core/recovery.py - Antigravity 多会话精准嗅探与零 UI 侵入断点接力
 核心契约：
 1. 100% 拔除 AppleScript 模拟物理按键，根治输入法乱码；
 2. 物理底座级多会话嗅探 (Active Session Sniffer)：遍历扫描 brain transcripts；
-3. 断点与上下文感知解析：提取任务目标、子代理 (Subagents) 状态与未闭环规划；
-4. 定制化接力指令生成：无缝衔接 Teamwork 多智能体协同；
+3. 已完结会话物理拦截跳过门禁 (Finished Task Filter)：主任务交付且无存活子代理时绝对不唤醒；
+4. Teamwork 多智能体专属断点恢复提示词引擎：自动提取分配子代理角色并强令恢复协同管线；
 5. 零 UI 侵入原生消息队列投递 (Zero-UI Injection)：直接投递至系统消息队列并触发语言服务器。
 """
 
@@ -65,15 +65,15 @@ class AntigravitySessionRecoveryManager:
                 if m:
                     ports.append(m.group(1))
 
-            target_bin = DEFAULT_AGENTAPI_BIN if (os.path.isfile(DEFAULT_AGENTAPI_BIN) and os.access(DEFAULT_AGENTAPI_BIN, os.X_OK)) else None
-            env = {
-                "pid": ls_pid,
-                "csrf_token": csrf,
-                "ports": ports,
-                "agentapi_bin": target_bin or ""
-            }
+            for p in sorted(ports, reverse=True):
+                env["ANTIGRAVITY_LS_ADDRESS"] = f"127.0.0.1:{p}"
+                env["ANTIGRAVITY_CSRF_TOKEN"] = csrf
+                env["ANTIGRAVITY_LS_PID"] = ls_pid
+                return env
+
         except Exception as e:
-            logger.debug(f"嗅探 language_server 进程异常: {e}")
+            logger.debug(f"嗅探 language_server 异常: {e}")
+
         return env
 
     def get_effective_session_mtime(self, session_dir: str, root_mtime: float) -> float:
@@ -112,9 +112,70 @@ class AntigravitySessionRecoveryManager:
                                         pass
         return eff_mtime
 
+    def check_subagent_is_active(self, sub_session_id: str) -> bool:
+        """
+        强类型检查单个子代理会话是否仍处于活跃或未完成状态
+        """
+        sub_tpath = os.path.join(self.brain_dir, sub_session_id, ".system_generated", "logs", "transcript.jsonl")
+        if not os.path.isfile(sub_tpath):
+            return False
+
+        try:
+            mtime = os.path.getmtime(sub_tpath)
+            if time.time() - mtime > 1800:
+                return False
+
+            with open(sub_tpath, "r", encoding="utf-8") as f:
+                lines = [l.strip() for l in f if l.strip()]
+            if not lines:
+                return False
+
+            for l in reversed(lines[-25:]):
+                try:
+                    d = json.loads(l)
+                    ttype = d.get("type", "")
+                    if ttype in ("USER_INPUT", "PLANNER_RESPONSE"):
+                        if ttype == "PLANNER_RESPONSE":
+                            tcalls = d.get("tool_calls", [])
+                            content = str(d.get("content", "")).strip()
+                            if len(tcalls) == 0 and bool(content):
+                                return False
+                            if len(tcalls) > 0:
+                                return True
+                        elif ttype == "USER_INPUT":
+                            return True
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.debug(f"检查子代理 {sub_session_id} 异常: {e}")
+
+        return False
+
+    def get_active_subagents_for_session(self, session_dir: str) -> List[str]:
+        """探测主会话及其下属所有正在全速运行或尚未交付的 Subagents ID 列表"""
+        active_subs = []
+        sub_dir = os.path.join(session_dir, ".system_generated", "subagents")
+        if not os.path.isdir(sub_dir):
+            return active_subs
+
+        for fname in os.listdir(sub_dir):
+            if fname.endswith(".json"):
+                sub_id = fname[:-5]
+                if self.check_subagent_is_active(sub_id):
+                    active_subs.append(sub_id)
+                nested_dir = os.path.join(self.brain_dir, sub_id, ".system_generated", "subagents")
+                if os.path.isdir(nested_dir):
+                    for n_fname in os.listdir(nested_dir):
+                        if n_fname.endswith(".json"):
+                            nid = n_fname[:-5]
+                            if self.check_subagent_is_active(nid) and nid not in active_subs:
+                                active_subs.append(nid)
+
+        return active_subs
+
     def scan_active_sessions(self, max_idle_seconds: int = 2700) -> List[Dict[str, Any]]:
         """
-        扫描 brain 目录，识别最近活跃的会话（默认 45 分钟窗口，已实装子代理活跃穿透）。
+        扫描 brain 目录，识别最近活跃且未完工的会话（已实装已完结过滤与子代理活跃穿透）。
         """
         if not os.path.exists(self.brain_dir):
             return []
@@ -124,7 +185,7 @@ class AntigravitySessionRecoveryManager:
 
         for session_id in os.listdir(self.brain_dir):
             sess_path = os.path.join(self.brain_dir, session_id)
-            if not os.path.isdir(sess_path) or session_id.startswith("."):
+            if not os.path.isdir(sess_path) or session_id.startswith(".") or session_id == "tempmediaStorage":
                 continue
 
             transcript_path = os.path.join(sess_path, ".system_generated", "logs", "transcript.jsonl")
@@ -140,11 +201,73 @@ class AntigravitySessionRecoveryManager:
                 if (now - eff_mtime) > max_idle_seconds:
                     continue
 
+                with open(transcript_path, "r", encoding="utf-8") as f:
+                    lines = [l.strip() for l in f if l.strip()]
+                if len(lines) < 3:
+                    continue
+
+                last_user_prompt = ""
+                subagents_invoked = []
+                for line in lines:
+                    try:
+                        d = json.loads(line)
+                        if d.get("source") == "USER_EXPLICIT" and d.get("type") == "USER_INPUT":
+                            clean_c = d.get("content", "").replace("<USER_REQUEST>", "").replace("</USER_REQUEST>", "").strip()
+                            if "<ADDITIONAL_METADATA>" in clean_c:
+                                clean_c = clean_c.split("<ADDITIONAL_METADATA>")[0].strip()
+                            last_user_prompt = clean_c[:180].replace("\n", " ")
+                        for tc in d.get("tool_calls", []):
+                            if tc.get("name") == "invoke_subagent":
+                                # 提取角色名
+                                args = tc.get("args") or {}
+                                for sub in args.get("Subagents", []):
+                                    if isinstance(sub, dict):
+                                        role = sub.get("Role") or sub.get("TypeName")
+                                        if role and role not in subagents_invoked:
+                                            subagents_invoked.append(role)
+                    except Exception:
+                        pass
+
+                # 逆序查找最后一个主体事件
+                last_major_type = ""
+                last_major_content = ""
+                last_major_tool_calls = []
+                for tl in reversed(lines[-50:]):
+                    try:
+                        td = json.loads(tl)
+                        ttype = td.get("type", "")
+                        if ttype in ("EPHEMERAL_MESSAGE", "GENERIC", "ERROR_MESSAGE", "CHECKPOINT", "SYSTEM_MESSAGE"):
+                            continue
+                        if ttype in ("PLANNER_RESPONSE", "USER_INPUT"):
+                            last_major_type = ttype
+                            last_major_content = str(td.get("content", ""))
+                            last_major_tool_calls = td.get("tool_calls", [])
+                            break
+                    except Exception:
+                        continue
+
+                # 探测活跃子代理
+                active_subs = self.get_active_subagents_for_session(sess_path)
+                has_active_subs = len(active_subs) > 0
+
+                # 核心过滤：已完工会话物理拦截跳过
+                if last_major_type == "PLANNER_RESPONSE" and len(last_major_tool_calls) == 0 and bool(last_major_content.strip()) and not has_active_subs:
+                    logger.debug(f"🟢 [已完工跳过] 会话 {session_id[:12]} 任务已彻底完成闭环，坚决不唤醒！")
+                    continue
+
+                # 防重复接力拦截
+                if "断点接力指令" in last_major_content or "系统配额轮换完成" in last_major_content:
+                    continue
+
                 active_sessions.append({
                     "session_id": session_id,
                     "session_dir": sess_path,
                     "transcript_path": transcript_path,
-                    "last_modified": eff_mtime
+                    "last_modified": eff_mtime,
+                    "last_user_prompt": last_user_prompt,
+                    "subagents": subagents_invoked,
+                    "active_subagents": active_subs,
+                    "has_active_subagents": has_active_subs
                 })
             except Exception:
                 continue
@@ -152,18 +275,48 @@ class AntigravitySessionRecoveryManager:
         active_sessions.sort(key=lambda x: x["last_modified"], reverse=True)
         return active_sessions
 
-    def build_teamwork_resume_prompt(self, base_prompt: str = "") -> str:
+    def build_teamwork_resume_prompt(self, session_info: Optional[Dict[str, Any]] = None, base_prompt: str = "") -> str:
         """构建包含 Teamwork 恢复保证的系统接力提示词"""
         if base_prompt:
             return base_prompt
 
-        return (
-            "【系统级配额断点无缝续传指令】当前账号已通过物理钥匙串无缝切换至高配额账号，配额已完全满血！\n"
-            "请从刚才中断的位置继续推进任务，保持无人值守与严谨交付：\n"
-            "1. 【恢复核心主线】：检查并恢复刚才被中断的代码编写、终端命令或交付文档；\n"
-            "2. 【无缝衔接 Teamwork 协作】：若本任务涉及 Teamwork / 多智能体协作（Subagents），必须无缝恢复团队协同管线；主动检查未完结子代理的状态与产出，平滑唤醒并驱动其继续推进各自专属子任务，直至整体协作目标达成；（仅排除早已完工结案或用户显式取消的子代理，严禁丢弃未完工的 Teamwork 链路）；\n"
-            "3. 【终态闭环交付】：全程保持无人值守全速推进，直至完整交付符合验收标准的最终成果！"
+        last_req = (session_info.get("last_user_prompt", "") if session_info else "")
+        subagents = (session_info.get("subagents", []) if session_info else [])
+        has_active_subs = (session_info.get("has_active_subagents", False) if session_info else False)
+
+        is_teamwork = (
+            has_active_subs
+            or len(subagents) > 0
+            or any(k in last_req.lower() for k in ["teamwork", "子代理", "多智能体", "subagent", "协同"])
         )
+
+        if is_teamwork:
+            sub_roles_str = "、".join(subagents) if subagents else "团队在途子代理"
+            return (
+                f"<USER_REQUEST>\n"
+                f"【配额轮换完成 · Teamwork 多智能体断点恢复接力指令】\n"
+                f"系统配额与网络已全面重载就绪。\n"
+                f"检测到本会话正在执行【Teamwork 多智能体工程协作】任务，上一条用户指令在协同推进途中遭遇意外中断:\n"
+                f"「{last_req}」\n\n"
+                f"🎯 请立即无缝恢复 Teamwork 协同管线并推进以下动作:\n"
+                f"1. 【恢复 Teamwork 团队协作】：立即检查分配给各子代理（Subagents: {sub_roles_str}）的任务进度与存活状态；\n"
+                f"2. 【驱动未完工子任务】：若子代理执行被中断或尚未交付，重新拉起或发送消息驱动其继续推进，严禁丢弃未完工的协同分支；\n"
+                f"3. 【闭环汇总与交付】：等待或汇总各子代理产出成果，严格按照工程规范落盘交底文档与更新总账，完成最终交付。\n"
+                f"</USER_REQUEST>"
+            )
+        else:
+            return (
+                f"<USER_REQUEST>\n"
+                f"【配额轮换完成 · 断点接力指令】\n"
+                f"系统配额与网络已重载就绪。\n"
+                f"检测到本会话上一条用户指令在执行中途遭遇意外中断:\n"
+                f"「{last_req}」\n\n"
+                f"请从刚才中断的断点继续全速推进:\n"
+                f"1. 恢复刚才被中断的代码编写、终端命令或调试任务；\n"
+                f"2. 严格遵循交付门禁与工程规范，完成实测验证并在项目运维/文档目录落盘技术交底；\n"
+                f"3. 保持无人值守直到任务完全闭环。\n"
+                f"</USER_REQUEST>"
+            )
 
     def inject_resume_message(self, session_id: str, prompt: str) -> bool:
         """
@@ -208,16 +361,16 @@ class AntigravitySessionRecoveryManager:
             return False
 
     def relay_all_active_sessions(self, prompt: str = "") -> int:
-        """为所有当前活跃会话执行断点续传接力"""
+        """为所有当前活跃且未完结会话执行断点续传接力"""
         active_list = self.scan_active_sessions()
         if not active_list:
-            logger.info("ℹ️ 当前未发现需要恢复的活跃会话")
+            logger.info("ℹ️ 当前未发现需要恢复的未闭环会话")
             return 0
 
-        resume_prompt = self.build_teamwork_resume_prompt(prompt)
         success_count = 0
         for sess in active_list:
             sid = sess["session_id"]
+            resume_prompt = self.build_teamwork_resume_prompt(session_info=sess, base_prompt=prompt)
             if self.inject_resume_message(sid, resume_prompt):
                 success_count += 1
 

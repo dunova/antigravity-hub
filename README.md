@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v0.1.0-FF2A85?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v2.34.0-FF2A85?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/Python-3.9+-00F0FF?style=flat-square&logo=python" alt="Python" />
   <img src="https://img.shields.io/badge/Architecture-Neo--Brutalism-FFE600?style=flat-square" alt="Style" />
   <img src="https://img.shields.io/badge/Frontend-HTMX-22C55E?style=flat-square&logo=htmx" alt="HTMX" />
@@ -41,15 +41,16 @@
 - **零 UI 侵入注入**：直接调用系统底层 `security add-generic-password`，以原子级文件锁写入 macOS Keychain 钥匙串中的 `gemini/antigravity`；
 - **原生平滑热切号**：针对 IDE 架构设计，切号时仅平滑重启 `language_server` 子进程，主窗口、编辑器标签页、终端与前台输入焦点 100% 保持存活，language_server 重启后 1-2 秒内自动加载新凭据，彻底告别笨重的整机或整应用重启。
 
-### 2. 双窗口配额看门狗与瀑布级联轮转 (Cascade Waterfall Rotator)
+### 2. 双窗口配额看门狗与【全局禁止自动轮换总闸】(Quota Watchdog & Manual Lock)
 - **双窗口实时守护**：高频并发监控 5 小时滑动桶与周度配额，实施短板防御；
-- **级联瀑布选号**：当当前账号 5h 配额低于阈值（默认 5%）时，自动过滤不可用或风控账号，按优先级权重与剩余健康配额综合打分，平滑无感切号；
-- **人工干预保护锁 (Manual Override Lock)**：支持在看板上一键锁定当前账号（1h / 2h / 4h），保护期内后台看门狗自动避让，绝对禁止自动夺权。
+- **【全局禁止自动轮换总闸】**：控制台顶栏实装全局自动轮换开关（开绿关红）。当需要专心使用 Claude 或固定指定账号时，一键物理阻断后台看门狗切号；切换回开启态后立即自动以 Gemini 为主力进行耗尽自动接力；
+- **级联瀑布选号**：在自动轮换开启态，当当前账号配额低于阈值（默认 5%）时，自动过滤不可用或风控账号，按优先级权重与剩余健康配额综合打分，平滑无感切号；
+- **人工切换场景脱耦**：用户在控制台手动点击切换账号时，仅执行凭据热更新与语言服务器原地重载，显式传入 `inject_recovery=False`，绝不向任何会话乱发接力词。
 
-### 3. 零 UI 侵入断点接力与 Teamwork 多智能体保活 (Zero-UI Relay)
+### 3. 零 UI 侵入断点接力与【Teamwork 专属恢复引擎】(Zero-UI Relay & Teamwork Engine)
 - **彻底拔除按键模拟**：100% 摒弃 AppleScript 物理按键，杜绝拼音乱码；
-- **系统消息队列直投**：切号完成后，直接扫描最近活跃会话，向 `.system_generated/messages/` 投递系统接力指令，并在 `undelivered` 队列创建待消费指针，由系统底层核心自动消费唤醒；
-- **Teamwork 保活提示词**：系统自动生成定制化接力 Prompt，明确要求恢复核心主线并无缝衔接 Teamwork 中未完结的 Subagents，保持无人值守推进至终态交付。
+- **【已完结任务物理跳过门禁 (Finished Task Filter)】**：穿透系统打点逆序分析会话主体事件。若最后事件为已交付最终答复的 `PLANNER_RESPONSE` 且无在途活跃子代理，直接物理跳过不投递，彻底杜绝“任务已完成每次轮换还要被唤醒”的体验痛点；
+- **【Teamwork 多智能体专属断点恢复提示词引擎】**：动态识别多智能体任务，精确提取会话下属各 Subagents 角色，自动组装强化版指令，明确要求“立即检查各子代理任务进度与存活状态，无缝恢复团队协同管线推进，严禁丢弃未完工协同分支”，确保无人值守推进至终态交付。
 
 ### 4. 智能防 500 定向解封向导 (Smart AccountChooser & Isolated Wizard)
 - **临期 Token 自动刷新**：检查前自动续签过期 OAuth Token，彻底消除因 401 引起的假死误判；
@@ -240,7 +241,24 @@ antigravity-hub/
 
 ---
 
+## 📜 版本更新日志 (Changelog)
+
+### v2.34.0 (2026-10-04)
+- **已完结会话物理拦截跳过门禁 (Finished Task Filter)**：穿透系统打点逆序分析会话主体事件，若最后事件为已交付最终文本的 `PLANNER_RESPONSE` 且无在途子代理，物理跳过不投递，彻底解决“任务已完成每次轮换还要被唤醒”的痛点；
+- **Teamwork 多智能体专属断点恢复提示词引擎**：自动识别多智能体任务，精确提取下属各 Subagent 角色，注入包含“检查未完工子代理状态、恢复协同管线、严禁丢弃协同分支”的强化指令；
+- **全局禁止自动轮换总闸与双模解耦**：顶栏实装全局自动轮换开关，在 Claude 专享与 Gemini 主力模式间无缝切换，手动切号传参 `inject_recovery=False`，彻底脱耦人工换号与自动接力；
+- **多机集群版本自动化同步规范**：确立新版本发布 4 步铁律（更新版本号、本机更新、推送到 01 M4 机器、更新 GitHub Readme）。
+
+### v2.33.0 (2026-10-04)
+- **全局自动轮换开关与双模健康防误切守卫**：实装轮换状态持久化与毫秒级 OOB 状态刷新，优化双模配额判定。
+
+### v2.32.0 (2026-10-03)
+- **官方 Protobuf 错峰预热流水线**：单账号微型错峰生成预热，消除风控假死。
+
+---
+
 ## 📄 开源许可证
 
 本项目基于 [MIT License](LICENSE) 开源发布。
 欢迎提交 Issue 与 Pull Request 共同改进！
+

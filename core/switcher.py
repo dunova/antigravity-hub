@@ -442,7 +442,7 @@ class AntigravityPhysicalManager:
 
         return True, f"成功无感切换至账号: {target_email}"
 
-    def perform_real_switch(self, target_email: str, restart_app: bool = True, relay_prompt: str = DEFAULT_RELAY_PROMPT, force: bool = False) -> bool:
+    def perform_real_switch(self, target_email: str, restart_app: bool = True, relay_prompt: str = DEFAULT_RELAY_PROMPT, force: bool = False, inject_recovery: bool = True) -> bool:
         """执行完整账号切换（兼容旧接口）"""
         ok, msg = self.switch_account(target_email, force_hot_switch=restart_app)
         return ok

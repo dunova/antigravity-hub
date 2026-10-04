@@ -30,10 +30,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.33.0"
-__canonical_version_tag__ = "20261004-v2.33.0-AUTO_ROTATION_SWITCH_AND_DUAL_MODEL_GUARD"
-__last_updated__ = "2026-10-04 12:50:00"
-__canonical_doctrine__ = "全局轮换开关物理阻断 + 双模防误切守卫 + 消除Gemini/Claude倒置Bug"
+__version__ = "2.34.0"
+__canonical_version_tag__ = "20261004-v2.34.0-COMPLETED_SESSION_SKIP_AND_TEAMWORK_RESUME"
+__last_updated__ = "2026-10-04 13:48:00"
+__canonical_doctrine__ = "已完结任务物理跳过门禁 + Teamwork多智能体断点恢复提示词引擎 + 手动切号场景脱耦"
 
 
 # 配置常量
@@ -675,15 +675,18 @@ class HubEngine:
                 "2. 【无缝衔接 Teamwork 协作】：若本任务涉及 Teamwork / 多智能体协作（Subagents），必须无缝恢复团队协同管线；主动检查未完结子代理的状态与产出，平滑唤醒并驱动其继续推进各自专属子任务，直至整体协作目标达成；（仅排除早已完工结案或用户显式取消的子代理，严禁丢弃未完工的 Teamwork 链路）；\n"
                 "3. 【终态闭环交付】：全程保持无人值守全速推进，直至完整交付符合验收标准的最终成果！"
             )
-            success = mgr.perform_real_switch(target_email, restart_app=True, relay_prompt=relay_prompt, force=True)
+            success = mgr.perform_real_switch(target_email, restart_app=True, relay_prompt=relay_prompt, force=True, inject_recovery=False)
             if success:
                 # 同步更新 Hub 本地数据库活跃指针
                 data = self.load_accounts()
                 data["active_email"] = target_email
                 data["last_updated"] = int(time.time())
                 self.save_accounts(data)
-                logger.info(f"🚀 [物理切换成功] 目标账号 {target_email} 凭据已注入，Antigravity 正在脱壳重启并自动发送接力提示词！")
-                return True, "物理切换成功，Antigravity 正在脱壳重启并自动接力唤醒！"
+                # 用户手动点击切换账号，必须自动将全局自动轮换置为禁止，保护人工选号不被看门狗切走！
+                set_auto_rotation_config(enabled=False, policy=get_auto_rotation_config().get("policy", "gemini_first"))
+                logger.info(f"🛡️ [人工切换保护] 已将自动轮换开关置为【禁止】，确保用户手动指定的账号 {target_email} 绝对不被后台轮换切走！")
+                logger.info(f"🚀 [物理切换成功] 目标账号 {target_email} 凭据已注入，Antigravity 正在平滑重载（人工切换不注入接力词）！")
+                return True, f"物理切换至 {target_email} 成功，Antigravity 正在平滑重载！"
             else:
                 logger.error(f"❌ 物理切换执行失败: {target_email}")
                 return False, "物理切换执行失败"
