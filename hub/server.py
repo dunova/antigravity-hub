@@ -30,9 +30,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.34.0"
+
+__version__ = "2.35.0"
 __canonical_version_tag__ = "20261004-v2.34.0-COMPLETED_SESSION_SKIP_AND_TEAMWORK_RESUME"
-__last_updated__ = "2026-10-04 13:48:00"
+__last_updated__ = "2026-10-04 22:57:07"
 __canonical_doctrine__ = "已完结任务物理跳过门禁 + Teamwork多智能体断点恢复提示词引擎 + 手动切号场景脱耦"
 
 
@@ -44,6 +45,7 @@ WARMUP_HUB_FILE = os.path.join(HUB_DIR, "warmup_hub.json")
 WARMUP_SCHEDULE_PATH = os.path.join(HUB_DIR, "warmup_schedule.json")
 AUTO_ROTATION_CONFIG_PATH = os.path.join(BASE_DATA_DIR, "auto_rotation_config.json")
 MANUAL_OVERRIDE_LOCK_PATH = os.path.join(BASE_DATA_DIR, "manual_override_lock.json")
+
 
 OAUTH_CREDS_PATH = os.path.expanduser("~/.gemini/oauth_creds.json")
 GOOGLE_ACCOUNTS_PATH = os.path.expanduser("~/.gemini/google_accounts.json")
@@ -161,7 +163,7 @@ def clear_manual_override_lock() -> bool:
 def get_auto_rotation_config() -> Dict[str, Any]:
     """
     【全局自动轮换配置】读取自动轮换开关与策略配置。
-    若文件不存在，默认返回开启 (enabled=True, policy='both_exhausted')。
+    若文件不存在，默认返回开启 (enabled=True, policy='gemini_first')。
     """
     if os.path.exists(AUTO_ROTATION_CONFIG_PATH):
         try:
@@ -169,10 +171,10 @@ def get_auto_rotation_config() -> Dict[str, Any]:
                 return json.load(f)
         except Exception:
             pass
-    return {"enabled": True, "policy": "both_exhausted", "updated_at": 0}
+    return {"enabled": True, "policy": "gemini_first", "updated_at": 0}
 
 
-def set_auto_rotation_config(enabled: bool, policy: str = "both_exhausted") -> Dict[str, Any]:
+def set_auto_rotation_config(enabled: bool, policy: str = "gemini_first") -> Dict[str, Any]:
     """
     【全局自动轮换配置】持久化原子保存自动轮换开关状态。
     """
@@ -219,46 +221,163 @@ class HubEngine:
     def __init__(self):
         self.lock = threading.Lock()
         self.refreshing_now = False
+        self._cached_accounts_data: Dict[str, Any] = {}
         self._ensure_storage()
 
     def _ensure_storage(self):
         os.makedirs(HUB_DIR, exist_ok=True)
-        if not os.path.exists(ACCOUNTS_HUB_FILE):
-            # 自动只读导入一次
-            from import_accounts_hub import import_accounts_read_only
-            import_accounts_read_only()
+        # 若主存储不存在或有效数据极小，优先执行多源容灾恢复
+        if not os.path.exists(ACCOUNTS_HUB_FILE) or os.path.getsize(ACCOUNTS_HUB_FILE) < 100:
+            self._try_fallback_recovery()
+
+    def _try_fallback_recovery(self) -> Dict[str, Any]:
+        """
+        【本地真源多重容灾熔断兜底】
+        当主存储（如 SMB/NAS 网络挂载盘）脱机、断网或文件损坏变空时，
+        从本地 APFS 磁盘自动寻找历史备份与原生账号池并恢复主存储。
+        """
+        candidate_paths = [
+            os.path.expanduser("~/.antigravity_hub/accounts_hub.json"),
+            os.path.expanduser("~/.antigravity_hub/data/accounts_hub.json"),
+        ]
+        for p in candidate_paths:
+            if os.path.exists(p) and os.path.getsize(p) > 100:
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        d = json.load(f)
+                    if isinstance(d, dict) and len(d.get("accounts", {})) > 0:
+                        logger.info(f"✨ [容灾自动恢复] 成功从本地 APFS 备份 ({p}) 恢复 {len(d['accounts'])} 个账号！")
+                        try:
+                            atomic_write_json(ACCOUNTS_HUB_FILE, d)
+                        except Exception:
+                            pass
+                        return d
+                except Exception as e:
+                    logger.warning(f"从容灾源 {p} 读取失败: {e}")
+
+        # 尝试从 ~/.antigravity_tools/accounts/ 扫描
+        tools_acc_dir = os.path.expanduser("~/.antigravity_tools/accounts")
+        if os.path.exists(tools_acc_dir):
+            try:
+                records = {}
+                import glob
+                for jf in glob.glob(os.path.join(tools_acc_dir, "*.json")):
+                    try:
+                        with open(jf, "r", encoding="utf-8") as f:
+                            acc_doc = json.load(f)
+                        email = acc_doc.get("email")
+                        if email and "@" in email:
+                            records[email] = acc_doc
+                    except Exception:
+                        pass
+                if records:
+                    logger.info(f"✨ [容灾自动恢复] 成功从 ~/.antigravity_tools/accounts 恢复 {len(records)} 个账号！")
+                    recovered = {
+                        "active_email": list(records.keys())[0],
+                        "accounts": records,
+                        "last_updated": int(time.time()),
+                    }
+                    try:
+                        atomic_write_json(ACCOUNTS_HUB_FILE, recovered)
+                    except Exception:
+                        pass
+                    return recovered
+            except Exception as e:
+                logger.warning(f"从 ~/.antigravity_tools/accounts 恢复失败: {e}")
+
+        # 尝试通过 import_accounts_hub
+        try:
+            import import_accounts_hub
+            if hasattr(import_accounts_hub, "import_accounts_read_only"):
+                if import_accounts_hub.import_accounts_read_only(ACCOUNTS_HUB_FILE):
+                    with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as f:
+                        return json.load(f)
+        except Exception as e:
+            logger.warning(f"执行 import_accounts_read_only 失败: {e}")
+
+        return {"active_email": "", "accounts": {}}
 
     def load_accounts(self) -> Dict[str, Any]:
         with self.lock:
-            if not os.path.exists(ACCOUNTS_HUB_FILE):
-                return {"active_email": "", "accounts": {}}
-            try:
-                with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                # 动态双向融合 ~/.antigravity_tools/accounts/<id>.json 中的风控拦截标记
-                for email, acc in data.get("accounts", {}).items():
-                    acc_id = acc.get("id")
-                    if acc_id:
-                        df = os.path.join(ANTIGRAVITY_TOOLS_ACCOUNTS_DIR, f"{acc_id}.json")
-                        if os.path.exists(df):
-                            try:
-                                with open(df, "r", encoding="utf-8") as dff:
-                                    detail = json.load(dff)
-                                is_blocked = bool(detail.get("validation_blocked", False))
-                                acc["validation_blocked"] = is_blocked
-                                acc["validation_url"] = detail.get("validation_url") if is_blocked else None
-                                acc["validation_blocked_reason"] = detail.get("validation_blocked_reason", "VALIDATION_REQUIRED") if is_blocked else None
-                            except Exception:
-                                pass
-                return data
-            except Exception as e:
-                logger.error(f"读取 accounts_hub.json 失败: {e}")
-                return {"active_email": "", "accounts": {}}
+            data = None
+            if os.path.exists(ACCOUNTS_HUB_FILE):
+                try:
+                    with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as f:
+                        candidate = json.load(f)
+                    if isinstance(candidate, dict) and len(candidate.get("accounts", {})) > 0:
+                        data = candidate
+                    elif isinstance(candidate, dict) and len(candidate.get("accounts", {})) == 0:
+                        logger.warning("⚠️ 主存储 accounts_hub.json 账号池为 0，启动本地多源容灾恢复...")
+                except Exception as e:
+                    logger.error(f"读取 accounts_hub.json 失败: {e} (如网络文件系统断开)，启动容灾降级...")
+
+            # 若主存储读取失败或账号数为0，优先复用内存缓存；若内存缓存亦无，执行容灾恢复
+            if not data or len(data.get("accounts", {})) == 0:
+                if self._cached_accounts_data and len(self._cached_accounts_data.get("accounts", {})) > 0:
+                    logger.info(f"🛡️ 复用内存缓存账号池 ({len(self._cached_accounts_data['accounts'])} 个账号)，避免断网置空")
+                    data = self._cached_accounts_data
+                else:
+                    data = self._try_fallback_recovery()
+
+            if not data:
+                data = {"active_email": "", "accounts": {}}
+
+            # 动态双向融合 ~/.antigravity_tools/accounts/<id>.json 中的风控拦截标记
+            for email, acc in data.get("accounts", {}).items():
+                acc_id = acc.get("id")
+                if acc_id:
+                    df = os.path.join(ANTIGRAVITY_TOOLS_ACCOUNTS_DIR, f"{acc_id}.json")
+                    if os.path.exists(df):
+                        try:
+                            with open(df, "r", encoding="utf-8") as dff:
+                                detail = json.load(dff)
+                            is_blocked = bool(detail.get("validation_blocked", False))
+                            acc["validation_blocked"] = is_blocked
+                            acc["validation_url"] = detail.get("validation_url") if is_blocked else None
+                            acc["validation_blocked_reason"] = detail.get("validation_blocked_reason", "VALIDATION_REQUIRED") if is_blocked else None
+                        except Exception:
+                            pass
+
+            if len(data.get("accounts", {})) > 0:
+                self._cached_accounts_data = data
+            return data
 
     def save_accounts(self, data: Dict[str, Any]) -> bool:
         with self.lock:
+            # 🛑 【零账号冲刷物理阻断门禁 (Anti-Zero-Wipe Guard)】
+            incoming_accounts = data.get("accounts", {})
+            if len(incoming_accounts) == 0:
+                cached_count = len(self._cached_accounts_data.get("accounts", {})) if self._cached_accounts_data else 0
+                if cached_count > 0:
+                    logger.critical(f"🛑 [零账号冲刷物理阻断] 拦截到异常清空指令！试图写入 0 个账号，但现有内存包含 {cached_count} 个账号！坚决拒绝写入并保留原状！")
+                    return False
+                if os.path.exists(ACCOUNTS_HUB_FILE) and os.path.getsize(ACCOUNTS_HUB_FILE) > 100:
+                    try:
+                        with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as f:
+                            disk_data = json.load(f)
+                        disk_count = len(disk_data.get("accounts", {}))
+                        if disk_count > 0:
+                            logger.critical(f"🛑 [零账号冲刷物理阻断] 拦截到异常清空指令！试图写入 0 个账号，但磁盘现有 {disk_count} 个账号！坚决拒绝覆盖！")
+                            return False
+                    except Exception:
+                        pass
+
             data["last_updated"] = int(time.time())
-            return atomic_write_json(ACCOUNTS_HUB_FILE, data)
+            if incoming_accounts:
+                self._cached_accounts_data = data
+
+            # 1. 写入主存储
+            ok = atomic_write_json(ACCOUNTS_HUB_FILE, data)
+
+            # 2. 🛡️ 本地 APFS 镜像双写容灾备份 (Dual-Write Local APFS Backup)
+            local_backup_file = os.path.expanduser("~/.antigravity_hub/accounts_hub.json")
+            try:
+                os.makedirs(os.path.dirname(local_backup_file), exist_ok=True)
+                atomic_write_json(local_backup_file, data)
+            except Exception as e:
+                logger.warning(f"写入本地 APFS 镜像备份失败: {e}")
+
+            return ok
 
     def auto_ingest_system_account(self) -> Optional[Tuple[str, bool]]:
         """
@@ -641,7 +760,7 @@ class HubEngine:
         【Hub 预热单账号直通入口 · 对齐物理中枢 AntigravityPhysicalManager】
         """
         try:
-            from core.switcher import AntigravityPhysicalManager
+            from antigravity_physical_switcher import AntigravityPhysicalManager
             mgr = AntigravityPhysicalManager()
             acc_entry = dict(acc)
             acc_entry["email"] = email
@@ -666,7 +785,7 @@ class HubEngine:
         # 物理中枢无缝接入：与额度用尽自动轮换 100% 共享完全一致的底层物理切换与脱壳接力唤醒
         # 注意：不设置人工锁定，看门狗依旧正常监控额度，额度用完后自动切换不受阻碍
         try:
-            from core.switcher import AntigravityPhysicalManager, DEFAULT_RELAY_PROMPT
+            from antigravity_physical_switcher import AntigravityPhysicalManager, DEFAULT_RELAY_PROMPT
             mgr = AntigravityPhysicalManager()
             relay_prompt = (
                 "【系统级配额断点无缝续传指令】当前账号已通过物理钥匙串无缝切换至高配额账号，配额已完全满血！\n"
@@ -982,7 +1101,24 @@ def render_table_rows(include_oob: bool = False) -> str:
     if include_oob:
         output += "\n" + render_top_bar_stats_html(total_count, pro_count, avg_g, avg_c, cur_time, oob=True)
         output += "\n" + render_active_pill_html(active_email, oob=True)
+        output += "\n" + render_rotation_button_html(oob=True)
     return output
+
+
+def render_rotation_button_html(oob: bool = False) -> str:
+    rot_cfg = get_auto_rotation_config()
+    rot_enabled = rot_cfg.get("enabled", True)
+    rot_btn_cls = "btn-rotation-on" if rot_enabled else "btn-rotation-off"
+    rot_btn_text = "自动轮换: 开启" if rot_enabled else "🚫 已禁止自动轮换"
+    rot_btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>' if rot_enabled else '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+    rot_title = "自动轮换运行中 (Gemini 耗尽自动切号；如用 Claude 请点击禁止自动轮换)" if rot_enabled else "已禁止自动轮换 (看门狗已冻结，可手动切换账号使用 Claude，不会被切走；点击恢复)"
+    oob_attr = ' hx-swap-oob="outerHTML:#btn-rotation-toggle"' if oob else ''
+    return f"""<button id="btn-rotation-toggle"{oob_attr} class="btn btn-top {rot_btn_cls} font-mono"
+                        onclick="toggleAutoRotation(this); event.preventDefault(); event.stopPropagation();"
+                        title="{rot_title}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;">{rot_btn_icon}</svg>
+                    {rot_btn_text}
+                </button>"""
 
 
 def render_dashboard_html() -> str:
@@ -996,19 +1132,7 @@ def render_dashboard_html() -> str:
     avg_c = round(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     cur_time = time.strftime("%H:%M:%S")
 
-    rot_cfg = get_auto_rotation_config()
-    rot_enabled = rot_cfg.get("enabled", True)
-    rot_btn_cls = "btn-rotation-on" if rot_enabled else "btn-rotation-off"
-    rot_btn_text = "自动轮换: 开启" if rot_enabled else "自动轮换: 暂停"
-    rot_btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>' if rot_enabled else '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
-    rot_title = "自动轮换运行中 (点击暂停)" if rot_enabled else "自动轮换已暂停 (点击开启)"
-    rot_btn_html = f"""<button id="btn-rotation-toggle" class="btn btn-top {rot_btn_cls} font-mono"
-                        onclick="toggleAutoRotation(this); event.preventDefault(); event.stopPropagation();"
-                        title="{rot_title}">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;">{rot_btn_icon}</svg>
-                    {rot_btn_text}
-                </button>"""
-
+    rot_btn_html = render_rotation_button_html(oob=False)
     table_rows = render_table_rows(include_oob=False)
     stats_html = render_top_bar_stats_html(total_count, pro_count, avg_g, avg_c, cur_time, oob=False)
     active_pill_html = render_active_pill_html(active_email, oob=False)
@@ -3112,13 +3236,13 @@ def render_dashboard_html() -> str:
                 if (res.enabled) {{
                     btn.className = "btn btn-top btn-rotation-on font-mono";
                     btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>自动轮换: 开启';
-                    btn.title = "自动轮换运行中 (点击暂停)";
-                    showToast("🟢 自动轮换已开启：看门狗恢复自动巡检换号", "success");
+                    btn.title = "自动轮换运行中 (Gemini 耗尽自动切号；如用 Claude 请点击禁止自动轮换)";
+                    showToast("⚡ 自动轮换已开启：Gemini 核心额度耗尽将自动接力换号", "success");
                 }} else {{
                     btn.className = "btn btn-top btn-rotation-off font-mono";
-                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>自动轮换: 暂停';
-                    btn.title = "自动轮换已暂停 (点击开启)";
-                    showToast("⏸️ 自动轮换已暂停：看门狗已冻结切号，仅监控不换号", "warning");
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>🚫 已禁止自动轮换';
+                    btn.title = "已禁止自动轮换 (看门狗已冻结，可手动切换账号使用 Claude，不会被切走；点击恢复)";
+                    showToast("🚫 已禁止自动轮换：看门狗已完全冻结，可放心手动切换使用 Claude", "warning");
                 }}
             }} catch (err) {{
                 showToast("❌ 切换轮换状态失败: " + err.message, "error");
@@ -3725,7 +3849,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
 
         elif parsed.path == "/api/warmup-all":
             try:
-                from core.switcher import AntigravityPhysicalManager
+                from antigravity_physical_switcher import AntigravityPhysicalManager
                 mgr = AntigravityPhysicalManager()
                 count = mgr.check_and_warmup_idle_accounts()
                 logger.info(f"🔥 [全池阶梯错峰预热] 触发完成，已成功拉入 {count} 个账号进入倒计时流水线")
@@ -3740,7 +3864,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
         elif parsed.path == "/api/toggle-rotation":
             cfg = get_auto_rotation_config()
             new_enabled = not cfg.get("enabled", True)
-            new_cfg = set_auto_rotation_config(new_enabled, policy=cfg.get("policy", "both_exhausted"))
+            new_cfg = set_auto_rotation_config(new_enabled, policy=cfg.get("policy", "gemini_first"))
             logger.info(f"🔄 [轮换开关切换] 用户通过 Web UI 切换自动轮换状态 -> {'开启' if new_enabled else '暂停'}")
             resp_bytes = json.dumps(new_cfg).encode("utf-8")
             self.send_response(200)
