@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 __version__ = "2.37.3"
 __canonical_version_tag__ = "20261005-v2.37.3-INLINE_NEO_BRUTALISM_IN_USE_BADGE_FIX"
-__last_updated__ = "2026-10-05 08:58:00"
+__last_updated__ = "2026-10-05 09:11:09"
 __canonical_doctrine__ = "彻底消除黑色在用违规按钮+薄荷绿双钮对齐结构+Claude与Gemini双模全息并发预热+行内内联防缓存保真"
 
 
