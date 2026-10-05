@@ -31,10 +31,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.38.0"
-__canonical_version_tag__ = "20261005-v2.38.0-BATCH_SELECT_EXPORT_AND_SAFE_DELETE"
-__last_updated__ = "2026-10-05 09:23:37"
-__canonical_doctrine__ = "批量勾选纳管+选区导出+安全防删在用+原子归档备份+全集群自动同步"
+__version__ = "2.39.0"
+__canonical_version_tag__ = "20261005-v2.39.0-TRISTATE_AUTO_ROTATION_MODE"
+__last_updated__ = "2026-10-05 09:31:56"
+__canonical_doctrine__ = "三态轮换开关(自动轮转Gemini/自动轮转Claude/关闭自动轮转)+单模纯化配额切号+全集群同步"
 
 
 # 配置常量
@@ -236,30 +236,60 @@ def clear_manual_override_lock() -> bool:
 
 def get_auto_rotation_config() -> Dict[str, Any]:
     """
-    【全局自动轮换配置】读取自动轮换开关与策略配置。
-    若文件不存在，默认返回开启 (enabled=True, policy='gemini_first')。
+    【全局自动轮换配置】读取自动轮换三态模式配置。
+    三态模式:
+      - 'gemini': 自动轮转 Gemini (仅关注 Gemini 额度)
+      - 'claude': 自动轮转 Claude (仅关注 Claude 额度)
+      - 'off':    彻底关闭轮转功能 (看门狗完全冻结)
+    兼容旧字段 enabled 与 policy。
     """
+    cfg = {"mode": "gemini", "enabled": True, "policy": "gemini_first", "updated_at": 0}
     if os.path.exists(AUTO_ROTATION_CONFIG_PATH):
         try:
             with open(AUTO_ROTATION_CONFIG_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                raw = json.load(f)
+                if isinstance(raw, dict):
+                    cfg.update(raw)
         except Exception:
             pass
-    return {"enabled": True, "policy": "gemini_first", "updated_at": 0}
+
+    if "mode" in cfg and cfg["mode"] in ("gemini", "claude", "off"):
+        m = cfg["mode"]
+    else:
+        if not cfg.get("enabled", True):
+            m = "off"
+        elif cfg.get("policy") in ("claude_first", "claude"):
+            m = "claude"
+        else:
+            m = "gemini"
+    cfg["mode"] = m
+    cfg["enabled"] = (m != "off")
+    cfg["policy"] = "claude_first" if m == "claude" else "gemini_first"
+    return cfg
 
 
-def set_auto_rotation_config(enabled: bool, policy: str = "gemini_first") -> Dict[str, Any]:
+def set_auto_rotation_config(mode: str = "gemini", enabled: Optional[bool] = None, policy: Optional[str] = None) -> Dict[str, Any]:
     """
-    【全局自动轮换配置】持久化原子保存自动轮换开关状态。
+    【全局自动轮换配置】持久化原子保存自动轮换三态模式。
+    支持显式传入 mode ('gemini' | 'claude' | 'off')，亦兼容旧参数 enabled/policy。
     """
+    if mode not in ("gemini", "claude", "off"):
+        if enabled is False:
+            mode = "off"
+        elif policy in ("claude_first", "claude"):
+            mode = "claude"
+        else:
+            mode = "gemini"
+
     cfg = {
-        "enabled": bool(enabled),
-        "policy": policy,
+        "mode": mode,
+        "enabled": (mode != "off"),
+        "policy": "claude_first" if mode == "claude" else "gemini_first",
         "updated_at": int(time.time()),
         "updated_by": "hub_ui"
     }
     atomic_write_json(AUTO_ROTATION_CONFIG_PATH, cfg)
-    logger.info(f"💾 [轮换配置持久化] 状态已保存: enabled={enabled}, policy={policy} -> {AUTO_ROTATION_CONFIG_PATH}")
+    logger.info(f"💾 [轮换配置持久化] 三态模式已保存: mode={mode} (enabled={cfg['enabled']}, policy={cfg['policy']}) -> {AUTO_ROTATION_CONFIG_PATH}")
     return cfg
 
 
@@ -914,9 +944,9 @@ class HubEngine:
                 data["active_email"] = target_email
                 data["last_updated"] = int(time.time())
                 self.save_accounts(data)
-                # 用户手动点击切换账号，必须自动将全局自动轮换置为禁止，保护人工选号不被看门狗切走！
-                set_auto_rotation_config(enabled=False, policy=get_auto_rotation_config().get("policy", "gemini_first"))
-                logger.info(f"🛡️ [人工切换保护] 已将自动轮换开关置为【禁止】，确保用户手动指定的账号 {target_email} 绝对不被后台轮换切走！")
+                # 用户手动点击切换账号，必须自动将全局自动轮换置为关闭，保护人工选号不被看门狗切走！
+                set_auto_rotation_config(mode="off")
+                logger.info(f"🛡️ [人工切换保护] 已将自动轮换模式置为【关闭】，确保用户手动指定的账号 {target_email} 绝对不被后台轮换切走！")
                 logger.info(f"🚀 [物理切换成功] 目标账号 {target_email} 凭据已注入，Antigravity 正在平滑重载（人工切换不注入接力词）！")
                 return True, f"物理切换至 {target_email} 成功，Antigravity 正在平滑重载！"
             else:
@@ -1235,17 +1265,31 @@ def render_table_rows(include_oob: bool = False) -> str:
 
 def render_rotation_button_html(oob: bool = False) -> str:
     rot_cfg = get_auto_rotation_config()
-    rot_enabled = rot_cfg.get("enabled", True)
-    rot_btn_cls = "btn-rotation-on" if rot_enabled else "btn-rotation-off"
-    rot_btn_text = "自动轮换: 开启" if rot_enabled else "🚫 已禁止自动轮换"
-    rot_btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>' if rot_enabled else '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
-    rot_title = "自动轮换运行中 (Gemini 耗尽自动切号；如用 Claude 请点击禁止自动轮换)" if rot_enabled else "已禁止自动轮换 (看门狗已冻结，可手动切换账号使用 Claude，不会被切走；点击恢复)"
+    mode = rot_cfg.get("mode", "gemini")
+
+    if mode == "gemini":
+        btn_cls = "btn-rotation-gemini"
+        btn_text = "⚡ 轮转: Gemini"
+        btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>'
+        btn_title = "当前模式：自动轮转 Gemini（仅关注 Gemini 额度，耗尽自动切号，忽略 Claude 额度；点击切换为自动轮转 Claude）"
+    elif mode == "claude":
+        btn_cls = "btn-rotation-claude"
+        btn_text = "⚡ 轮转: Claude"
+        btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>'
+        btn_title = "当前模式：自动轮转 Claude（仅关注 Claude 额度，耗尽自动切号，忽略 Gemini 额度；点击彻底关闭轮转）"
+    else:  # 'off'
+        btn_cls = "btn-rotation-off"
+        btn_text = "🚫 轮转: 关闭"
+        btn_icon = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
+        btn_title = "当前模式：彻底关闭自动轮转（看门狗已冻结，不会自动切号；点击开启自动轮转 Gemini）"
+
     oob_attr = ' hx-swap-oob="outerHTML:#btn-rotation-toggle"' if oob else ''
-    return f"""<button id="btn-rotation-toggle"{oob_attr} class="btn btn-top {rot_btn_cls} font-mono"
-                        onclick="toggleAutoRotation(this); event.preventDefault(); event.stopPropagation();"
-                        title="{rot_title}">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;">{rot_btn_icon}</svg>
-                    {rot_btn_text}
+    return f"""<button id="btn-rotation-toggle"{oob_attr} class="btn btn-top {btn_cls} font-mono"
+                        onclick="cycleAutoRotation(this); event.preventDefault(); event.stopPropagation();"
+                        data-mode="{mode}"
+                        title="{btn_title}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;">{btn_icon}</svg>
+                    {btn_text}
                 </button>"""
 
 
@@ -1508,10 +1552,14 @@ def render_dashboard_html() -> str:
         .btn-import {{ background: #00F0FF; color: #000000; margin-right: 6px; }}
         .btn-export {{ background: #FFE600; color: #000000; margin-right: 6px; }}
         .btn-refresh-all {{ background: #22C55E; color: #000000; margin-right: 6px; }}
-        .btn-warmup-all {{ background: #FF4D4D; color: #FFFFFF; margin-right: 6px; }}
-        .btn-rotation-on {{ background: #22C55E; color: #000000; font-weight: 900; }}
-        .btn-rotation-off {{ background: #FF9900; color: #000000; font-weight: 900; }}
-        .btn-rotation-off:hover {{ background: #FF7700; }}
+        .btn-rotation-gemini {{ background: #4ADE80; color: #000000; font-weight: 900; margin-left: 2px; }}
+        .btn-rotation-gemini:hover {{ background: #22C55E; }}
+        .btn-rotation-claude {{ background: #F59E0B; color: #000000; font-weight: 900; margin-left: 2px; }}
+        .btn-rotation-claude:hover {{ background: #D97706; }}
+        .btn-rotation-off {{ background: #E2E8F0; color: #000000; font-weight: 900; margin-left: 2px; }}
+        .btn-rotation-off:hover {{ background: #CBD5E1; }}
+        /* 向后兼容 */
+        .btn-rotation-on {{ background: #4ADE80; color: #000000; font-weight: 900; margin-left: 2px; }}
 
         .control-bar {{
             display: flex;
@@ -3507,8 +3555,8 @@ def render_dashboard_html() -> str:
             }}
         }}
 
-        // 🔄 切换自动轮换开关直通函数
-        async function toggleAutoRotation(btn) {{
+        // 🔄 三态循环切换自动轮换开关直通函数 (Gemini ➔ Claude ➔ 关闭 ➔ Gemini)
+        async function cycleAutoRotation(btn) {{
             btn.disabled = true;
             try {{
                 const resp = await fetch('/api/toggle-rotation', {{
@@ -3516,16 +3564,24 @@ def render_dashboard_html() -> str:
                 }});
                 if (!resp.ok) throw new Error("HTTP " + resp.status);
                 const res = await resp.json();
-                if (res.enabled) {{
-                    btn.className = "btn btn-top btn-rotation-on font-mono";
-                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>自动轮换: 开启';
-                    btn.title = "自动轮换运行中 (Gemini 耗尽自动切号；如用 Claude 请点击禁止自动轮换)";
-                    showToast("⚡ 自动轮换已开启：Gemini 核心额度耗尽将自动接力换号", "success");
+                const mode = res.mode || (res.enabled ? (res.policy === 'claude_first' ? 'claude' : 'gemini') : 'off');
+                btn.setAttribute('data-mode', mode);
+
+                if (mode === 'gemini') {{
+                    btn.className = "btn btn-top btn-rotation-gemini font-mono";
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>⚡ 轮转: Gemini';
+                    btn.title = "当前模式：自动轮转 Gemini（仅关注 Gemini 额度，耗尽自动切号，忽略 Claude 额度；点击切换为 Claude 轮转）";
+                    showToast("⚡ 已切换为【自动轮转 Gemini】：仅监控 Gemini 额度，耗尽自动切号", "success");
+                }} else if (mode === 'claude') {{
+                    btn.className = "btn btn-top btn-rotation-claude font-mono";
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>⚡ 轮转: Claude';
+                    btn.title = "当前模式：自动轮转 Claude（仅关注 Claude 额度，耗尽自动切号，忽略 Gemini 额度；点击彻底关闭轮转）";
+                    showToast("⚡ 已切换为【自动轮转 Claude】：仅监控 Claude 额度，耗尽自动切号", "info");
                 }} else {{
                     btn.className = "btn btn-top btn-rotation-off font-mono";
-                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>🚫 已禁止自动轮换';
-                    btn.title = "已禁止自动轮换 (看门狗已冻结，可手动切换账号使用 Claude，不会被切走；点击恢复)";
-                    showToast("🚫 已禁止自动轮换：看门狗已完全冻结，可放心手动切换使用 Claude", "warning");
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>🚫 轮转: 关闭';
+                    btn.title = "当前模式：彻底关闭自动轮转（看门狗已冻结，不自动切号；点击开启 Gemini 轮转）";
+                    showToast("🚫 已彻底关闭自动轮转：看门狗已冻结，不会自动切号，可放心手动使用", "warning");
                 }}
             }} catch (err) {{
                 showToast("❌ 切换轮换状态失败: " + err.message, "error");
@@ -3533,6 +3589,7 @@ def render_dashboard_html() -> str:
                 btn.disabled = false;
             }}
         }}
+        window.toggleAutoRotation = cycleAutoRotation;
 
         let currentPage = 1;
         const PAGE_SIZE = 15;
@@ -4360,10 +4417,31 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             self.wfile.write(html.encode("utf-8"))
 
         elif parsed.path == "/api/toggle-rotation":
-            cfg = get_auto_rotation_config()
-            new_enabled = not cfg.get("enabled", True)
-            new_cfg = set_auto_rotation_config(new_enabled, policy=cfg.get("policy", "gemini_first"))
-            logger.info(f"🔄 [轮换开关切换] 用户通过 Web UI 切换自动轮换状态 -> {'开启' if new_enabled else '暂停'}")
+            cur_cfg = get_auto_rotation_config()
+            cur_mode = cur_cfg.get("mode", "gemini")
+
+            req_mode = ""
+            try:
+                if post_data.strip().startswith("{"):
+                    req_j = json.loads(post_data)
+                    req_mode = str(req_j.get("mode", "")).strip()
+                else:
+                    req_mode = params.get("mode", [""])[0].strip()
+            except Exception:
+                pass
+
+            if req_mode in ("gemini", "claude", "off"):
+                next_mode = req_mode
+            else:
+                if cur_mode == "gemini":
+                    next_mode = "claude"
+                elif cur_mode == "claude":
+                    next_mode = "off"
+                else:
+                    next_mode = "gemini"
+
+            new_cfg = set_auto_rotation_config(mode=next_mode)
+            logger.info(f"🔄 [轮换开关三态切换] 用户通过 Web UI 切换自动轮换模式: {cur_mode} -> {next_mode}")
             resp_bytes = json.dumps(new_cfg).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
