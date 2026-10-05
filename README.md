@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v2.39.0-FF2A85?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v2.39.1-FF2A85?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/Python-3.9+-00F0FF?style=flat-square&logo=python" alt="Python" />
   <img src="https://img.shields.io/badge/Architecture-Neo--Brutalism-FFE600?style=flat-square" alt="Style" />
   <img src="https://img.shields.io/badge/Frontend-HTMX-22C55E?style=flat-square&logo=htmx" alt="HTMX" />
@@ -242,6 +242,19 @@ antigravity-hub/
 ---
 
 ## 📜 版本更新日志 (Changelog)
+
+### v2.39.1 (2026-10-05)
+- **前端双重物理自愈门禁 (Self-Healing Grid Gate)**：客户端 JavaScript 在解析服务端 table 更新时，内置【表头列数物理一致性门禁】（若 `thead` 列数与数据行 `td` 列数不符立即整页自愈刷新，根除旧页面长时间未刷新导致的表格向右错位）与【服务端版本感知门禁】（一旦检测到服务端升版，客户端瞬间无感整页自愈刷新）；
+- **断点接力提示词全面重构与反早夭契约 (Anti-Premature Wrapup Contract)**：彻底消灭旧提示词中诱导 AI 匆忙收尾结案的早夭倾向，确立最高铁律“本指令为全速续跑信号，绝非结案信号，实体工程未彻底完成前严禁跳过核心实现步骤直接做形式化总结”；
+- **Teamwork 多智能体全速续跑无条件恢复**：无论是否显式命中，通用与专用接力提示词均全面强化“马上恢复所有 Teamwork 团队协作管线，检查并唤醒所有在途子代理，绝不允许丢弃任何未完工协同分支”；
+- **批量选择状态自愈保持**：表格动态增量渲染后自动回填复选框勾选态，保障批量导出与删除操作的连续性。
+
+### v2.39.0 (2026-10-05)
+- **三态全自动轮换开关**：支持「⚡ 自动轮转 Gemini」、「⚡ 自动轮转 Claude」、「🚫 关闭自动轮转」三态流转切换；单模额度纯化判定与专属降级选号；
+- **顶栏状态药丸三态直观呈现**：不同轮换模式采用高对比度 Neo-Brutalism 配色与独立 SVG 图标，状态一目了然。
+
+### v2.38.0 (2026-10-05)
+- **批量勾选、导出与安全归档删除**：增加多选复选框、一键批量安全导出（导出为标准 JSON 凭据文件）与批量安全删除（自动归档至 `deleted_accounts_archive.json`，在用账号受保护不可删除）。
 
 ### v2.37.3 (2026-10-05)
 - **「在用」按钮行内样式防缓存保真**：针对 HTMX 局部替换 `<tbody>` 不刷新 `<head>` 的特性，将 Neo-Brutalism 薄荷绿 (`#4ADE80`)、粗实线黑描边与加粗黑字写死为行内 `style` 属性，彻底免疫浏览器 CSS 缓存；

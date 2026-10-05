@@ -31,10 +31,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.39.0"
-__canonical_version_tag__ = "20261005-v2.39.0-TRISTATE_AUTO_ROTATION_MODE"
-__last_updated__ = "2026-10-05 09:31:56"
-__canonical_doctrine__ = "三态轮换开关(自动轮转Gemini/自动轮转Claude/关闭自动轮转)+单模纯化配额切号+全集群同步"
+__version__ = "2.39.1"
+__canonical_version_tag__ = "20261005-v2.39.1-UI_SELF_HEALING_AND_ROBUST_RELAY"
+__last_updated__ = "2026-10-05 10:09:06"
+__canonical_doctrine__ = "前端列数与版本双重自愈门禁+断点接力提示词全面重构(深度Teamwork恢复与反早夭契约)+全集群同步"
 
 
 # 配置常量
@@ -1129,7 +1129,7 @@ def render_table_rows(include_oob: bool = False) -> str:
     if not accounts:
         empty_row = '<tr><td colspan="7" style="text-align:center; padding: 24px; font-size:13px; font-weight:900; background:#FFE4E6;">暂无账号，请执行单向导入</td></tr>'
         if include_oob:
-            return empty_row + "\n" + render_top_bar_stats_html(0, 0, 0.0, 0.0, cur_time, oob=True) + "\n" + render_active_pill_html("", oob=True)
+            return empty_row + "\n" + render_top_bar_stats_html(0, 0, 0.0, 0.0, cur_time, oob=True) + "\n" + render_active_pill_html("", oob=True) + "\n" + render_rotation_button_html(oob=True) + "\n" + render_version_marker_html(oob=True)
         return empty_row
 
     rows = []
@@ -1260,7 +1260,13 @@ def render_table_rows(include_oob: bool = False) -> str:
         output += "\n" + render_top_bar_stats_html(total_count, pro_count, avg_g, avg_c, cur_time, oob=True)
         output += "\n" + render_active_pill_html(active_email, oob=True)
         output += "\n" + render_rotation_button_html(oob=True)
+        output += "\n" + render_version_marker_html(oob=True)
     return output
+
+
+def render_version_marker_html(oob: bool = False) -> str:
+    oob_attr = ' hx-swap-oob="outerHTML:#hub-version-marker"' if oob else ''
+    return f"""<div id="hub-version-marker"{oob_attr} data-version="{__version__}" style="display:none;"></div>"""
 
 
 def render_rotation_button_html(oob: bool = False) -> str:
@@ -2870,7 +2876,8 @@ def render_dashboard_html() -> str:
         }}
     </style>
 </head>
-<body>
+<body data-hub-version="{__version__}">
+    <div id="hub-version-marker" data-version="{__version__}" style="display:none;"></div>
     <div id="loading-bar"></div>
     <div id="toast" class="toast font-mono"></div>
 
@@ -3396,6 +3403,19 @@ def render_dashboard_html() -> str:
 
             // 1. 处理所有 hx-swap-oob 元素 (如顶栏药丸与统计数据)
             const docAll = parser.parseFromString(html, 'text/html');
+
+            // 🛡️ [版本感知自愈门禁] 检测客户端版本与服务端版本是否一致
+            const serverVerMarker = docAll.getElementById('hub-version-marker');
+            if (serverVerMarker) {{
+                const clientVer = document.body ? document.body.getAttribute('data-hub-version') : null;
+                const serverVer = serverVerMarker.getAttribute('data-version');
+                if (clientVer && serverVer && clientVer !== serverVer) {{
+                    console.warn(`[Hub自愈门禁] 服务端已升版至 ${{serverVer}}，当前客户端为 ${{clientVer}}，立即整页自愈刷新！`);
+                    window.location.reload();
+                    return;
+                }}
+            }}
+
             const oobs = docAll.querySelectorAll('[hx-swap-oob="true"]');
             oobs.forEach(oob => {{
                 const targetId = oob.id;
@@ -3411,6 +3431,18 @@ def render_dashboard_html() -> str:
             const tableDoc = parser.parseFromString(`<table><tbody>${{html}}</tbody></table>`, 'text/html');
             const trs = tableDoc.querySelectorAll('tbody > tr.account-row, tr.account-row');
             const tbody = document.getElementById('account-tbody');
+
+            // 🛡️ [表头列数物理一致性自愈门禁] 检测当前页面的表头 th 数量与服务端返回的 tr 单元格数量是否一致
+            const theadThs = document.querySelectorAll('.table-wrap table thead th');
+            if (trs.length > 0 && theadThs.length > 0) {{
+                const firstRowCells = trs[0].querySelectorAll('td, th');
+                if (firstRowCells.length > 0 && theadThs.length !== firstRowCells.length) {{
+                    console.warn(`[Hub自愈门禁] 表头列数(${{theadThs.length}})与行单元格数(${{firstRowCells.length}})失配，页面结构过时，立即整页自愈刷新！`);
+                    window.location.reload();
+                    return;
+                }}
+            }}
+
             if (tbody && trs.length > 0) {{
                 tbody.innerHTML = '';
                 trs.forEach(tr => {{
@@ -3420,6 +3452,9 @@ def render_dashboard_html() -> str:
                 filterTable();
                 if (typeof initDragSort === 'function') {{
                     initDragSort();
+                }}
+                if (typeof restoreSelectionState === 'function') {{
+                    restoreSelectionState();
                 }}
             }}
         }}
