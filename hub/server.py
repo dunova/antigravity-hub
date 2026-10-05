@@ -25,15 +25,16 @@ import subprocess
 import threading
 import concurrent.futures
 import logging
+import datetime
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.37.3"
-__canonical_version_tag__ = "20261005-v2.37.3-INLINE_NEO_BRUTALISM_IN_USE_BADGE_FIX"
-__last_updated__ = "2026-10-05 09:11:09"
-__canonical_doctrine__ = "彻底消除黑色在用违规按钮+薄荷绿双钮对齐结构+Claude与Gemini双模全息并发预热+行内内联防缓存保真"
+__version__ = "2.38.0"
+__canonical_version_tag__ = "20261005-v2.38.0-BATCH_SELECT_EXPORT_AND_SAFE_DELETE"
+__last_updated__ = "2026-10-05 09:23:37"
+__canonical_doctrine__ = "批量勾选纳管+选区导出+安全防删在用+原子归档备份+全集群自动同步"
 
 
 # 配置常量
@@ -1096,7 +1097,7 @@ def render_table_rows(include_oob: bool = False) -> str:
     cur_time = time.strftime("%H:%M:%S")
 
     if not accounts:
-        empty_row = '<tr><td colspan="6" style="text-align:center; padding: 24px; font-size:13px; font-weight:900; background:#FFE4E6;">暂无账号，请执行单向导入</td></tr>'
+        empty_row = '<tr><td colspan="7" style="text-align:center; padding: 24px; font-size:13px; font-weight:900; background:#FFE4E6;">暂无账号，请执行单向导入</td></tr>'
         if include_oob:
             return empty_row + "\n" + render_top_bar_stats_html(0, 0, 0.0, 0.0, cur_time, oob=True) + "\n" + render_active_pill_html("", oob=True)
         return empty_row
@@ -1204,6 +1205,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             data-claude-5h="{c_5h}"
             data-claude-w="{c_w}"
             data-is-active="{'1' if is_active else '0'}">
+            <td class="col-center col-check" style="background-color: {row_bg}; width: 34px; padding: 0 4px;"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
             <td class="col-center font-mono num-col" style="background-color: {row_bg};">{num_html}</td>
             <td class="col-status" style="background-color: {row_bg};"><div class="status-cell-wrap">{badge_html}</div></td>
             <td class="col-email" style="background-color: {row_bg};">
@@ -2342,6 +2344,131 @@ def render_dashboard_html() -> str:
             flex-shrink: 0 !important;
         }}
 
+        /* 🔲 Neo-Brutalism 复选框与批量控制 */
+        .th-check, .col-check {{
+            width: 34px !important;
+            min-width: 34px !important;
+            max-width: 34px !important;
+            text-align: center !important;
+            padding: 0 4px !important;
+            vertical-align: middle !important;
+            box-sizing: border-box !important;
+        }}
+        .neo-checkbox {{
+            appearance: none;
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            border: 2px solid #000000;
+            border-radius: 3px;
+            background: #FFFFFF;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            vertical-align: middle;
+            transition: all 0.05s ease;
+            box-shadow: 1px 1px 0px #000000;
+            margin: 0;
+            padding: 0;
+            flex-shrink: 0;
+        }}
+        .neo-checkbox:hover {{
+            transform: translate(-0.5px, -0.5px);
+            box-shadow: 2px 2px 0px #000000;
+            background: #FFDE59;
+        }}
+        .neo-checkbox:checked {{
+            background-color: #000000;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 13px;
+        }}
+        .neo-checkbox:indeterminate {{
+            background-color: #000000;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='3' y='7' width='10' height='2' rx='1'/%3E%3C/svg%3E");
+            background-position: center;
+            background-repeat: no-repeat;
+        }}
+        tr.is-row-selected {{
+            background-color: #FEF08A !important;
+            outline: 2px solid #000000;
+            outline-offset: -2px;
+        }}
+        tr.is-row-selected td {{
+            background-color: #FEF08A !important;
+        }}
+
+        /* 🎛️ 批量操作指示卡片 */
+        .batch-bar {{
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #FFE600;
+            border: 2px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 2px 2px 0px #000000;
+            padding: 0 8px;
+            height: 26px;
+            font-size: 11px;
+            font-weight: 900;
+            color: #000000;
+            box-sizing: border-box;
+            margin-left: auto;
+        }}
+        .batch-count-label {{
+            font-size: 10.5px;
+            margin-right: 2px;
+            white-space: nowrap;
+        }}
+        .btn-batch {{
+            height: 20px;
+            padding: 0 6px;
+            font-size: 10px;
+            font-weight: 900;
+            border: 1.5px solid #000000;
+            border-radius: 3px;
+            cursor: pointer;
+            box-shadow: 1px 1px 0px #000000;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            box-sizing: border-box;
+            transition: all 0.05s ease;
+            white-space: nowrap;
+        }}
+        .btn-batch:hover {{
+            transform: translate(-0.5px, -0.5px);
+            box-shadow: 1.5px 1.5px 0px #000000;
+        }}
+        .btn-batch:active {{
+            transform: translate(0.5px, 0.5px);
+            box-shadow: 0px 0px 0px #000000;
+        }}
+        .btn-batch-export {{
+            background: #FFFFFF;
+            color: #000000;
+        }}
+        .btn-batch-export:hover {{
+            background: var(--cyan-accent);
+        }}
+        .btn-batch-delete {{
+            background: #FF4B4B;
+            color: #FFFFFF;
+        }}
+        .btn-batch-delete:hover {{
+            background: #DC2626;
+        }}
+        .btn-batch-clear {{
+            background: #000000;
+            color: #FFFFFF;
+            padding: 0 5px;
+        }}
+        .btn-batch-clear:hover {{
+            background: #333333;
+        }}
+
         .toast {{
             position: fixed;
             top: 24px;
@@ -2759,12 +2886,23 @@ def render_dashboard_html() -> str:
             <div class="stats-counter" id="filter-counter">
                 显示: <b>{total_count}</b> / {total_count}
             </div>
+            <div id="batch-action-bar" class="batch-bar font-mono" style="display:none;">
+                <span class="batch-count-label">已选 <b id="batch-selected-count">0</b> 项</span>
+                <button type="button" class="btn-batch btn-batch-export font-mono" onclick="doBatchExport()" title="导出所勾选账号凭据为标准 JSON 文件">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出
+                </button>
+                <button type="button" class="btn-batch btn-batch-delete font-mono" onclick="doBatchDelete()" title="批量删除所勾选账号（在用账号受保护不可删除，自动归档备份）">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除
+                </button>
+                <button type="button" class="btn-batch btn-batch-clear font-mono" onclick="clearAllSelections()" title="清空全部勾选">取消</button>
+            </div>
         </div>
 
         <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 横向滚动防护) -->
         <div class="table-wrap">
             <table>
                 <colgroup>
+                    <col style="width: 34px;">   <!-- 批量勾选复选框 (34px) -->
                     <col style="width: 40px;">   <!-- # 序号+拖拽手柄 (40px) -->
                     <col style="width: 74px;">   <!-- 状态 (74px) -->
                     <col style="width: 186px;">  <!-- 账号+PRO (186px，自适应充沛呼吸空间，彻底根除截断) -->
@@ -2774,6 +2912,7 @@ def render_dashboard_html() -> str:
                 </colgroup>
                 <thead>
                     <tr>
+                        <th class="col-center th-check" title="全选 / 反选当前可见账号"><input type="checkbox" id="master-select-cb" class="neo-checkbox" onchange="toggleMasterSelect(this)" title="全选 / 反选当前所有筛选可见账号"></th>
                         <th class="col-center th-num" title="拖拽手柄与序号">#</th>
                         <th class="col-center th-status">状态</th>
                         <th class="th-email">账号 (点击复制)</th>
@@ -3629,6 +3768,7 @@ def render_dashboard_html() -> str:
             if (btnNext) btnNext.disabled = (currentPage >= totalPages);
 
             updateSortBadges();
+            restoreSelectionState();
         }}
 
         // 支持 URL 参数 ?filter=usable 自动触发筛选与 ?sort=gemini_w 自动触发排序
@@ -3807,6 +3947,213 @@ def render_dashboard_html() -> str:
                     saveCurrentAccountOrder();
                 }};
             }});
+        }}
+
+        // ═══════════════════════════════════════════════════════════
+        // ☑️ 批量勾选、选区导出与安全防误删系统 (抗 5s HTMX 轮询刷新状态自愈)
+        // ═══════════════════════════════════════════════════════════
+        const selectedEmails = new Set();
+
+        // 单行勾选改变
+        function onRowSelectChange(cb) {{
+            const email = cb.getAttribute('data-email') || cb.value;
+            if (!email) return;
+            const tr = cb.closest('tr.account-row');
+            if (cb.checked) {{
+                selectedEmails.add(email);
+                if (tr) tr.classList.add('is-row-selected');
+            }} else {{
+                selectedEmails.delete(email);
+                if (tr) tr.classList.remove('is-row-selected');
+            }}
+            updateBatchActionBar();
+            updateMasterCheckboxState();
+        }}
+
+        // 表头全选 / 反选（仅针对当前经过筛选后可见的行）
+        function toggleMasterSelect(masterCb) {{
+            const tbody = document.getElementById('account-tbody');
+            if (!tbody) return;
+            const visibleRows = Array.from(tbody.querySelectorAll('tr.account-row')).filter(r => r.style.display !== 'none');
+            const shouldCheck = masterCb.checked;
+            visibleRows.forEach(tr => {{
+                const email = tr.getAttribute('data-email');
+                const cb = tr.querySelector('.row-select-cb');
+                if (shouldCheck) {{
+                    selectedEmails.add(email);
+                    if (cb) cb.checked = true;
+                    tr.classList.add('is-row-selected');
+                }} else {{
+                    selectedEmails.delete(email);
+                    if (cb) cb.checked = false;
+                    tr.classList.remove('is-row-selected');
+                }}
+            }});
+            updateBatchActionBar();
+        }}
+
+        // 清空所有已选
+        function clearAllSelections() {{
+            selectedEmails.clear();
+            const tbody = document.getElementById('account-tbody');
+            if (tbody) {{
+                tbody.querySelectorAll('.row-select-cb').forEach(cb => cb.checked = false);
+                tbody.querySelectorAll('tr.account-row').forEach(tr => tr.classList.remove('is-row-selected'));
+            }}
+            const masterCb = document.getElementById('master-select-cb');
+            if (masterCb) {{
+                masterCb.checked = false;
+                masterCb.indeterminate = false;
+            }}
+            updateBatchActionBar();
+        }}
+
+        // 更新批量操作栏显示与计数
+        function updateBatchActionBar() {{
+            const bar = document.getElementById('batch-action-bar');
+            const countEl = document.getElementById('batch-selected-count');
+            const count = selectedEmails.size;
+            if (countEl) countEl.textContent = count;
+            if (bar) {{
+                bar.style.display = count > 0 ? 'inline-flex' : 'none';
+            }}
+        }}
+
+        // 更新表头全选框的状态（对齐当前可见行：全选/部分选中/未选）
+        function updateMasterCheckboxState() {{
+            const masterCb = document.getElementById('master-select-cb');
+            if (!masterCb) return;
+            const tbody = document.getElementById('account-tbody');
+            if (!tbody) return;
+            const visibleRows = Array.from(tbody.querySelectorAll('tr.account-row')).filter(r => r.style.display !== 'none');
+            if (visibleRows.length === 0) {{
+                masterCb.checked = false;
+                masterCb.indeterminate = false;
+                return;
+            }}
+            let checkedCount = 0;
+            visibleRows.forEach(tr => {{
+                const email = tr.getAttribute('data-email');
+                if (selectedEmails.has(email)) checkedCount++;
+            }});
+            if (checkedCount === 0) {{
+                masterCb.checked = false;
+                masterCb.indeterminate = false;
+            }} else if (checkedCount === visibleRows.length) {{
+                masterCb.checked = true;
+                masterCb.indeterminate = false;
+            }} else {{
+                masterCb.checked = false;
+                masterCb.indeterminate = true;
+            }}
+        }}
+
+        // 状态自愈：当 DOM 被 applyTbodyAndOOB 或 filterTable 重新渲染时，遍历 DOM 回填勾选态
+        function restoreSelectionState() {{
+            const tbody = document.getElementById('account-tbody');
+            if (!tbody) return;
+            tbody.querySelectorAll('tr.account-row').forEach(tr => {{
+                const email = tr.getAttribute('data-email');
+                const cb = tr.querySelector('.row-select-cb');
+                if (selectedEmails.has(email)) {{
+                    if (cb) cb.checked = true;
+                    tr.classList.add('is-row-selected');
+                }} else {{
+                    if (cb) cb.checked = false;
+                    tr.classList.remove('is-row-selected');
+                }}
+            }});
+            updateBatchActionBar();
+            updateMasterCheckboxState();
+        }}
+
+        // 批量导出选中的账号
+        async function doBatchExport() {{
+            if (selectedEmails.size === 0) {{
+                showToast("⚠️ 请先勾选要导出的账号", "warning");
+                return;
+            }}
+            showToast(`⏳ 正在打包导出 ${{selectedEmails.size}} 个账号凭据...`, "info");
+            try {{
+                const resp = await fetch('/api/export_selected', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ emails: Array.from(selectedEmails) }})
+                }});
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const blob = await resp.blob();
+                const now = new Date();
+                const pad = n => String(n).padStart(2, '0');
+                const ts = `${{now.getFullYear()}}${{pad(now.getMonth()+1)}}${{pad(now.getDate())}}_${{pad(now.getHours())}}${{pad(now.getMinutes())}}${{pad(now.getSeconds())}}`;
+                const filename = `antigravity_selected_accounts_${{ts}}.json`;
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                showToast(`✅ 已成功导出 ${{selectedEmails.size}} 个账号！`, "success");
+            }} catch (err) {{
+                showToast("❌ 导出失败: " + err.message, "error");
+            }}
+        }}
+
+        // 批量删除选中的账号（带在用拦截与自动归档）
+        async function doBatchDelete() {{
+            if (selectedEmails.size === 0) {{
+                showToast("⚠️ 请先勾选要删除的账号", "warning");
+                return;
+            }}
+            // 嗅探当前在用活跃账号
+            let activeEmail = "";
+            const activeTr = document.querySelector('tr.account-row[data-is-active="1"]');
+            if (activeTr) {{
+                activeEmail = activeTr.getAttribute('data-email') || "";
+            }}
+            if (!activeEmail) {{
+                const pill = document.getElementById('active-email-pill');
+                if (pill) {{
+                    const text = pill.textContent || "";
+                    const m = text.match(/([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+)/);
+                    if (m) activeEmail = m[1];
+                }}
+            }}
+
+            const allSelected = Array.from(selectedEmails);
+            const includesActive = activeEmail && selectedEmails.has(activeEmail);
+            const toDelete = allSelected.filter(e => e !== activeEmail);
+
+            if (includesActive && toDelete.length === 0) {{
+                alert(`❌ 所选账号为当前【在用】护航账号（${{activeEmail}}），受安全门禁保护严禁删除！\\n\\n如需删除，请先在列表中切换至其他可用账号。`);
+                return;
+            }}
+
+            let confirmMsg = `⚠️ 确定要删除选中的 ${{toDelete.length}} 个账号吗？\\n\\n`;
+            if (includesActive) {{
+                confirmMsg += `🛡️ 注意：所选的【在用】护航账号（${{activeEmail}}）将受保护自动保留，仅删除其余 ${{toDelete.length}} 个账号。\\n\\n`;
+            }}
+            confirmMsg += `数据将自动归档至 deleted_accounts_archive.json，删除后列表不再展示。是否继续？`;
+
+            if (!confirm(confirmMsg)) return;
+
+            showToast(`⏳ 正在执行安全删除与归档 (${{toDelete.length}} 个账号)...`, "info");
+            try {{
+                const resp = await fetch('/api/delete_accounts', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ emails: toDelete }})
+                }});
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const html = await resp.text();
+                toDelete.forEach(e => selectedEmails.delete(e));
+                applyTbodyAndOOB(html);
+                showToast(`🗑️ 已成功安全删除并归档 ${{toDelete.length}} 个账号！`, "success");
+            }} catch (err) {{
+                showToast("❌ 删除失败: " + err.message, "error");
+            }}
         }}
 
         // 初始化等待与自动重绑
@@ -4214,6 +4561,109 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "ok" if ok else "error", "added": added, "updated": updated, "message": msg}).encode("utf-8"))
+            return
+
+        elif parsed.path == "/api/export_selected":
+            target_emails = []
+            try:
+                if post_data.strip().startswith("{"):
+                    req_j = json.loads(post_data)
+                    target_emails = req_j.get("emails", [])
+                else:
+                    target_emails = params.get("emails[]", params.get("emails", []))
+            except Exception as e:
+                logger.error(f"解析 export_selected 请求异常: {e}")
+
+            data = ENGINE.load_accounts()
+            all_accounts = data.get("accounts", {})
+            selected_dict = {}
+            for e in target_emails:
+                if e in all_accounts:
+                    selected_dict[e] = all_accounts[e]
+
+            export_payload = {
+                "exported_at": datetime.datetime.now().isoformat(),
+                "generator": "Antigravity Hub v2.38.0",
+                "count": len(selected_dict),
+                "accounts": selected_dict
+            }
+            resp_bytes = json.dumps(export_payload, ensure_ascii=False, indent=2).encode("utf-8")
+            now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"antigravity_selected_accounts_{now_str}.json"
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.end_headers()
+            self.wfile.write(resp_bytes)
+            logger.info(f"📦 [批量导出] 已成功导出 {len(selected_dict)} 个账号凭据")
+            return
+
+        elif parsed.path == "/api/delete_accounts":
+            target_emails = []
+            try:
+                if post_data.strip().startswith("{"):
+                    req_j = json.loads(post_data)
+                    target_emails = req_j.get("emails", [])
+                else:
+                    target_emails = params.get("emails[]", params.get("emails", []))
+            except Exception as e:
+                logger.error(f"解析 delete_accounts 请求异常: {e}")
+
+            data = ENGINE.load_accounts()
+            active_email = data.get("active_email", "")
+            accounts = data.get("accounts", {})
+
+            # 🛡️ 物理最高门禁：拦截当前正在使用的护航活跃账号
+            deletable_emails = [e for e in target_emails if e in accounts and e != active_email]
+
+            if deletable_emails:
+                # 自动灾备归档留痕
+                archive_file = os.path.join(os.path.dirname(ACCOUNTS_HUB_FILE), "deleted_accounts_archive.json")
+                archived_data = {}
+                if os.path.exists(archive_file):
+                    try:
+                        with open(archive_file, "r", encoding="utf-8") as af:
+                            archived_data = json.load(af)
+                    except Exception:
+                        archived_data = {}
+
+                now_iso = datetime.datetime.now().isoformat()
+                for e in deletable_emails:
+                    rec = accounts.pop(e)
+                    rec["deleted_at"] = now_iso
+                    archived_data[e] = rec
+
+                try:
+                    with open(archive_file, "w", encoding="utf-8") as af:
+                        json.dump(archived_data, af, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    logger.error(f"归档已删除账号数据异常: {e}")
+
+                # 保存更新后的账号池
+                data["accounts"] = accounts
+                ENGINE.save_accounts(data)
+
+                # 同步清理持久化顺序列表 (若存在)
+                order_file = os.path.join(os.path.dirname(ACCOUNTS_HUB_FILE), "accounts_order.json")
+                if os.path.exists(order_file):
+                    try:
+                        with open(order_file, "r", encoding="utf-8") as of:
+                            cur_order = json.load(of)
+                        if isinstance(cur_order, list):
+                            new_order = [x for x in cur_order if x not in deletable_emails]
+                            with open(order_file, "w", encoding="utf-8") as of:
+                                json.dump(new_order, of, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+
+                logger.info(f"🗑️ [批量安全删除] 成功从账号池切除并归档 {len(deletable_emails)} 个账号: {deletable_emails}")
+
+            html = render_table_rows(include_oob=True)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(html.encode("utf-8"))
             return
 
         else:
