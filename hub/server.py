@@ -30,11 +30,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-
-__version__ = "2.35.0"
-__canonical_version_tag__ = "20261004-v2.34.0-COMPLETED_SESSION_SKIP_AND_TEAMWORK_RESUME"
-__last_updated__ = "2026-10-04 22:57:07"
-__canonical_doctrine__ = "已完结任务物理跳过门禁 + Teamwork多智能体断点恢复提示词引擎 + 手动切号场景脱耦"
+__version__ = "2.37.3"
+__canonical_version_tag__ = "20261005-v2.37.3-INLINE_NEO_BRUTALISM_IN_USE_BADGE_FIX"
+__last_updated__ = "2026-10-05 08:58:00"
+__canonical_doctrine__ = "彻底消除黑色在用违规按钮+薄荷绿双钮对齐结构+Claude与Gemini双模全息并发预热+行内内联防缓存保真"
 
 
 # 配置常量
@@ -45,7 +44,6 @@ WARMUP_HUB_FILE = os.path.join(HUB_DIR, "warmup_hub.json")
 WARMUP_SCHEDULE_PATH = os.path.join(HUB_DIR, "warmup_schedule.json")
 AUTO_ROTATION_CONFIG_PATH = os.path.join(BASE_DATA_DIR, "auto_rotation_config.json")
 MANUAL_OVERRIDE_LOCK_PATH = os.path.join(BASE_DATA_DIR, "manual_override_lock.json")
-
 
 OAUTH_CREDS_PATH = os.path.expanduser("~/.gemini/oauth_creds.json")
 GOOGLE_ACCOUNTS_PATH = os.path.expanduser("~/.gemini/google_accounts.json")
@@ -83,6 +81,81 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("HubServer")
+
+
+def get_installed_browser_candidates() -> List[Dict[str, Any]]:
+    """
+    返回当前系统可用浏览器候选列表（按优先级排序）：
+    1. ego lite（用户主力默认浏览器，/Applications/ego lite.app）
+    2. Google Chrome（若安装）
+    """
+    candidates = []
+    # 1. 优先检查 ego lite
+    ego_paths = [
+        "/Applications/ego lite.app",
+        os.path.expanduser("~/Applications/ego lite.app"),
+    ]
+    for p in ego_paths:
+        if os.path.exists(p):
+            candidates.append({"name": "ego lite", "path": p})
+            break
+
+    # 2. 检查 Google Chrome
+    chrome_paths = [
+        "/Applications/Google Chrome.app",
+        os.path.expanduser("~/Applications/Google Chrome.app"),
+    ]
+    for p in chrome_paths:
+        if os.path.exists(p):
+            candidates.append({"name": "Google Chrome", "path": p})
+            break
+
+    return candidates
+
+
+def launch_browser_for_auth(url: str, isolated: bool = False, profile_name: str = "") -> bool:
+    """
+    为解封或 OAuth 授权拉起浏览器：
+    - 优先绑定用户现役主力浏览器 ego lite；
+    - 支持带独立 profile 隔离容器（isolated=True）或在现役会话中秒级打开标签页（isolated=False）；
+    - 若指定独立容器失败，平滑回退到现役 ego lite 窗口；
+    - 若 ego lite 不存在，自动回退 Chrome，终极保底回退 open <url>；
+    - 彻底杜绝因写死 Google Chrome 导致应用未安装而静默失败的隐患。
+    """
+    candidates = get_installed_browser_candidates()
+    profile_dir = os.path.join(BASE_DATA_DIR, "browser_profiles", profile_name) if profile_name else None
+    if profile_dir:
+        os.makedirs(profile_dir, exist_ok=True)
+
+    for cand in candidates:
+        app_name = cand["name"]
+        try:
+            if isolated and profile_dir:
+                cmd = ["open", "-na", app_name, "--args", f"--user-data-dir={profile_dir}", url]
+                p = subprocess.Popen(cmd)
+                p.wait(timeout=1)
+                if p.returncode == 0:
+                    logger.info(f"🚀 [浏览器调起] 已为授权/解封拉起独立容器 ({app_name}): {profile_dir}")
+                    return True
+                else:
+                    logger.warning(f"⚠️ [浏览器调起] 独立容器启动返回码非0 ({p.returncode})，尝试平滑切换至标准打开")
+
+            # 标准模式或独立容器回退：直接在现役窗口中新建标签页拉起并聚焦
+            cmd = ["open", "-a", app_name, url]
+            subprocess.Popen(cmd)
+            logger.info(f"🚀 [浏览器调起] 已在现役 {app_name} 浏览器中打开目标 URL")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ [浏览器调起] 拉起 {app_name} 异常: {e}，尝试下一个候选")
+
+    # 保底：使用 macOS 系统默认浏览器
+    try:
+        subprocess.Popen(["open", url])
+        logger.info(f"🚀 [浏览器调起] 已使用系统默认浏览器打开目标 URL")
+        return True
+    except Exception as e:
+        logger.error(f"❌ [浏览器调起失败] 系统默认 open 打开异常: {e}")
+        return False
 
 
 def atomic_write_json(file_path: str, data: Any, indent: int = 2) -> bool:
@@ -593,6 +666,45 @@ class HubEngine:
             logger.warning(f"获取官方配额失败: {e}")
             return {}, {}, None
 
+    def fetch_available_models(self, access_token: str) -> Tuple[str, List[str]]:
+        """
+        探测账号支持的模型矩阵，精准区分 Claude 5.5 (付费Pro) 与 Claude 4.6 (未付费Pro·预计11月下架)
+        返回: (claude_version: "5.5" | "4.6", claude_models: List[str])
+        """
+        req = urllib.request.Request(
+            MODELS_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "User-Agent": NATIVE_OAUTH_USER_AGENT
+            },
+            method="POST",
+            data=b"{}"
+        )
+        ctx = ssl.create_default_context()
+        try:
+            with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+                body_str = _safe_decode_resp(resp.read())
+                data = json.loads(body_str)
+            c_models = []
+            has_55 = False
+            has_46 = False
+            for g in data.get("agentModelSorts", []):
+                for grp in g.get("groups", []):
+                    for m in grp.get("modelIds", []):
+                        if "claude" in m:
+                            c_models.append(m)
+                            if "5-5" in m or "5.5" in m:
+                                has_55 = True
+                            elif "4-6" in m or "4.6" in m:
+                                has_46 = True
+            ver = "5.5" if has_55 else ("4.6" if has_46 else "4.6")
+            return ver, c_models
+        except Exception as e:
+            logger.debug(f"探测模型矩阵失败: {e}")
+            return "4.6", []
+
+
     def _sync_antigravity_tools_cache(self, acc_id: str, access_token: str = None, refresh_token: str = None, expiry_ts: int = None, validation_blocked: bool = None, val_url: str = None):
         """同步回写 ~/.antigravity_tools/accounts/<id>.json 与 accounts_hub.json"""
         if not acc_id:
@@ -860,7 +972,7 @@ def format_countdown_sec(sec_diff: int) -> str:
     return f"{sec_diff}s"
 
 
-def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "", reset_weekly_info: str = "", model_type: str = "gemini") -> str:
+def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "", reset_weekly_info: str = "", model_type: str = "gemini", claude_ver: str = "") -> str:
     val_w = round(weekly_pct * 100, 1)
 
     # 核心物理约束：周额度没了，5H 自然归零，绝对不能虚假满额就绪！
@@ -878,10 +990,6 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
         tip = f"周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
     elif val_5h >= 99.9:
-        # 当 5 小时配额为 100% 满额时：
-        # Google 官方 API 在配额未被消耗时物理动态返回 now+5h (格式化后呈现为 4h59m 动态漂移)。
-        # 该状态代表配额完全满血可用、处于就绪待命态，绝非遇到失败等待恢复！
-        # 仅当后台预热锁定了真正的倒计时且剩余时间显著进入倒数窗口 (< 4h 45m) 时呈现倒计时，其余一律呈现绿色「就绪」！
         is_warmup_in_progress = (
             reset_5h_info 
             and reset_5h_info not in ("--", "已就绪") 
@@ -894,7 +1002,6 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
         else:
             reset_5h_html = '<span class="q-reset q-reset-ready font-mono" title="满血待命，随时可用">就绪</span>'
     elif reset_5h_info and reset_5h_info not in ("--", "已就绪"):
-        # 只要存在有效恢复倒计时，直接呈现时间（如 3h 23m、45m）！无论是否100%，绝不覆盖！
         reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
     elif reset_5h_info == "已就绪":
         reset_5h_html = '<span class="q-reset q-reset-ready font-mono" title="已恢复就绪">就绪</span>'
@@ -912,8 +1019,17 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     lbl_5h_cls = "tag-5h-g" if model_type == "gemini" else "tag-5h-c"
     lbl_w_cls = "tag-w-g" if model_type == "gemini" else "tag-w-c"
 
+    cell_title = ""
+    if model_type == "claude":
+        if claude_ver == "5.5":
+            cell_title = ' title="Claude 5.5 · 官方付费 Pro 特权 (Opus 5.5 / Sonnet 5.5)"'
+        else:
+            cell_title = ' title="Claude 4.6 · 未付费 Pro (官方预计 11 月下架)"'
+    elif model_type == "gemini":
+        cell_title = ' title="Gemini 2.5 配额 (5h 滚动 / 周度总额)"'
+
     return f"""
-    <div class="q-cell">
+    <div class="q-cell"{cell_title}>
         <div class="q-row">
             <span class="q-lbl {lbl_5h_cls}">5h</span>
             <div class="q-track"><div class="q-fill" style="width: {min(100, max(0, val_5h))}%; background: {c_5h};"></div></div>
@@ -1014,12 +1130,15 @@ def render_table_rows(include_oob: bool = False) -> str:
 
         if is_active:
             badge_html = '<span class="badge badge-active"><span class="pulse-dot-green"></span>ACTIVE</span>'
-            main_btn_html = f"""<div class="active-badge-action font-mono" title="当前主程序正在使用此账号护航">在用</div>"""
+            main_btn_html = f"""<div class="btn-in-use active-badge-action font-mono" style="width: 60px !important; min-width: 60px !important; max-width: 60px !important; height: 24px !important; background: #4ADE80 !important; color: #000000 !important; border: 2px solid #000000 !important; border-radius: var(--radius-btn, 6px) !important; box-shadow: 2px 2px 0px #000000 !important; font-size: 11px !important; font-weight: 900 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; cursor: default !important; user-select: none !important; padding: 0 !important; flex-shrink: 0 !important; box-sizing: border-box !important; letter-spacing: 0.5px !important;" title="当前主程序正在使用此账号护航">在用</div>
+                                <button class="btn btn-warmup font-mono" 
+                                onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
+                                title="向该账号发送极轻量真实生成，提前锁定5h倒计时错峰就绪">预热</button>"""
         elif is_blocked:
             badge_html = '<span class="badge badge-blocked" title="Google账号需网页验证">⚠️待验证</span>'
             main_btn_html = f"""<button class="btn btn-unblock font-mono" 
                             onclick="doUnblockAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                            title="拉起专属隔离Chrome容器并自动定向对应账号解封（彻底防500）">解封</button>"""
+                            title="在现役 ego lite 浏览器中拉起解封页面并自动定向该账号（后台自动监听解锁）">解封</button>"""
         else:
             badge_html = '<span class="badge badge-standby">STANDBY</span>'
             has_refresh_token = bool(acc.get("refresh_token", ""))
@@ -1054,7 +1173,8 @@ def render_table_rows(include_oob: bool = False) -> str:
         g_reset_w = format_reset_time(acc.get("gemini", {}).get("reset_time_weekly", acc.get("gemini", {}).get("reset_time", "")))
         g_cell = render_quota_cell(g_5h, g_w, g_reset_5h, g_reset_w, model_type="gemini")
 
-        # Claude 配额 (活力暖橙)
+        # Claude 配额与模型版本 (区分 5.5 付费Pro 与 4.6 预计11月下架)
+        claude_ver = acc.get("claude_version") or ("5.5" if email == "5-5" in str(acc.get("claude_models", [])) or "5-5" in str(acc.get("claude_models", [])) else "4.6")
         c_w = acc.get("claude", {}).get("quota_weekly", 1.0)
         c_5h = 0.0 if c_w <= 0.0001 else acc.get("claude", {}).get("quota_5h", 1.0)
         c_reset_raw = acc.get("claude", {}).get("reset_time_5h", "")
@@ -1062,10 +1182,15 @@ def render_table_rows(include_oob: bool = False) -> str:
             c_reset_raw = warmup_iso
         c_reset_5h = format_reset_time(c_reset_raw)
         c_reset_w = format_reset_time(acc.get("claude", {}).get("reset_time_weekly", acc.get("claude", {}).get("reset_time", "")))
-        c_cell = render_quota_cell(c_5h, c_w, c_reset_5h, c_reset_w, model_type="claude")
+        c_cell = render_quota_cell(c_5h, c_w, c_reset_5h, c_reset_w, model_type="claude", claude_ver=claude_ver)
 
         # 彻底去除邮箱域名后缀，只保留账号英文字符，告别 ... 截断
         short_name = email.split("@")[0] if "@" in email else email
+
+        if claude_ver == "5.5":
+            pro_tag_html = '<span class="pro-tag pro-tag-55 font-mono" title="官方付费 Pro 特权 · 支持 Claude 5.5 (Opus 5.5 / Sonnet 5.5)">5.5</span>'
+        else:
+            pro_tag_html = '<span class="pro-tag pro-tag-46 font-mono" title="未付费 Pro 账号 · 仅支持 Claude 4.6 (预计 11 月官方下架)">4.6</span>'
 
         row = f"""
         <tr class="account-row {active_class}" 
@@ -1073,6 +1198,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             style="background-color: {row_bg};"
             data-email="{email}"
             data-orig-idx="{idx}"
+            data-claude-ver="{claude_ver}"
             data-gemini-5h="{g_5h}"
             data-gemini-w="{g_w}"
             data-claude-5h="{c_5h}"
@@ -1083,7 +1209,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             <td class="col-email" style="background-color: {row_bg};">
                 <div class="email-cell-inner">
                     <span class="email-text font-mono" onclick="copyText('{email}')" title="点击复制完整账号凭据: {email}">{short_name}</span>
-                    <span class="pro-tag font-mono">PRO</span>
+                    {pro_tag_html}
                 </div>
             </td>
             <td class="col-quota" style="background-color: {row_bg};">{g_cell}</td>
@@ -1127,6 +1253,8 @@ def render_dashboard_html() -> str:
     active_email = data.get("active_email", "")
 
     total_count = len(accounts)
+    c55_count = sum(1 for a in accounts.values() if a.get("claude_version") == "5.5" or a.get("email") == "5-5" in str(acc.get("claude_models", [])))
+    c46_count = total_count - c55_count
     pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
     avg_g = round(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     avg_c = round(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
@@ -1743,9 +1871,9 @@ def render_dashboard_html() -> str:
             font-weight: 900;
             background: var(--pink-accent);
             color: #FFFFFF;
-            width: 34px !important;
-            min-width: 34px !important;
-            max-width: 34px !important;
+            width: 30px !important;
+            min-width: 30px !important;
+            max-width: 30px !important;
             height: 17px;
             border: 1.5px solid #000000;
             border-radius: 3px;
@@ -1753,9 +1881,23 @@ def render_dashboard_html() -> str:
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            letter-spacing: 0.5px;
             box-sizing: border-box;
             flex-shrink: 0 !important;
+            white-space: nowrap !important;
+            text-align: center;
+            line-height: 1;
+            padding: 0 !important;
+            letter-spacing: 0px;
+        }}
+        .pro-tag-55 {{
+            background: #F59E0B !important;
+            color: #000000 !important;
+            box-shadow: 1.5px 1.5px 0px #000000 !important;
+        }}
+        .pro-tag-46 {{
+            background: var(--pink-accent) !important;
+            color: #FFFFFF !important;
+            box-shadow: 1.5px 1.5px 0px #000000 !important;
         }}
 
         /* 配额单元格：双轨绝对等长 + 52px 绝对对称槽位 */
@@ -2176,26 +2318,28 @@ def render_dashboard_html() -> str:
             box-shadow: 0px 0px 0px #000000;
         }}
 
+        .btn-in-use,
         .active-badge-action {{
             width: 60px !important;
             min-width: 60px !important;
             max-width: 60px !important;
-            height: 24px;
-            background: #000000;
-            color: #FFFFFF;
-            font-size: 11px;
-            font-weight: 900;
-            border: 2px solid #000000;
-            border-radius: var(--radius-btn);
-            box-shadow: 2px 2px 0px #000000;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            letter-spacing: 0.5px;
-            cursor: default;
-            user-select: none;
-            box-sizing: border-box;
+            height: 24px !important;
+            background: #4ADE80 !important;
+            color: #000000 !important;
+            font-size: 11px !important;
+            font-weight: 900 !important;
+            border: 2px solid #000000 !important;
+            border-radius: var(--radius-btn) !important;
+            box-shadow: 2px 2px 0px #000000 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            letter-spacing: 0.5px !important;
+            cursor: default !important;
+            user-select: none !important;
+            box-sizing: border-box !important;
             padding: 0 !important;
+            flex-shrink: 0 !important;
         }}
 
         .toast {{
@@ -2607,7 +2751,7 @@ def render_dashboard_html() -> str:
             </div>
             <div class="filter-group">
                 <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">全部 ({total_count})</button>
-                <button class="filter-tab" data-filter="usable" onclick="setFilter('usable', this)" title="仅展示 Gemini 周额度大于 0 的可用轮换账号"><span class="filter-dot dot-blue"></span>可用账号 (G&gt;0)</button>
+                <button class="filter-tab" data-filter="usable" onclick="setFilter('usable', this)" title="仅展示 Gemini 周额度大于 0 的可用轮换账号"><span class="filter-dot dot-blue"></span>可用 (G&gt;0)</button>
                 <button class="filter-tab" data-filter="healthy" onclick="setFilter('healthy', this)"><span class="filter-dot dot-green"></span>充足 (&gt;50%)</button>
                 <button class="filter-tab" data-filter="warning" onclick="setFilter('warning', this)"><span class="filter-dot dot-red"></span>告急 (&lt;15%)</button>
                 <button class="filter-tab" data-filter="exhausted" onclick="setFilter('exhausted', this)" title="仅展示 Gemini 周额度已彻底归零的枯竭账号"><span class="filter-dot dot-gray"></span>已枯竭 (G=0)</button>
@@ -2699,7 +2843,7 @@ def render_dashboard_html() -> str:
                             🌐 弹出浏览器登录 Google 授权 (推荐)
                         </button>
                         <button class="btn-submit-action font-mono" id="btn-oauth-isolated" onclick="doStartGoogleOAuth(true, this)">
-                            🛡️ 拉起独立 Chrome 容器授权 (多号防串号)
+                            🛡️ 拉起独立 ego/隔离容器授权 (多号防串号)
                         </button>
                     </div>
                     <div id="oauth-status-box" style="display:none; margin-top:12px; padding:10px 12px; background:#FEF9C3; border:2px solid #000000; border-radius:6px; box-shadow:2px 2px 0px #000000;">
@@ -2827,8 +2971,8 @@ def render_dashboard_html() -> str:
                 const statusText = document.getElementById('oauth-status-text');
                 if (statusBox) statusBox.style.display = 'block';
                 if (statusText) statusText.innerText = isolated
-                    ? "⏳ 已拉起独立 Chrome 容器，请在弹出窗口登录 Google 并点击允许..."
-                    : "⏳ 已弹出浏览器 Google 授权页，请完成登录授权（完成后自动入库）...";
+                    ? "⏳ 已拉起独立 ego 隔离容器，请在弹出窗口登录 Google 并点击允许..."
+                    : "⏳ 已在 ego 浏览器弹出 Google 授权页，请完成登录授权（完成后自动入库）...";
 
                 showToast("🚀 已拉起 Google 授权页面，请在浏览器中登录确认", "info");
 
@@ -3172,9 +3316,9 @@ def render_dashboard_html() -> str:
             }}
         }}
 
-        // 🛡️ 一键隔离解封向导：拉起专属Chrome独立容器并自动定向对应账号，彻底防500！
+        // 🛡️ 一键解封向导：拉起现役 ego lite 浏览器并自动定向对应账号，彻底防500！
         async function doUnblockAccount(email) {{
-            showToast("🚀 正在获取最新令牌并拉起专属隔离浏览器窗口...", "info");
+            showToast("🚀 正在获取最新令牌并拉起 ego 浏览器解封页面...", "info");
             try {{
                 const resp = await fetch('/api/unblock', {{
                     method: 'POST',
@@ -3184,7 +3328,7 @@ def render_dashboard_html() -> str:
                 if (!resp.ok) throw new Error("HTTP " + resp.status);
                 const html = await resp.text();
                 applyTbodyAndOOB(html);
-                showToast("✅ 已拉起专属无污染窗口！请在该窗口登录并确认，后台将自动监听解锁！", "success");
+                showToast("✅ 已在 ego 浏览器拉起解封页面！请在窗口登录并确认，后台将自动监听解锁！", "success");
             }} catch (err) {{
                 showToast("❌ 启动解封失败: " + err.message, "error");
             }}
@@ -3417,20 +3561,27 @@ def render_dashboard_html() -> str:
             const matchedRows = [];
             allRows.forEach(tr => {{
                 const email = tr.getAttribute('data-email') || '';
-                const matchQuery = !q || email.toLowerCase().includes(q);
+                const cver = tr.getAttribute('data-claude-ver') || '';
+                const matchQuery = !q || email.toLowerCase().includes(q) 
+                    || (q === '5.5' && cver === '5.5') 
+                    || (q === '4.6' && cver === '4.6') 
+                    || (q === '下架' && cver === '4.6')
+                    || (q === '付费' && cver === '5.5');
 
                 const gw = parseFloat(tr.getAttribute('data-gemini-w') || '1.0');
                 const cw = parseFloat(tr.getAttribute('data-claude-w') || '1.0');
                 let matchTab = true;
-                if (currentFilter === 'usable') {{
-                    // 🎯 严格执行用户最高指令：只要 Gemini 周额度 > 0 (未彻底归零)，就必须保留在可用池中
+                if (currentFilter === 'ver55') {{
+                    matchTab = (cver === '5.5');
+                }} else if (currentFilter === 'ver46') {{
+                    matchTab = (cver === '4.6');
+                }} else if (currentFilter === 'usable') {{
                     matchTab = (gw > 0.0001);
                 }} else if (currentFilter === 'healthy') {{
                     matchTab = (gw >= 0.5 && cw >= 0.5);
                 }} else if (currentFilter === 'warning') {{
                     matchTab = (gw < 0.15 || cw < 0.15);
                 }} else if (currentFilter === 'exhausted') {{
-                    // 仅查看 Gemini 周额度已彻底归零 (== 0) 的枯竭账号
                     matchTab = (gw <= 0.0001);
                 }}
 
@@ -3934,35 +4085,36 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
                         logger.info(f"🎉 [一键解封] 账号 {email} 云端已恢复健康，直接自动解锁！")
                     else:
                         raw_url = fresh_val_url or acc.get("validation_url", "")
-                        if raw_url:
-                            if "&authuser" in raw_url:
-                                fixed_raw = raw_url.replace("&authuser", f"&authuser={urllib.parse.quote(email)}")
-                            else:
-                                fixed_raw = f"{raw_url}&authuser={urllib.parse.quote(email)}"
-                            smart_url = f"https://accounts.google.com/AccountChooser?Email={urllib.parse.quote(email)}&continue={urllib.parse.quote(fixed_raw)}"
-                            safe_name = email.replace("@", "_").replace(".", "_")
-                            profile_dir = os.path.join(BASE_DATA_DIR, "browser_profiles", safe_name)
-                            os.makedirs(profile_dir, exist_ok=True)
-                            subprocess.Popen(["open", "-na", "Google Chrome", "--args", f"--user-data-dir={profile_dir}", smart_url])
-                            logger.info(f"🚀 [一键隔离解封] 已为 {email} 拉起独立 Chrome 容器: {profile_dir}")
+                        if not raw_url:
+                            raw_url = f"https://myaccount.google.com/security?authuser={urllib.parse.quote(email)}"
 
-                            def _watch_unblock(target_email: str, target_id: str, token: str):
-                                for _ in range(45):
-                                    time.sleep(4)
-                                    q_res, r_res, _ = ENGINE.fetch_live_quota(token)
-                                    if q_res:
-                                        d_now = ENGINE.load_accounts()
-                                        a_now = d_now.get("accounts", {}).get(target_email)
-                                        if a_now:
-                                            a_now["validation_blocked"] = False
-                                            a_now["validation_url"] = None
-                                            a_now["validation_blocked_reason"] = None
-                                            ENGINE._sync_antigravity_tools_cache(target_id, validation_blocked=False)
-                                            ENGINE.save_accounts(d_now)
-                                            logger.info(f"🎉 [后台监听解封成功] 账号 {target_email} 验证通过，已自动复权！")
-                                        break
+                        if "&authuser" in raw_url:
+                            fixed_raw = raw_url.replace("&authuser", f"&authuser={urllib.parse.quote(email)}")
+                        else:
+                            fixed_raw = f"{raw_url}&authuser={urllib.parse.quote(email)}"
+                        smart_url = f"https://accounts.google.com/AccountChooser?Email={urllib.parse.quote(email)}&continue={urllib.parse.quote(fixed_raw)}"
+                        safe_name = email.replace("@", "_").replace(".", "_")
 
-                            threading.Thread(target=_watch_unblock, args=(email, acc_id, at), daemon=True).start()
+                        launch_browser_for_auth(smart_url, isolated=False, profile_name=safe_name)
+                        logger.info(f"🚀 [一键解封] 已为 {email} 在 ego 浏览器中拉起解封页面: {smart_url}")
+
+                        def _watch_unblock(target_email: str, target_id: str, token: str):
+                            for _ in range(45):
+                                time.sleep(4)
+                                q_res, r_res, _ = ENGINE.fetch_live_quota(token)
+                                if q_res:
+                                    d_now = ENGINE.load_accounts()
+                                    a_now = d_now.get("accounts", {}).get(target_email)
+                                    if a_now:
+                                        a_now["validation_blocked"] = False
+                                        a_now["validation_url"] = None
+                                        a_now["validation_blocked_reason"] = None
+                                        ENGINE._sync_antigravity_tools_cache(target_id, validation_blocked=False)
+                                        ENGINE.save_accounts(d_now)
+                                        logger.info(f"🎉 [后台监听解封成功] 账号 {target_email} 验证通过，已自动复权！")
+                                    break
+
+                        threading.Thread(target=_watch_unblock, args=(email, acc_id, at), daemon=True).start()
 
             html = render_table_rows(include_oob=True)
             self.send_response(200)
@@ -3995,14 +4147,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             }
             if open_browser:
                 try:
-                    if isolated:
-                        profile_dir = os.path.join(BASE_DATA_DIR, "browser_profiles", f"oauth_{state}")
-                        os.makedirs(profile_dir, exist_ok=True)
-                        subprocess.Popen(["open", "-na", "Google Chrome", "--args", f"--user-data-dir={profile_dir}", auth_url])
-                        logger.info(f"🚀 [OAuth 独立容器授权] 已拉起 Chrome 隔离实例: {profile_dir}")
-                    else:
-                        subprocess.Popen(["open", auth_url])
-                        logger.info("🚀 [OAuth 浏览器授权] 已拉起系统默认浏览器打开 Google 授权页")
+                    launch_browser_for_auth(auth_url, isolated=isolated, profile_name=f"oauth_{state}")
                 except Exception as e:
                     logger.warning(f"拉起浏览器异常: {e}")
 

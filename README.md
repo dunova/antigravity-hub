@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v2.35.0-FF2A85?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v2.37.3-FF2A85?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/Python-3.9+-00F0FF?style=flat-square&logo=python" alt="Python" />
   <img src="https://img.shields.io/badge/Architecture-Neo--Brutalism-FFE600?style=flat-square" alt="Style" />
   <img src="https://img.shields.io/badge/Frontend-HTMX-22C55E?style=flat-square&logo=htmx" alt="HTMX" />
@@ -242,6 +242,16 @@ antigravity-hub/
 ---
 
 ## 📜 版本更新日志 (Changelog)
+
+### v2.37.3 (2026-10-05)
+- **「在用」按钮行内样式防缓存保真**：针对 HTMX 局部替换 `<tbody>` 不刷新 `<head>` 的特性，将 Neo-Brutalism 薄荷绿 (`#4ADE80`)、粗实线黑描边与加粗黑字写死为行内 `style` 属性，彻底免疫浏览器 CSS 缓存；
+- **拔除 3D 拟物 Emoji 纯化**：彻底移除 macOS 原生带高光球的 `🟢` Emoji，纯化为粗黑无衬线「在用」标识，全表操作列 100% 保持 128px 像素级双钮绝对居中对称；
+- **Gemini + Claude 双模全息并发预热引擎**：重构预热激活流水线，根据账号 Claude 权限精准分流（Claude 5.5 付费 Pro 发送 `claude-sonnet-5-5-low`，普通 Pro 发送 `claude-sonnet-4-6`），双轨 5 小时滚动重置倒计时同步激活并回写；
+- **Claude 5.5 与 4.6 区分度紧凑徽章**：重构账号列 30px 超紧凑固定宽度标签（琥珀金 5.5 vs 经典粉 4.6），彻底根除首字母挤压截断问题；
+- **现役 ego lite 浏览器原生解封与 OAuth 适配**：解封向导优先探测系统现役 ego lite 浏览器，消除旧版写死 Chrome 导致的拉起静默失败。
+
+### v2.35.0 (2026-10-04)
+- **零账号冲刷物理阻断门禁与本地 APFS 双写容灾**：网络挂载脱机时自动从本地恢复历史备份，杜绝意外冲刷。
 
 ### v2.34.0 (2026-10-04)
 - **已完结会话物理拦截跳过门禁 (Finished Task Filter)**：穿透系统打点逆序分析会话主体事件，若最后事件为已交付最终文本的 `PLANNER_RESPONSE` 且无在途子代理，物理跳过不投递，彻底解决“任务已完成每次轮换还要被唤醒”的痛点；
