@@ -26,15 +26,16 @@ import threading
 import concurrent.futures
 import logging
 import datetime
+import uuid
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.40.0"
-__canonical_version_tag__ = "20261013-v2.40.0-ENTERPRISE_COMMERCIAL_UI_AND_FLEET_DRAWER"
-__last_updated__ = "2026-10-13 10:18:19"
-__canonical_doctrine__ = "对齐现代商业软件级高质感SaaS控制台+全景KPI指标大盘+资产抽屉+斑马纹白底升级+全链路自愈与闭环实测"
+__version__ = "2.41.0"
+__canonical_version_tag__ = "20261013-v2.41.0-UNIFIED_POOL_SSOT_AND_TRUE_MODEL_MATRIX"
+__last_updated__ = "2026-10-13 11:45:32"
+__canonical_doctrine__ = "全链路三库统一SSOT+已删账号防复活物理门禁+切除虚假Claude5.5标签+真实模型矩阵实时探测"
 
 
 
@@ -477,6 +478,18 @@ class HubEngine:
                         pass
 
             data["last_updated"] = int(time.time())
+            for em, acc_obj in incoming_accounts.items():
+                if not acc_obj.get("id"):
+                    acc_obj["id"] = str(uuid.uuid5(uuid.NAMESPACE_DNS, em))
+                if not acc_obj.get("tier"):
+                    acc_obj["tier"] = "PRO"
+                if not acc_obj.get("claude_version") or acc_obj.get("claude_version") == "5.5":
+                    c_mods = acc_obj.get("claude_models") or []
+                    has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_mods)
+                    if not has_real_55:
+                        acc_obj["claude_version"] = "4.6"
+                        acc_obj["claude_models"] = ["claude-sonnet-4-6", "claude-opus-4-6-thinking"]
+
             if incoming_accounts:
                 self._cached_accounts_data = data
 
@@ -491,13 +504,125 @@ class HubEngine:
             except Exception as e:
                 logger.warning(f"写入本地 APFS 镜像备份失败: {e}")
 
+            # 3. 🔄 同步到底层轮换池与工具索引 (杜绝双脑分裂与幽灵账号复活)
+            try:
+                self.sync_external_pools(data)
+            except Exception as e:
+                logger.warning(f"同步外部账号池异常: {e}")
+
             return ok
+
+    def sync_external_pools(self, data: Dict[str, Any]):
+        """将 accounts_hub.json (唯一真源 SSOT) 严格同步至 ~/.antigravity_tools 与 antigravity_account_pool.json，并物理清理孤儿/已删账号"""
+        accounts = data.get("accounts", {})
+        if not accounts:
+            return
+        active_email = data.get("active_email", "")
+        now_ts = int(time.time())
+        os.makedirs(ANTIGRAVITY_TOOLS_ACCOUNTS_DIR, exist_ok=True)
+
+        valid_ids = set()
+        idx_accounts = []
+        pool_entries = []
+        current_account_id = None
+
+        for email, acc in accounts.items():
+            if not email or "@" not in email:
+                continue
+            acc_id = acc.get("id") or str(uuid.uuid5(uuid.NAMESPACE_DNS, email))
+            acc["id"] = acc_id
+            valid_ids.add(acc_id)
+            is_active = (email == active_email)
+            if is_active:
+                current_account_id = acc_id
+
+            detail_path = os.path.join(ANTIGRAVITY_TOOLS_ACCOUNTS_DIR, f"{acc_id}.json")
+            existing_detail = {}
+            if os.path.exists(detail_path):
+                try:
+                    with open(detail_path, "r", encoding="utf-8") as f:
+                        existing_detail = json.load(f)
+                except Exception:
+                    existing_detail = {}
+
+            name = acc.get("name") or existing_detail.get("name") or email.split("@")[0]
+            tok = existing_detail.get("token", {})
+            if acc.get("refresh_token"):
+                tok["refresh_token"] = acc["refresh_token"]
+            if acc.get("access_token"):
+                tok["access_token"] = acc["access_token"]
+            if acc.get("expires_at") or acc.get("expiry_timestamp"):
+                tok["expiry_timestamp"] = acc.get("expiry_timestamp") or acc.get("expires_at")
+
+            q_meta = existing_detail.get("quota", {})
+            q_meta["gemini_5h_remaining"] = acc.get("gemini", {}).get("quota_5h", 1.0)
+            q_meta["gemini_weekly_remaining"] = acc.get("gemini", {}).get("quota_weekly", 1.0)
+            q_meta["claude_5h_remaining"] = acc.get("claude", {}).get("quota_5h", 1.0)
+            q_meta["claude_weekly_remaining"] = acc.get("claude", {}).get("quota_weekly", 1.0)
+
+            detail_doc = {
+                "id": acc_id,
+                "email": email,
+                "name": name,
+                "token": tok,
+                "quota": q_meta,
+                "validation_blocked": bool(acc.get("validation_blocked", False)),
+                "validation_url": acc.get("validation_url") if acc.get("validation_blocked") else None,
+                "validation_blocked_reason": acc.get("validation_blocked_reason") if acc.get("validation_blocked") else None,
+            }
+            atomic_write_json(detail_path, detail_doc)
+
+            idx_accounts.append({
+                "id": acc_id,
+                "email": email,
+                "name": name,
+                "disabled": False,
+                "proxy_disabled": False,
+                "created_at": acc.get("added_at") or now_ts,
+                "last_used": now_ts if is_active else (acc.get("last_refreshed_ts") or now_ts),
+            })
+
+            pool_entries.append({
+                "id": acc_id,
+                "email": email,
+                "name": name,
+                "status": "active" if is_active else "standby",
+                "last_5h_fraction": round(float(acc.get("gemini", {}).get("quota_5h", 1.0)), 4),
+                "last_used_time": float(now_ts) if is_active else 0.0,
+                "cooldown_until": 0.0,
+                "last_warmup_ts": acc.get("last_warmup_ts") or now_ts,
+                "has_desktop_token": True,
+            })
+
+        # 清理 ~/.antigravity_tools/accounts/ 下不在 valid_ids 中的孤儿文件或已删账号文件
+        import glob
+        for jf in glob.glob(os.path.join(ANTIGRAVITY_TOOLS_ACCOUNTS_DIR, "*.json")):
+            fn_id = os.path.splitext(os.path.basename(jf))[0]
+            if fn_id not in valid_ids:
+                try:
+                    os.remove(jf)
+                    logger.info(f"🧹 [三库统一清理] 已移除孤儿/已删账号详情文件: {os.path.basename(jf)}")
+                except Exception:
+                    pass
+
+        tools_idx_path = os.path.join(ANTIGRAVITY_TOOLS_DIR, "accounts.json")
+        idx_doc = {
+            "version": "1.0",
+            "accounts": idx_accounts,
+            "current_account_id": current_account_id or (idx_accounts[0]["id"] if idx_accounts else ""),
+            "current_target_ide": "antigravity",
+        }
+        atomic_write_json(tools_idx_path, idx_doc)
+
+        pool_cfg_path = os.path.join(os.path.dirname(HUB_DIR), "antigravity_account_pool.json")
+        atomic_write_json(pool_cfg_path, pool_entries)
 
     def auto_ingest_system_account(self) -> Optional[Tuple[str, bool]]:
         """
         【新登录账号 100% 自动热维护纳管】
         实时从 macOS Keychain 与系统配置中嗅探当前活跃登录账号，
         若发现新登录账号或凭据更新，自动无感热纳管至 accounts_hub.json 并初始化配额。
+        （已删归档账号受物理门禁拦截，绝不被动死灰复燃）
         返回: (email, is_new) 或 None
         """
         try:
@@ -543,10 +668,27 @@ class HubEngine:
             is_new = detected_email not in accounts
 
             if is_new:
+                # 🛑 防死灰复燃门禁：若该账号存在于 deleted_accounts_archive.json，严禁后台自动重新纳管！
+                archive_file = os.path.join(os.path.dirname(ACCOUNTS_HUB_FILE), "deleted_accounts_archive.json")
+                if os.path.exists(archive_file):
+                    try:
+                        with open(archive_file, "r", encoding="utf-8") as af:
+                            deleted_arch = json.load(af)
+                        if detected_email in deleted_arch:
+                            logger.warning(f"🛡️ [已删账号防复活拦截] Keychain 检测到已归档删除账号 {detected_email}，拒绝自动重新纳管！")
+                            return None
+                    except Exception:
+                        pass
+
                 logger.info(f"✨ [热维护自动纳管] 发现新登录账号: {detected_email}，正在自动纳管...")
+                c_ver, c_models = self.fetch_available_models(at)
                 new_acc = {
+                    "id": str(uuid.uuid5(uuid.NAMESPACE_DNS, detected_email)),
                     "email": detected_email,
+                    "tier": "PRO",
                     "pro": True,
+                    "claude_version": c_ver,
+                    "claude_models": c_models or ["claude-sonnet-4-6", "claude-opus-4-6-thinking"],
                     "refresh_token": rt,
                     "access_token": at,
                     "expires_at": now_ts + 3600,
@@ -571,7 +713,7 @@ class HubEngine:
                 }
                 # 立即拉取实时配额
                 try:
-                    quotas, resets = self.fetch_live_quota(at)
+                    quotas, resets, _ = self.fetch_live_quota(at)
                     if quotas:
                         new_acc["gemini"]["quota_5h"] = quotas.get("gemini-5h", 1.0)
                         new_acc["gemini"]["quota_weekly"] = quotas.get("gemini-weekly", 1.0)
@@ -857,6 +999,14 @@ class HubEngine:
                 logger.info(f"🎉 [风控自愈复权] 账号 {email} 探测配额成功，已自动清除 validation_blocked！")
             self._sync_antigravity_tools_cache(acc_id, validation_blocked=False)
 
+            c_ver, c_models = self.fetch_available_models(at)
+            if c_models:
+                acc["claude_version"] = c_ver
+                acc["claude_models"] = c_models
+            elif not acc.get("claude_version") or acc.get("claude_version") == "5.5":
+                acc["claude_version"] = "4.6"
+                acc["claude_models"] = ["claude-sonnet-4-6", "claude-opus-4-6-thinking"]
+
             acc["gemini"]["quota_5h"] = quotas.get("gemini-5h", acc["gemini"].get("quota_5h", 1.0))
             acc["gemini"]["quota_weekly"] = quotas.get("gemini-weekly", acc["gemini"].get("quota_weekly", 1.0))
             if resets.get("gemini-5h"):
@@ -1062,12 +1212,9 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
 
     cell_title = ""
     if model_type == "claude":
-        if claude_ver == "5.5":
-            cell_title = ' title="Claude 5.5 · 官方付费 Pro 特权 (Opus 5.5 / Sonnet 5.5)"'
-        else:
-            cell_title = ' title="Claude 4.6 · 未付费 Pro (官方预计 11 月下架)"'
+        cell_title = ' title="Claude Sonnet 4.6 / Opus 4.6 Thinking 配额 (5h 滚动 / 周度总额)"'
     elif model_type == "gemini":
-        cell_title = ' title="Gemini 2.5 配额 (5h 滚动 / 周度总额)"'
+        cell_title = ' title="Gemini 2.5 Pro / Flash 配额 (5h 滚动 / 周度总额)"'
 
     return f"""
     <div class="q-cell"{cell_title}>
@@ -1104,16 +1251,17 @@ def render_top_bar_stats_html(total_count: int = 0, pro_count: int = 0, avg_g: f
     accounts = data.get("accounts", {})
     active_email = data.get("active_email", "")
     total_count = len(accounts)
-    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
-    c55_count = sum(1 for a in accounts.values() if a.get("claude_version") == "5.5" or a.get("email") == "5-5" in str(acc.get("claude_models", [])) or "5-5" in str(a.get("claude_models", [])))
+    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO" or a.get("pro"))
+    usable_count = sum(1 for a in accounts.values() if (a.get("gemini", {}).get("quota_weekly", 0.0) > 0.0001 or a.get("claude", {}).get("quota_weekly", 0.0) > 0.0001) and not a.get("validation_blocked"))
+    blocked_count = sum(1 for a in accounts.values() if a.get("validation_blocked"))
     
     avg_g_5h = round(sum(a.get("gemini", {}).get("quota_5h", 1.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     avg_g_w = round(sum(a.get("gemini", {}).get("quota_weekly", 1.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     avg_c_5h = round(sum(a.get("claude", {}).get("quota_5h", 1.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     avg_c_w = round(sum(a.get("claude", {}).get("quota_weekly", 1.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     
-    ready_g = sum(1 for a in accounts.values() if a.get("gemini", {}).get("quota_5h", 1.0) >= 0.99)
-    ready_c = sum(1 for a in accounts.values() if a.get("claude", {}).get("quota_5h", 1.0) >= 0.99)
+    ready_g = sum(1 for a in accounts.values() if a.get("gemini", {}).get("quota_5h", 1.0) >= 0.99 and a.get("gemini", {}).get("quota_weekly", 1.0) > 0.0001)
+    ready_c = sum(1 for a in accounts.values() if a.get("claude", {}).get("quota_5h", 1.0) >= 0.99 and a.get("claude", {}).get("quota_weekly", 1.0) > 0.0001)
     
     rot_cfg = get_auto_rotation_config()
     rot_mode = rot_cfg.get("mode", "gemini")
@@ -1125,7 +1273,6 @@ def render_top_bar_stats_html(total_count: int = 0, pro_count: int = 0, avg_g: f
 
     active_short = active_email.split("@")[0] if "@" in active_email else (active_email or "未设置")
     active_acc = accounts.get(active_email, {})
-    active_c_ver = active_acc.get("claude_version") or ("5.5" if "5-5" in str(active_acc.get("claude_models", [])) or active_email == "5-5" in str(acc.get("claude_models", [])) else "4.6")
     active_g_5h = round(active_acc.get("gemini", {}).get("quota_5h", 1.0) * 100, 1)
     active_c_5h = round(active_acc.get("claude", {}).get("quota_5h", 1.0) * 100, 1)
     
@@ -1152,7 +1299,7 @@ def render_top_bar_stats_html(total_count: int = 0, pro_count: int = 0, avg_g: f
                 <span class="stat-card-val text-truncate">{active_short}</span>
             </div>
             <div class="stat-card-footer">
-                <span class="stat-tag tag-claude-ver font-mono">Claude {active_c_ver}</span>
+                <span class="stat-tag tag-pro font-mono">PRO 执勤</span>
                 <span class="stat-muted">G: {active_g_5h}% · C: {active_c_5h}%</span>
             </div>
         </div>
@@ -1161,7 +1308,7 @@ def render_top_bar_stats_html(total_count: int = 0, pro_count: int = 0, avg_g: f
         <div class="stat-card">
             <div class="stat-card-header">
                 <span class="stat-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px;"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>集群纳管资产</span>
-                <span class="stat-badge stat-badge-green font-mono">100% HEALTHY</span>
+                <span class="stat-badge stat-badge-green font-mono">{'100% HEALTHY' if blocked_count == 0 else str(blocked_count) + ' BLOCKED'}</span>
             </div>
             <div class="stat-card-main">
                 <span class="stat-card-val">{total_count}</span>
@@ -1169,8 +1316,8 @@ def render_top_bar_stats_html(total_count: int = 0, pro_count: int = 0, avg_g: f
             </div>
             <div class="stat-card-footer">
                 <span class="stat-tag tag-pro font-mono">PRO {pro_count}</span>
-                <span class="stat-tag tag-55 font-mono">Claude 5.5: {c55_count}</span>
-                <span class="stat-muted">0 异常</span>
+                <span class="stat-tag tag-claude-ver font-mono">可用 {usable_count}/{total_count}</span>
+                <span class="stat-muted">{blocked_count} 异常</span>
             </div>
         </div>
 
@@ -1251,7 +1398,7 @@ def render_table_rows(include_oob: bool = False) -> str:
     accounts = data.get("accounts", {})
 
     total_count = len(accounts)
-    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
+    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO" or a.get("pro"))
     avg_g = round(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     avg_c = round(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     cur_time = time.strftime("%H:%M:%S")
@@ -1335,8 +1482,8 @@ def render_table_rows(include_oob: bool = False) -> str:
         g_reset_w = format_reset_time(acc.get("gemini", {}).get("reset_time_weekly", acc.get("gemini", {}).get("reset_time", "")))
         g_cell = render_quota_cell(g_5h, g_w, g_reset_5h, g_reset_w, model_type="gemini")
 
-        # Claude 配额与模型版本 (区分 5.5 付费Pro 与 4.6 预计11月下架)
-        claude_ver = acc.get("claude_version") or ("5.5" if email == "5-5" in str(acc.get("claude_models", [])) or "5-5" in str(acc.get("claude_models", [])) else "4.6")
+        # Claude 配额与真实模型版本
+        claude_ver = "5.5" if any(("5-5" in m or "5.5" in m) for m in (acc.get("claude_models") or [])) else "4.6"
         c_w = acc.get("claude", {}).get("quota_weekly", 1.0)
         c_5h = 0.0 if c_w <= 0.0001 else acc.get("claude", {}).get("quota_5h", 1.0)
         c_reset_raw = acc.get("claude", {}).get("reset_time_5h", "")
@@ -1351,10 +1498,7 @@ def render_table_rows(include_oob: bool = False) -> str:
         avatar_color = AVATAR_COLORS[ord(first_letter) % len(AVATAR_COLORS)]
         avatar_html = f'<div class="acc-avatar font-mono" style="background:{avatar_color};">{first_letter}</div>'
 
-        if claude_ver == "5.5":
-            pro_tag_html = '<span class="pro-tag pro-tag-55 font-mono" title="官方付费 Pro 特权 · 支持 Claude 5.5 (Opus 5.5 / Sonnet 5.5)">5.5</span>'
-        else:
-            pro_tag_html = '<span class="pro-tag pro-tag-46 font-mono" title="未付费 Pro 账号 · 仅支持 Claude 4.6 (预计 11 月官方下架)">4.6</span>'
+        pro_tag_html = '<span class="pro-tag pro-tag-46 font-mono" title="Google AI Pro 授权账号">PRO</span>'
 
         row = f"""
         <tr class="account-row {active_class}" 
@@ -1444,9 +1588,7 @@ def render_dashboard_html() -> str:
     active_email = data.get("active_email", "")
 
     total_count = len(accounts)
-    c55_count = sum(1 for a in accounts.values() if a.get("claude_version") == "5.5" or a.get("email") == "5-5" in str(acc.get("claude_models", [])))
-    c46_count = total_count - c55_count
-    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
+    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO" or a.get("pro"))
     avg_g = round(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     avg_c = round(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
     cur_time = time.strftime("%H:%M:%S")
@@ -5468,7 +5610,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
 
             export_payload = {
                 "exported_at": datetime.datetime.now().isoformat(),
-                "generator": "Antigravity Hub v2.38.0",
+                "generator": f"Antigravity Hub v{__version__}",
                 "count": len(selected_dict),
                 "accounts": selected_dict
             }
@@ -5525,7 +5667,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
                 except Exception as e:
                     logger.error(f"归档已删除账号数据异常: {e}")
 
-                # 保存更新后的账号池
+                # 保存更新后的账号池（内部自动触发 sync_external_pools 同步清理三处账号库）
                 data["accounts"] = accounts
                 ENGINE.save_accounts(data)
 
@@ -5603,6 +5745,10 @@ def start_background_workers():
 
 
 def run_server(port: int = SERVER_PORT):
+    try:
+        ENGINE.save_accounts(ENGINE.load_accounts())
+    except Exception as e:
+        logger.warning(f"启动同步账号池异常: {e}")
     server_address = ("127.0.0.1", port)
     httpd = ThreadingHTTPServer(server_address, HubHTTPRequestHandler)
     start_background_workers()
