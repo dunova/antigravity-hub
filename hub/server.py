@@ -31,10 +31,11 @@ from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-__version__ = "2.39.1"
-__canonical_version_tag__ = "20261005-v2.39.1-UI_SELF_HEALING_AND_ROBUST_RELAY"
-__last_updated__ = "2026-10-05 10:09:06"
-__canonical_doctrine__ = "前端列数与版本双重自愈门禁+断点接力提示词全面重构(深度Teamwork恢复与反早夭契约)+全集群同步"
+__version__ = "2.40.0"
+__canonical_version_tag__ = "20261013-v2.40.0-ENTERPRISE_COMMERCIAL_UI_AND_FLEET_DRAWER"
+__last_updated__ = "2026-10-13 10:18:19"
+__canonical_doctrine__ = "对齐现代商业软件级高质感SaaS控制台+全景KPI指标大盘+资产抽屉+斑马纹白底升级+全链路自愈与闭环实测"
+
 
 
 # 配置常量
@@ -160,18 +161,27 @@ def launch_browser_for_auth(url: str, isolated: bool = False, profile_name: str 
 
 
 def atomic_write_json(file_path: str, data: Any, indent: int = 2) -> bool:
+    tmp_path = None
     try:
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        tmp_path = f"{file_path}.tmp.{os.getpid()}.{time.time()}"
+        tmp_path = f"{file_path}.tmp.{os.getpid()}.{time.time()}.{random.randint(1000, 9999)}"
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=indent, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_path, file_path)
+        tmp_path = None
         return True
     except Exception as e:
         logger.error(f"原子写入 {file_path} 失败: {e}")
         return False
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
 
 
 def _safe_decode_resp(raw_bytes: bytes) -> str:
@@ -1077,24 +1087,144 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     """
 
 
-# 新野兽派官方规范：5组高对比度Pastel交替色盘 (彻底消灭死白)
-NEO_ROW_PALETTES = [
-    "#E0F2FE",  # 电光冰蓝 (Cyber Sky)
-    "#FCE7F3",  # 泡泡糖柔粉 (Bubblegum Pink)
-    "#DCFCE7",  # 酸性嫩绿 (Acid Mint)
-    "#F3E8FF",  # 薰衣草紫 (Lavender Violet)
-    "#FFEDD5",  # 活力暖杏 (Warm Apricot)
+# 商业级专业数据表格色盘：高级纯白与极淡暖灰斑马纹，彻底告别花里胡哨彩虹条
+ROW_BG_ODD = "#FFFFFF"
+ROW_BG_EVEN = "#F9FAFB"
+ROW_BG_ACTIVE = "#FEF9C3"
+
+AVATAR_COLORS = [
+    "#DBEAFE", "#FCE7F3", "#DCFCE7", "#FEF3C7", "#E0E7FF",
+    "#F3E8FF", "#CCFBF1", "#FEE2E2", "#FFEDD5", "#CFFAFE"
 ]
 
 
-def render_top_bar_stats_html(total_count: int, pro_count: int, avg_g: float, avg_c: float, cur_time: str, oob: bool = False) -> str:
-    oob_attr = ' hx-swap-oob="true"' if oob else ""
-    # 彻底去除顶栏无意义的均值统计与15s轮询时间戳，避免挤压重叠，保持极致克制与清爽
-    return f"""<div id="top-bar-stats" class="stats-strip font-mono"{oob_attr} style="display:none;"></div>"""
+def render_top_bar_stats_html(total_count: int = 0, pro_count: int = 0, avg_g: float = 0.0, avg_c: float = 0.0, cur_time: str = "", oob: bool = False) -> str:
+    oob_attr = ' hx-swap-oob="outerHTML:#top-bar-stats"' if oob else ''
+    data = ENGINE.load_accounts()
+    accounts = data.get("accounts", {})
+    active_email = data.get("active_email", "")
+    total_count = len(accounts)
+    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
+    c55_count = sum(1 for a in accounts.values() if a.get("claude_version") == "5.5" or a.get("email") == "5-5" in str(acc.get("claude_models", [])) or "5-5" in str(a.get("claude_models", [])))
+    
+    avg_g_5h = round(sum(a.get("gemini", {}).get("quota_5h", 1.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
+    avg_g_w = round(sum(a.get("gemini", {}).get("quota_weekly", 1.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
+    avg_c_5h = round(sum(a.get("claude", {}).get("quota_5h", 1.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
+    avg_c_w = round(sum(a.get("claude", {}).get("quota_weekly", 1.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
+    
+    ready_g = sum(1 for a in accounts.values() if a.get("gemini", {}).get("quota_5h", 1.0) >= 0.99)
+    ready_c = sum(1 for a in accounts.values() if a.get("claude", {}).get("quota_5h", 1.0) >= 0.99)
+    
+    rot_cfg = get_auto_rotation_config()
+    rot_mode = rot_cfg.get("mode", "gemini")
+    
+    lock_info = get_manual_override_lock()
+    now_ts = time.time()
+    is_locked = bool(lock_info and lock_info.get("manual_account") == active_email and lock_info.get("locked_until", 0) > now_ts)
+    lock_rem = max(1, int((lock_info.get("locked_until", 0) - now_ts) // 60)) if is_locked else 0
+
+    active_short = active_email.split("@")[0] if "@" in active_email else (active_email or "未设置")
+    active_acc = accounts.get(active_email, {})
+    active_c_ver = active_acc.get("claude_version") or ("5.5" if "5-5" in str(active_acc.get("claude_models", [])) or active_email == "5-5" in str(acc.get("claude_models", [])) else "4.6")
+    active_g_5h = round(active_acc.get("gemini", {}).get("quota_5h", 1.0) * 100, 1)
+    active_c_5h = round(active_acc.get("claude", {}).get("quota_5h", 1.0) * 100, 1)
+    
+    if rot_mode == "gemini":
+        engine_badge = '<span class="stat-badge stat-badge-green font-mono">⚡ 轮换 GEMINI</span>'
+        engine_title = "智能额度流转"
+    elif rot_mode == "claude":
+        engine_badge = '<span class="stat-badge stat-badge-amber font-mono">⚡ 轮换 CLAUDE</span>'
+        engine_title = "智能额度流转"
+    else:
+        engine_badge = '<span class="stat-badge stat-badge-gray font-mono">🛑 轮转已冻结</span>'
+        engine_title = "人工指定守护"
+
+    cur_time = time.strftime("%H:%M:%S")
+
+    return f"""<div id="top-bar-stats" class="stats-grid font-mono"{oob_attr}>
+        <!-- 卡片 1: 在岗执勤哨兵 -->
+        <div class="stat-card stat-card-active" onclick="copyText('{active_email}')" title="点击快速复制当前执勤账号完整凭据: {active_email}">
+            <div class="stat-card-header">
+                <span class="stat-card-label"><span class="pulse-dot-green"></span>在岗执勤哨兵</span>
+                <span class="stat-badge {'stat-badge-locked' if is_locked else 'stat-badge-active'} font-mono">{'🛡️ 人工锁定 (' + str(lock_rem) + 'm)' if is_locked else '⚡ 自动接力'}</span>
+            </div>
+            <div class="stat-card-main">
+                <span class="stat-card-val text-truncate">{active_short}</span>
+            </div>
+            <div class="stat-card-footer">
+                <span class="stat-tag tag-claude-ver font-mono">Claude {active_c_ver}</span>
+                <span class="stat-muted">G: {active_g_5h}% · C: {active_c_5h}%</span>
+            </div>
+        </div>
+
+        <!-- 卡片 2: 集群资产总览 -->
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <span class="stat-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px;"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>集群纳管资产</span>
+                <span class="stat-badge stat-badge-green font-mono">100% HEALTHY</span>
+            </div>
+            <div class="stat-card-main">
+                <span class="stat-card-val">{total_count}</span>
+                <span class="stat-unit">账号在册</span>
+            </div>
+            <div class="stat-card-footer">
+                <span class="stat-tag tag-pro font-mono">PRO {pro_count}</span>
+                <span class="stat-tag tag-55 font-mono">Claude 5.5: {c55_count}</span>
+                <span class="stat-muted">0 异常</span>
+            </div>
+        </div>
+
+        <!-- 卡片 3: Gemini 算力池 -->
+        <div class="stat-card stat-card-gemini">
+            <div class="stat-card-header">
+                <span class="stat-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Gemini 算力池</span>
+                <span class="stat-badge stat-badge-blue font-mono">Google 2.5</span>
+            </div>
+            <div class="stat-card-main">
+                <span class="stat-card-val">{avg_g_w}%</span>
+                <span class="stat-unit">周均算力</span>
+            </div>
+            <div class="stat-mini-progress">
+                <div class="mini-bar-track" title="全池 5h 滚动均值: {avg_g_5h}%"><div class="mini-bar-fill fill-blue" style="width: {min(100, max(0, avg_g_5h))}%;"></div></div>
+                <div class="mini-bar-label"><span>5h 均值: {avg_g_5h}%</span><span>满血待命: {ready_g}/{total_count}</span></div>
+            </div>
+        </div>
+
+        <!-- 卡片 4: Claude 算力池 -->
+        <div class="stat-card stat-card-claude">
+            <div class="stat-card-header">
+                <span class="stat-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Claude 算力池</span>
+                <span class="stat-badge stat-badge-amber font-mono">Anthropic</span>
+            </div>
+            <div class="stat-card-main">
+                <span class="stat-card-val">{avg_c_w}%</span>
+                <span class="stat-unit">周均算力</span>
+            </div>
+            <div class="stat-mini-progress">
+                <div class="mini-bar-track" title="全池 5h 滚动均值: {avg_c_5h}%"><div class="mini-bar-fill fill-amber" style="width: {min(100, max(0, avg_c_5h))}%;"></div></div>
+                <div class="mini-bar-label"><span>5h 均值: {avg_c_5h}%</span><span>满血待命: {ready_c}/{total_count}</span></div>
+            </div>
+        </div>
+
+        <!-- 卡片 5: 自动化中枢守护 -->
+        <div class="stat-card stat-card-engine">
+            <div class="stat-card-header">
+                <span class="stat-card-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:3px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>自动化中枢</span>
+                {engine_badge}
+            </div>
+            <div class="stat-card-main">
+                <span class="stat-card-val text-sm">{engine_title}</span>
+            </div>
+            <div class="stat-card-footer">
+                <span class="stat-tag tag-engine font-mono">30s 实时刷新</span>
+                <span class="stat-muted font-mono">{cur_time}</span>
+            </div>
+        </div>
+    </div>"""
 
 
 def render_active_pill_html(active_email: str, oob: bool = False) -> str:
-    oob_attr = ' hx-swap-oob="true"' if oob else ""
+    oob_attr = ' hx-swap-oob="outerHTML:#active-email-pill"' if oob else ""
     short_name = active_email.split("@")[0] if "@" in active_email else (active_email or "未激活")
     lock_info = get_manual_override_lock()
     now_ts = time.time()
@@ -1127,7 +1257,7 @@ def render_table_rows(include_oob: bool = False) -> str:
     cur_time = time.strftime("%H:%M:%S")
 
     if not accounts:
-        empty_row = '<tr><td colspan="7" style="text-align:center; padding: 24px; font-size:13px; font-weight:900; background:#FFE4E6;">暂无账号，请执行单向导入</td></tr>'
+        empty_row = '<tr><td colspan="7" style="text-align:center; padding: 32px; font-size:13px; font-weight:900; background:#FFF1F2; color:#E11D48;">暂无账号数据，请点击顶栏【导入】吸纳账号凭据</td></tr>'
         if include_oob:
             return empty_row + "\n" + render_top_bar_stats_html(0, 0, 0.0, 0.0, cur_time, oob=True) + "\n" + render_active_pill_html("", oob=True) + "\n" + render_rotation_button_html(oob=True) + "\n" + render_version_marker_html(oob=True)
         return empty_row
@@ -1146,30 +1276,29 @@ def render_table_rows(include_oob: bool = False) -> str:
     for idx, (email, acc) in enumerate(accounts.items(), start=1):
         is_active = (email == active_email)
         
-        row_bg = "#FFF066" if is_active else NEO_ROW_PALETTES[(idx - 1) % len(NEO_ROW_PALETTES)]
+        row_bg = ROW_BG_ACTIVE if is_active else (ROW_BG_ODD if (idx % 2 == 1) else ROW_BG_EVEN)
         active_class = "is-active-row" if is_active else ""
         
         num_html = f"""<div class="num-cell-inner" title="按住拖拽调节账号顺序"><span class="drag-handle">⠿</span><span class="row-num font-mono">{idx}</span></div>"""
 
-        arrows_html = f"""<div class="reorder-arrows">
-            <button class="btn-arrow" onclick="moveAccountRow('{email}', -1); event.preventDefault(); event.stopPropagation();" title="上移一位">▲</button>
-            <button class="btn-arrow" onclick="moveAccountRow('{email}', 1); event.preventDefault(); event.stopPropagation();" title="下移一位">▼</button>
-        </div>"""
-
         is_blocked = bool(acc.get("validation_blocked"))
         val_url = acc.get("validation_url", "")
 
+        detail_btn_html = f"""<button class="btn btn-detail font-mono" onclick="openAccountDrawer('{email}'); event.preventDefault(); event.stopPropagation();" title="查看全量资产画像与完整支持模型">详情</button>"""
+
         if is_active:
             badge_html = '<span class="badge badge-active"><span class="pulse-dot-green"></span>ACTIVE</span>'
-            main_btn_html = f"""<div class="btn-in-use active-badge-action font-mono" style="width: 60px !important; min-width: 60px !important; max-width: 60px !important; height: 24px !important; background: #4ADE80 !important; color: #000000 !important; border: 2px solid #000000 !important; border-radius: var(--radius-btn, 6px) !important; box-shadow: 2px 2px 0px #000000 !important; font-size: 11px !important; font-weight: 900 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; cursor: default !important; user-select: none !important; padding: 0 !important; flex-shrink: 0 !important; box-sizing: border-box !important; letter-spacing: 0.5px !important;" title="当前主程序正在使用此账号护航">在用</div>
+            main_btn_html = f"""<div class="btn-in-use active-badge-action font-mono" title="当前主程序正在使用此账号护航">在用</div>
                                 <button class="btn btn-warmup font-mono" 
                                 onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="向该账号发送极轻量真实生成，提前锁定5h倒计时错峰就绪">预热</button>"""
+                                title="向该账号发送极轻量真实生成，提前锁定5h倒计时错峰就绪">预热</button>
+                                {detail_btn_html}"""
         elif is_blocked:
             badge_html = '<span class="badge badge-blocked" title="Google账号需网页验证">⚠️待验证</span>'
             main_btn_html = f"""<button class="btn btn-unblock font-mono" 
                             onclick="doUnblockAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                            title="在现役 ego lite 浏览器中拉起解封页面并自动定向该账号（后台自动监听解锁）">解封</button>"""
+                            title="在现役 ego lite 浏览器中拉起解封页面并自动定向该账号（后台自动监听解锁）">解封</button>
+                            {detail_btn_html}"""
         else:
             badge_html = '<span class="badge badge-standby">STANDBY</span>'
             has_refresh_token = bool(acc.get("refresh_token", ""))
@@ -1179,14 +1308,16 @@ def render_table_rows(include_oob: bool = False) -> str:
                                 title="切换为此账号，看门狗照常监控额度自动轮换">切换</button>
                                 <button class="btn btn-warmup font-mono" 
                                 onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="向该账号发送极轻量真实生成，提前锁定5h倒计时错峰就绪">预热</button>"""
+                                title="向该账号发送极轻量真实生成，提前锁定5h倒计时错峰就绪">预热</button>
+                                {detail_btn_html}"""
             else:
                 main_btn_html = f"""<button class="btn btn-switch font-mono" 
                                 style="opacity:0.35;cursor:not-allowed;background:#ccc;"
                                 onclick="event.preventDefault();event.stopPropagation();showToast('❌ 此账号缺少授权 Token，无法切换！请先在 Antigravity 中重新登录此账号。','error');"
-                                title="此账号缺少 refresh_token，无法物理切换">无Token</button>"""
+                                title="此账号缺少 refresh_token，无法物理切换">无Token</button>
+                                {detail_btn_html}"""
 
-        action_switch_html = f"""<div class="actions-flex">{main_btn_html}{arrows_html}</div>"""
+        action_switch_html = f"""<div class="actions-flex">{main_btn_html}</div>"""
 
         # 联动持久化预热调度账本：若官方返回尚未刷新或漂移，优先采信预热锁定的绝对重置倒计时
         acc_warmup = sched_warmup.get(email, {})
@@ -1215,8 +1346,10 @@ def render_table_rows(include_oob: bool = False) -> str:
         c_reset_w = format_reset_time(acc.get("claude", {}).get("reset_time_weekly", acc.get("claude", {}).get("reset_time", "")))
         c_cell = render_quota_cell(c_5h, c_w, c_reset_5h, c_reset_w, model_type="claude", claude_ver=claude_ver)
 
-        # 彻底去除邮箱域名后缀，只保留账号英文字符，告别 ... 截断
         short_name = email.split("@")[0] if "@" in email else email
+        first_letter = (short_name[0] if short_name else "A").upper()
+        avatar_color = AVATAR_COLORS[ord(first_letter) % len(AVATAR_COLORS)]
+        avatar_html = f'<div class="acc-avatar font-mono" style="background:{avatar_color};">{first_letter}</div>'
 
         if claude_ver == "5.5":
             pro_tag_html = '<span class="pro-tag pro-tag-55 font-mono" title="官方付费 Pro 特权 · 支持 Claude 5.5 (Opus 5.5 / Sonnet 5.5)">5.5</span>'
@@ -1234,13 +1367,18 @@ def render_table_rows(include_oob: bool = False) -> str:
             data-gemini-w="{g_w}"
             data-claude-5h="{c_5h}"
             data-claude-w="{c_w}"
-            data-is-active="{'1' if is_active else '0'}">
-            <td class="col-center col-check" style="background-color: {row_bg}; width: 34px; padding: 0 4px;"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
+            data-is-active="{'1' if is_active else '0'}"
+            ondblclick="openAccountDrawer('{email}')">
+            <td class="col-center col-check" style="background-color: {row_bg}; width: 36px; padding: 0 4px;"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
             <td class="col-center font-mono num-col" style="background-color: {row_bg};">{num_html}</td>
             <td class="col-status" style="background-color: {row_bg};"><div class="status-cell-wrap">{badge_html}</div></td>
             <td class="col-email" style="background-color: {row_bg};">
-                <div class="email-cell-inner">
-                    <span class="email-text font-mono" onclick="copyText('{email}')" title="点击复制完整账号凭据: {email}">{short_name}</span>
+                <div class="email-cell-inner" onclick="openAccountDrawer('{email}')" title="双击或点击查看详情: {email}">
+                    {avatar_html}
+                    <div class="email-name-group">
+                        <span class="email-text font-mono" onclick="copyText('{email}'); event.stopPropagation();" title="点击复制完整账号: {email}">{short_name}</span>
+                        <span class="email-sub font-mono">{email}</span>
+                    </div>
                     {pro_tag_html}
                 </div>
             </td>
@@ -1262,6 +1400,7 @@ def render_table_rows(include_oob: bool = False) -> str:
         output += "\n" + render_rotation_button_html(oob=True)
         output += "\n" + render_version_marker_html(oob=True)
     return output
+
 
 
 def render_version_marker_html(oob: bool = False) -> str:
@@ -1379,16 +1518,420 @@ def render_dashboard_html() -> str:
             font-variant-numeric: tabular-nums;
         }}
 
-        /* 🚀 弹性全自适应版心：宽度自由撑开，两翼 16px 舒适呼吸留白，支持用户自由拖拽缩放任意尺寸 */
+        /* 🚀 弹性全自适应商业版心：扩大至 1400px，两翼舒适留白，全面对齐商业 SaaS 控制台 */
         .app-container {{
             width: 100%;
-            max-width: 1040px;
-            min-width: 580px;
+            max-width: 1400px;
+            min-width: 900px;
             margin: 0 auto;
             box-sizing: border-box;
-            padding: 0 16px;
+            padding: 0 20px;
             flex-shrink: 0;
         }}
+
+        /* 📊 全景 KPI 商业指标大盘网格 */
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-bottom: 10px;
+            width: 100% !important;
+            box-sizing: border-box;
+        }}
+        @media (max-width: 1200px) {{
+            .stats-grid {{
+                grid-template-columns: repeat(3, 1fr);
+            }}
+        }}
+        .stat-card {{
+            background: #FFFFFF;
+            border: var(--border-black);
+            border-radius: var(--radius-card);
+            box-shadow: 2.5px 2.5px 0px #000000;
+            padding: 9px 12px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 82px;
+            transition: transform 0.08s ease, box-shadow 0.08s ease;
+            cursor: default;
+        }}
+        .stat-card:hover {{
+            transform: translateY(-1.5px);
+            box-shadow: 3.5px 3.5px 0px #000000;
+        }}
+        .stat-card-active {{
+            background: #FEFCE8;
+            cursor: pointer;
+        }}
+        .stat-card-gemini {{
+            background: #F0F9FF;
+        }}
+        .stat-card-claude {{
+            background: #FFFBEB;
+        }}
+        .stat-card-engine {{
+            background: #FAF5FF;
+        }}
+        .stat-card-header {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 10.5px;
+            font-weight: 800;
+            margin-bottom: 3px;
+        }}
+        .stat-card-label {{
+            color: #4B5563;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            letter-spacing: 0.2px;
+        }}
+        .stat-badge {{
+            font-size: 9px;
+            font-weight: 900;
+            padding: 1.5px 5px;
+            border: 1.5px solid #000000;
+            border-radius: 4px;
+            box-shadow: 1px 1px 0px #000000;
+            line-height: 1.1;
+        }}
+        .stat-badge-active {{ background: #4ADE80; color: #000000; }}
+        .stat-badge-locked {{ background: #FDA4AF; color: #9F1239; }}
+        .stat-badge-green {{ background: #86EFAC; color: #000000; }}
+        .stat-badge-blue {{ background: #93C5FD; color: #000000; }}
+        .stat-badge-amber {{ background: #FCD34D; color: #000000; }}
+        .stat-badge-gray {{ background: #E5E7EB; color: #000000; }}
+        .stat-card-main {{
+            display: flex;
+            align-items: baseline;
+            gap: 5px;
+            margin: 1px 0 3px 0;
+            overflow: hidden;
+        }}
+        .stat-card-val {{
+            font-size: 17px;
+            font-weight: 900;
+            color: #000000;
+            line-height: 1.1;
+            letter-spacing: -0.3px;
+        }}
+        .stat-unit {{
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #6B7280;
+        }}
+        .stat-card-footer {{
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+        }}
+        .stat-tag {{
+            font-size: 9px;
+            font-weight: 900;
+            padding: 1px 4px;
+            border: 1px solid #000000;
+            border-radius: 3px;
+            line-height: 1;
+        }}
+        .tag-claude-ver {{ background: #FDE047; color: #000; }}
+        .tag-pro {{ background: #F472B6; color: #000; }}
+        .tag-55 {{ background: #FB923C; color: #000; }}
+        .tag-engine {{ background: #C084FC; color: #000; }}
+        .stat-muted {{
+            color: #6B7280;
+            font-size: 9.5px;
+            font-weight: 600;
+        }}
+        .stat-mini-progress {{
+            width: 100%;
+            margin-top: 2px;
+        }}
+        .mini-bar-track {{
+            width: 100%;
+            height: 5px;
+            background: #E5E7EB;
+            border: 1px solid #000000;
+            border-radius: 3px;
+            overflow: hidden;
+            box-sizing: border-box;
+        }}
+        .mini-bar-fill {{
+            height: 100%;
+            transition: width 0.3s ease;
+        }}
+        .fill-blue {{ background: #2563EB; }}
+        .fill-amber {{ background: #D97706; }}
+        .mini-bar-label {{
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: #4B5563;
+            font-weight: 700;
+            margin-top: 2px;
+        }}
+        .text-truncate {{
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+        .text-sm {{
+            font-size: 13.5px !important;
+        }}
+
+        /* 🪪 账号头像与现代信息组 */
+        .acc-avatar {{
+            width: 22px;
+            height: 22px;
+            border: 1.5px solid #000000;
+            border-radius: 5px;
+            box-shadow: 1px 1px 0px #000000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10.5px;
+            font-weight: 900;
+            color: #000000;
+            flex-shrink: 0;
+        }}
+        .email-name-group {{
+            display: flex;
+            flex-direction: column;
+            line-height: 1.15;
+            overflow: hidden;
+            text-align: left;
+        }}
+        .email-sub {{
+            font-size: 9.5px;
+            color: #6B7280;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 170px;
+        }}
+        .btn-detail {{
+            background: #FFFFFF;
+            color: #000000;
+            border: 1.5px solid #000000;
+            border-radius: var(--radius-btn);
+            box-shadow: 1.5px 1.5px 0px #000000;
+            font-size: 10.5px;
+            font-weight: 800;
+            padding: 0 7px;
+            height: 22px;
+            cursor: pointer;
+            transition: all 0.08s ease;
+        }}
+        .btn-detail:hover {{
+            background: #F3F4F6;
+            transform: translate(-1px, -1px);
+            box-shadow: 2px 2px 0px #000000;
+        }}
+
+        /* 🚪 商业级账号资产详情右侧抽屉 (Account Slide-over Drawer) */
+        .drawer-backdrop {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 9998;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }}
+        .drawer-backdrop.show {{
+            display: block;
+            opacity: 1;
+        }}
+        .account-drawer {{
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 480px;
+            max-width: 90vw;
+            height: 100vh;
+            background: #F8F6F0;
+            border-left: 3px solid #000000;
+            box-shadow: -6px 0px 0px rgba(0, 0, 0, 0.15);
+            z-index: 9999;
+            transform: translateX(100%);
+            transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }}
+        .account-drawer.open {{
+            transform: translateX(0);
+        }}
+        .drawer-header {{
+            padding: 14px 18px;
+            background: #FFE600;
+            border-bottom: 2.5px solid #000000;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }}
+        .drawer-header-left {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }}
+        .drawer-avatar {{
+            width: 34px;
+            height: 34px;
+            background: #FFFFFF;
+            border: 2px solid #000000;
+            border-radius: 7px;
+            box-shadow: 2px 2px 0px #000000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            font-weight: 900;
+        }}
+        .drawer-title-group {{
+            display: flex;
+            flex-direction: column;
+        }}
+        .drawer-title {{
+            font-size: 14px;
+            font-weight: 900;
+            color: #000000;
+        }}
+        .drawer-subtitle {{
+            font-size: 11px;
+            color: #4B5563;
+            font-weight: 600;
+        }}
+        .drawer-close {{
+            background: #FFFFFF;
+            border: 2px solid #000000;
+            border-radius: 6px;
+            box-shadow: 2px 2px 0px #000000;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 900;
+            cursor: pointer;
+        }}
+        .drawer-close:hover {{
+            background: #FEE2E2;
+        }}
+        .drawer-body {{
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }}
+        .drawer-card {{
+            background: #FFFFFF;
+            border: 2px solid #000000;
+            border-radius: 8px;
+            box-shadow: 2.5px 2.5px 0px #000000;
+            padding: 12px 14px;
+        }}
+        .drawer-card-title {{
+            font-size: 11.5px;
+            font-weight: 900;
+            color: #111827;
+            border-bottom: 1.5px solid #E5E7EB;
+            padding-bottom: 5px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }}
+        .drawer-item {{
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            margin-bottom: 6px;
+            align-items: center;
+        }}
+        .drawer-label {{
+            color: #6B7280;
+            font-weight: 700;
+        }}
+        .drawer-val {{
+            color: #111827;
+            font-weight: 800;
+        }}
+        .drawer-model-tag {{
+            display: inline-block;
+            background: #F3F4F6;
+            border: 1px solid #000000;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 6px;
+            margin: 2px 3px 2px 0;
+        }}
+        .drawer-footer {{
+            padding: 12px 18px;
+            background: #FFFFFF;
+            border-top: 2.5px solid #000000;
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }}
+        .btn-drawer-switch {{
+            background: #3B82F6;
+            color: #FFFFFF;
+            border: 2px solid #000000;
+            border-radius: 6px;
+            box-shadow: 2px 2px 0px #000000;
+            font-weight: 900;
+            padding: 7px 12px;
+            font-size: 11px;
+            cursor: pointer;
+            flex: 1;
+        }}
+        .btn-drawer-warmup {{
+            background: #F59E0B;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: 6px;
+            box-shadow: 2px 2px 0px #000000;
+            font-weight: 900;
+            padding: 7px 12px;
+            font-size: 11px;
+            cursor: pointer;
+        }}
+        .btn-drawer-copy {{
+            background: #FFFFFF;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: 6px;
+            box-shadow: 2px 2px 0px #000000;
+            font-weight: 900;
+            padding: 7px 12px;
+            font-size: 11px;
+            cursor: pointer;
+        }}
+        .brand-tag {{
+            font-size: 9px;
+            padding: 0.5px 5px;
+            border: 1px solid #000000;
+            border-radius: 3px;
+            margin-right: 4px;
+            font-weight: 900;
+            display: inline-block;
+        }}
+        .brand-gemini {{ background: #93C5FD; color: #000000; }}
+        .brand-claude {{ background: #FCD34D; color: #000000; }}
 
         /* 顶部黑黄斜纹加载条 */
         #loading-bar {{
@@ -1748,28 +2291,29 @@ def render_dashboard_html() -> str:
             text-align: left;
         }}
 
-        /* 表头新野兽派全撞色系统 (规范大小写，5h/4h 精准原样呈现) */
+        /* 表头商业级中性高质感灰色底 + 极简纯黑细线 (规范大小写，5h/4h 精准原样呈现) */
         thead th {{
-            padding: 7px 6px;
+            padding: 8px 6px;
             font-size: 11px;
             font-weight: 900;
-            letter-spacing: 0.5px;
-            border-right: 2px solid #000000;
-            border-bottom: 3px solid #000000;
-            color: #000000;
+            letter-spacing: 0.4px;
+            border-right: 1.5px solid #000000;
+            border-bottom: 2.5px solid #000000;
+            color: #18181B;
+            background: #F4F4F5;
             overflow: hidden;
             white-space: nowrap;
             box-sizing: border-box;
         }}
         thead th:last-child {{ border-right: none; }}
 
-        .th-num {{ background: #FFFFFF; text-align: center; }}
-        .th-status {{ background: #38BDF8; text-align: center; }}
-        .th-email {{ background: #FDE047; text-align: left; padding-left: 10px; }}
-        .th-gemini {{ background: #7DD3FC; text-align: center; }}
-        .th-claude {{ background: #FB923C; text-align: center; }}
-        .th-warmup {{ background: #C084FC; text-align: center; }}
-        .th-action {{ background: #4ADE80; text-align: center; }}
+        .th-num {{ text-align: center; }}
+        .th-status {{ text-align: center; }}
+        .th-email {{ text-align: left; padding-left: 10px; }}
+        .th-gemini {{ text-align: center; }}
+        .th-claude {{ text-align: center; }}
+        .th-warmup {{ text-align: center; }}
+        .th-action {{ text-align: center; }}
 
         /* 🔀 Gemini / Claude 表头三态循环排序交互与角标 */
         .th-sortable {{
@@ -2882,21 +3426,32 @@ def render_dashboard_html() -> str:
     <div id="toast" class="toast font-mono"></div>
 
     <div class="app-container">
-        <!-- 新野兽派顶栏控制条 (宽阔微高 + 三点平衡居中) -->
+        <!-- 顶栏 Navbar (高质感商业控制台风格) -->
         <div class="top-bar">
             <div class="top-left">
                 <span class="brand-title">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    ANTIGRAVITY HUB
+                    ANTIGRAVITY FLEET HUB
                 </span>
                 <span class="version-badge font-mono">v{__version__}</span>
             </div>
             <div class="top-center">
                 {active_pill_html}
             </div>
-            {stats_html}
             <div class="top-right">
                 {rot_btn_html}
+                <button class="btn btn-top btn-warmup-all font-mono"
+                        onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
+                        title="启动全池阶梯错峰预热流水线，提前激活备用账号 5h 倒计时">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    错峰预热
+                </button>
+                <button class="btn btn-top btn-refresh-all font-mono"
+                        onclick="doRefreshQuota(this); event.preventDefault(); event.stopPropagation();"
+                        title="立即同步最新活跃状态并触发全池配额并发刷新">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                    刷新
+                </button>
                 <button class="btn btn-top btn-import font-mono"
                         onclick="openImportModal(); event.preventDefault(); event.stopPropagation();"
                         title="导入账号备份、批量添加或从 IDE 钥匙串一键吸纳">
@@ -2909,26 +3464,17 @@ def render_dashboard_html() -> str:
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     导出
                 </button>
-                <button class="btn btn-top btn-refresh-all font-mono"
-                        onclick="doRefreshQuota(this); event.preventDefault(); event.stopPropagation();"
-                        title="立即同步最新活跃状态并触发全池配额并发刷新">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-                    刷新
-                </button>
-                <button class="btn btn-top btn-warmup-all font-mono"
-                        onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
-                        title="启动全池阶梯错峰预热流水线，提前激活备用账号 5h 倒计时">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    错峰预热
-                </button>
             </div>
         </div>
+
+        <!-- 📊 全景 KPI 商业指标大盘网格 (OOB 原地自愈刷新) -->
+        {stats_html}
 
         <!-- 搜索与多维过滤控制条 (客户端 0ms 即时响应) -->
         <div class="control-bar font-mono">
             <div class="search-box">
                 <span class="search-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-                <input type="text" id="account-search" class="search-input font-mono" placeholder="搜索账号..." oninput="filterTable()" autocomplete="off">
+                <input type="text" id="account-search" class="search-input font-mono" placeholder="搜索账号 (支持快捷键 /)..." oninput="filterTable()" autocomplete="off">
                 <button id="clear-search" class="btn-clear" onclick="clearSearch()" style="display:none;" title="清空搜索">✕</button>
             </div>
             <div class="filter-group">
@@ -2953,37 +3499,39 @@ def render_dashboard_html() -> str:
             </div>
         </div>
 
-        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 横向滚动防护) -->
+        <!-- 官方规范级商业高质感数据表格 (自适应弹性伸缩 + 双模型精准等长) -->
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 34px;">   <!-- 批量勾选复选框 (34px) -->
-                    <col style="width: 40px;">   <!-- # 序号+拖拽手柄 (40px) -->
-                    <col style="width: 74px;">   <!-- 状态 (74px) -->
-                    <col style="width: 186px;">  <!-- 账号+PRO (186px，自适应充沛呼吸空间，彻底根除截断) -->
-                    <col style="width: 234px;">  <!-- Gemini 配额 (234px) -->
-                    <col style="width: 234px;">  <!-- Claude 配额 (234px) -->
-                    <col style="width: 136px;">  <!-- 切换+预热+调序操作 (136px 充沛空间，消除切边) -->
+                    <col style="width: 36px;">   <!-- 批量勾选复选框 -->
+                    <col style="width: 44px;">   <!-- # 序号与手柄 -->
+                    <col style="width: 86px;">   <!-- 状态徽章 -->
+                    <col style="width: 270px;">  <!-- 账号头像与凭据 (充沛空间) -->
+                    <col style="width: 320px;">  <!-- Gemini 配额双轨 -->
+                    <col style="width: 320px;">  <!-- Claude 配额双轨 -->
+                    <col style="width: 180px;">  <!-- 操作按钮群 (在用/切换+预热+详情) -->
                 </colgroup>
                 <thead>
                     <tr>
                         <th class="col-center th-check" title="全选 / 反选当前可见账号"><input type="checkbox" id="master-select-cb" class="neo-checkbox" onchange="toggleMasterSelect(this)" title="全选 / 反选当前所有筛选可见账号"></th>
                         <th class="col-center th-num" title="拖拽手柄与序号">#</th>
                         <th class="col-center th-status">状态</th>
-                        <th class="th-email">账号 (点击复制)</th>
+                        <th class="th-email">账号资产 (点击复制 / 双击查看画像)</th>
                         <th class="th-gemini th-sortable" onclick="cycleGeminiSort()" title="点击切换排序：周额度 (少→多) → 5h额度 (少→多) → 恢复默认">
                             <div class="th-sort-inner">
-                                <span>Gemini 配额 (5h / 周)</span>
+                                <span class="brand-tag brand-gemini font-mono">Google</span>
+                                <span>Gemini 算力 (5h / 周)</span>
                                 <span id="sort-gemini-badge" class="sort-badge font-mono" style="display:none;"></span>
                             </div>
                         </th>
                         <th class="th-claude th-sortable" onclick="cycleClaudeSort()" title="点击切换排序：周额度 (少→多) → 5h额度 (少→多) → 恢复默认">
                             <div class="th-sort-inner">
-                                <span>Claude 配额 (5h / 周)</span>
+                                <span class="brand-tag brand-claude font-mono">Claude</span>
+                                <span>Claude 算力 (5h / 周)</span>
                                 <span id="sort-claude-badge" class="sort-badge font-mono" style="display:none;"></span>
                             </div>
                         </th>
-                        <th class="col-center th-action" title="切换账号与上下微调顺序">操作</th>
+                        <th class="col-center th-action" title="切换账号、立即预热与资产画像">操作</th>
                     </tr>
                 </thead>
                 <tbody id="account-tbody">
@@ -2992,7 +3540,7 @@ def render_dashboard_html() -> str:
             </table>
         </div>
 
-        <!-- 新野兽派底部分页与状态指示条 (单页上限 15 个，自适应翻页) -->
+        <!-- 底部分页与状态指示条 (单页上限 15 个，自适应翻页) -->
         <div class="pagination-bar font-mono" id="pagination-bar">
             <div class="page-info">
                 <span>单页上限: <b>15</b> 个</span>
@@ -3005,6 +3553,29 @@ def render_dashboard_html() -> str:
                 <button class="btn btn-page font-mono" id="btn-prev-page" onclick="changePage(-1)" disabled title="上一页">← 上一页</button>
                 <button class="btn btn-page font-mono" id="btn-next-page" onclick="changePage(1)" disabled title="下一页">下一页 →</button>
             </div>
+        </div>
+    </div>
+
+    <!-- 🚪 商业级账号资产详情右侧抽屉 (Account Slide-over Drawer) -->
+    <div id="drawer-backdrop" class="drawer-backdrop" onclick="closeAccountDrawer()"></div>
+    <div id="account-drawer" class="account-drawer font-mono">
+        <div class="drawer-header">
+            <div class="drawer-header-left">
+                <div id="drawer-avatar" class="drawer-avatar font-mono">A</div>
+                <div class="drawer-title-group">
+                    <div id="drawer-title" class="drawer-title font-mono">账号详情</div>
+                    <div id="drawer-subtitle" class="drawer-subtitle font-mono">user@example.com</div>
+                </div>
+            </div>
+            <button class="drawer-close font-mono" onclick="closeAccountDrawer()" title="关闭详情面板">✕</button>
+        </div>
+        <div class="drawer-body" id="drawer-body">
+            <div class="drawer-loading font-mono">正在拉取全量资产画像...</div>
+        </div>
+        <div class="drawer-footer" id="drawer-footer">
+            <button id="drawer-btn-switch" class="btn btn-drawer-switch font-mono" onclick="drawerSwitchAccount()">⚡ 切换为此账号</button>
+            <button id="drawer-btn-warmup" class="btn btn-drawer-warmup font-mono" onclick="drawerWarmupAccount()">🔥 立即预热</button>
+            <button id="drawer-btn-copy" class="btn btn-drawer-copy font-mono" onclick="drawerCopyJson()">📋 复制 JSON</button>
         </div>
     </div>
 
@@ -3338,8 +3909,180 @@ def render_dashboard_html() -> str:
             clearTimeout(window.__toastTimer);
             window.__toastTimer = setTimeout(() => {{
                 t.style.display = "none";
-            }}, 3200);
+            }}, 2800);
         }}
+
+        // ========================================================
+        // 🚪 商业级账号资产详情右侧抽屉 (Account Slide-over Drawer) 控制逻辑
+        // ========================================================
+        let __currentDrawerEmail = null;
+        let __cachedDrawerData = null;
+
+        async function openAccountDrawer(email) {{
+            if (!email) return;
+            __currentDrawerEmail = email;
+            const backdrop = document.getElementById('drawer-backdrop');
+            const drawer = document.getElementById('account-drawer');
+            const titleEl = document.getElementById('drawer-title');
+            const subtitleEl = document.getElementById('drawer-subtitle');
+            const avatarEl = document.getElementById('drawer-avatar');
+            const bodyEl = document.getElementById('drawer-body');
+            const switchBtn = document.getElementById('drawer-btn-switch');
+
+            if (!backdrop || !drawer) return;
+
+            const shortName = email.split('@')[0];
+            const firstChar = (shortName[0] || 'A').toUpperCase();
+            if (titleEl) titleEl.innerText = shortName;
+            if (subtitleEl) subtitleEl.innerText = email;
+            if (avatarEl) avatarEl.innerText = firstChar;
+
+            backdrop.classList.add('show');
+            drawer.classList.add('open');
+
+            if (bodyEl) {{
+                bodyEl.innerHTML = '<div class="drawer-loading font-mono" style="text-align:center;padding:30px;color:#6B7280;">⏳ 正在拉取全量资产画像与实时配额...</div>';
+            }}
+
+            try {{
+                const resp = await fetch('/api/account-detail?email=' + encodeURIComponent(email));
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                __cachedDrawerData = data;
+
+                const isAct = Boolean(data.is_active);
+                if (switchBtn) {{
+                    if (isAct) {{
+                        switchBtn.innerText = "✅ 当前正在使用中";
+                        switchBtn.style.background = "#10B981";
+                        switchBtn.style.cursor = "default";
+                        switchBtn.disabled = true;
+                    }} else {{
+                        switchBtn.innerText = "⚡ 物理切换为此账号";
+                        switchBtn.style.background = "#3B82F6";
+                        switchBtn.style.cursor = "pointer";
+                        switchBtn.disabled = false;
+                    }}
+                }}
+
+                renderDrawerBody(data);
+            }} catch (err) {{
+                if (bodyEl) {{
+                    bodyEl.innerHTML = '<div style="color:#DC2626;padding:20px;text-align:center;">❌ 拉取画像失败: ' + err.message + '</div>';
+                }}
+            }}
+        }}
+
+        function closeAccountDrawer() {{
+            const backdrop = document.getElementById('drawer-backdrop');
+            const drawer = document.getElementById('account-drawer');
+            if (backdrop) backdrop.classList.remove('show');
+            if (drawer) drawer.classList.remove('open');
+            __currentDrawerEmail = null;
+            __cachedDrawerData = null;
+        }}
+
+        function renderDrawerBody(acc) {{
+            const bodyEl = document.getElementById('drawer-body');
+            if (!bodyEl) return;
+
+            const g5h = Math.round((acc.gemini?.quota_5h ?? 1.0) * 100);
+            const gw = Math.round((acc.gemini?.quota_weekly ?? 1.0) * 100);
+            const c5h = Math.round((acc.claude?.quota_5h ?? 1.0) * 100);
+            const cw = Math.round((acc.claude?.quota_weekly ?? 1.0) * 100);
+
+            const cVer = acc.claude_version || (acc.claude_models?.some(m => m.includes('5-5')) ? '5.5' : '4.6');
+            const tier = acc.tier || (acc.pro ? 'PRO' : 'FREE');
+            const hasToken = Boolean(acc.refresh_token);
+            const expTs = acc.expiry_timestamp || acc.expires_at || 0;
+            const expStr = expTs ? new Date(expTs * 1000).toLocaleString() : '--';
+            const models = acc.claude_models || ['claude-sonnet-4-6', 'claude-opus-4-6-thinking'];
+
+            const modelTagsHtml = models.map(m => '<span class="drawer-model-tag font-mono">' + m + '</span>').join('');
+
+            const gReset5h = acc.gemini?.reset_time_5h || '--';
+            const gResetW = acc.gemini?.reset_time_weekly || '--';
+            const cReset5h = acc.claude?.reset_time_5h || '--';
+            const cResetW = acc.claude?.reset_time_weekly || '--';
+
+            const warmupSched = acc.warmup_schedule || {{}};
+            const nextWarmup = warmupSched.next_warmup_ts ? new Date(warmupSched.next_warmup_ts * 1000).toLocaleTimeString() : '--';
+
+            const tierBadge = (tier === 'PRO') ? '<span class="stat-badge stat-badge-green font-mono">PRO</span>' : '<span class="stat-badge stat-badge-gray font-mono">FREE</span>';
+            const activeLabel = acc.is_active ? '<span style="color:#10B981;font-weight:900;">🟢 在岗使用中</span>' : '⚪ 待命候选池';
+            const blockedLabel = acc.validation_blocked ? '<span style="color:#DC2626;font-weight:900;">⚠️ 需网页验证</span>' : '✅ 正常免风控';
+            const tokenBadge = hasToken ? '<span class="stat-badge stat-badge-green font-mono">TOKEN 就绪</span>' : '<span class="stat-badge stat-badge-gray font-mono">缺少 TOKEN</span>';
+            const accName = acc.name || (acc.email ? acc.email.split('@')[0] : '--');
+
+            bodyEl.innerHTML = [
+                '<div class="drawer-card">',
+                    '<div class="drawer-card-title"><span>🆔 身份与权限</span>' + tierBadge + '</div>',
+                    '<div class="drawer-item"><span class="drawer-label">账号名称:</span><span class="drawer-val">' + accName + '</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">完整邮箱:</span><span class="drawer-val">' + (acc.email || '--') + '</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">Claude 版本:</span><span class="drawer-val"><span class="stat-tag tag-claude-ver font-mono">Claude ' + cVer + '</span></span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">当前状态:</span><span class="drawer-val">' + activeLabel + '</span></div>',
+                '</div>',
+                '<div class="drawer-card" style="background:#F0F9FF;">',
+                    '<div class="drawer-card-title"><span>⚡ Gemini 算力池 (Google 2.5)</span><span class="stat-badge stat-badge-blue font-mono">5h: ' + g5h + '% | 周: ' + gw + '%</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">5小时滚动配额:</span><span class="drawer-val">' + g5h + '%</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">5小时重置时间:</span><span class="drawer-val">' + gReset5h + '</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">周度总配额:</span><span class="drawer-val">' + gw + '%</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">周度重置周期:</span><span class="drawer-val">' + gResetW + '</span></div>',
+                '</div>',
+                '<div class="drawer-card" style="background:#FFFBEB;">',
+                    '<div class="drawer-card-title"><span>🧠 Claude 算力池 (Anthropic)</span><span class="stat-badge stat-badge-amber font-mono">5h: ' + c5h + '% | 周: ' + cw + '%</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">5小时滚动配额:</span><span class="drawer-val">' + c5h + '%</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">5小时重置时间:</span><span class="drawer-val">' + cReset5h + '</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">周度总配额:</span><span class="drawer-val">' + cw + '%</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">周度重置周期:</span><span class="drawer-val">' + cResetW + '</span></div>',
+                '</div>',
+                '<div class="drawer-card">',
+                    '<div class="drawer-card-title"><span>🔑 OAuth 凭据与有效期</span>' + tokenBadge + '</div>',
+                    '<div class="drawer-item"><span class="drawer-label">Refresh Token:</span><span class="drawer-val">' + (hasToken ? '已持久化 (安全哈希保护)' : '未授权') + '</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">Access Token 过期:</span><span class="drawer-val">' + expStr + '</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">人机验证受限:</span><span class="drawer-val">' + blockedLabel + '</span></div>',
+                    '<div class="drawer-item"><span class="drawer-label">下次预热调度:</span><span class="drawer-val">' + nextWarmup + '</span></div>',
+                '</div>',
+                '<div class="drawer-card">',
+                    '<div class="drawer-card-title"><span>🧩 可用授权模型矩阵 (' + models.length + ')</span></div>',
+                    '<div style="line-height:1.6;">' + modelTagsHtml + '</div>',
+                '</div>'
+            ].join('');
+        }}
+
+        function drawerSwitchAccount() {{
+            if (!__currentDrawerEmail) return;
+            doSwitchAccount(__currentDrawerEmail);
+        }}
+
+        function drawerWarmupAccount() {{
+            if (!__currentDrawerEmail) return;
+            doWarmupAccount(__currentDrawerEmail);
+        }}
+
+        function drawerCopyJson() {{
+            if (!__cachedDrawerData) return;
+            const str = JSON.stringify(__cachedDrawerData, null, 2);
+            navigator.clipboard.writeText(str).then(() => {{
+                showToast("✅ 已成功复制全量资产画像 JSON", "success");
+            }}).catch(() => {{
+                showToast("❌ 复制失败，请重试", "error");
+            }});
+        }}
+
+        // ⌨️ 全局键盘快捷键：/ 聚焦搜索，Esc 关闭模态或抽屉
+        document.addEventListener('keydown', (e) => {{
+            if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {{
+                e.preventDefault();
+                const s = document.getElementById('account-search');
+                if (s) {{ s.focus(); s.select(); }}
+            }} else if (e.key === 'Escape') {{
+                closeAccountDrawer();
+                closeNeoModal(false);
+                closeImportModal();
+            }}
+        }});
+
 
         // ========================================================
         // 🔒 自绘 Neo-Brutalism 确认对话框 (彻底解决 WKWebView confirm 死锁)
@@ -4318,6 +5061,35 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(data).encode("utf-8"))
+        elif parsed.path == "/api/account-detail":
+            qs = urllib.parse.parse_qs(parsed.query)
+            email = qs.get("email", [""])[0]
+            data = ENGINE.load_accounts()
+            accounts = data.get("accounts", {})
+            acc = accounts.get(email)
+            if not acc:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": f"Account {email} not found"}).encode("utf-8"))
+                return
+            sched_warmup = {}
+            if os.path.exists(WARMUP_SCHEDULE_PATH):
+                try:
+                    with open(WARMUP_SCHEDULE_PATH, "r", encoding="utf-8") as sf:
+                        sched_warmup = json.load(sf)
+                except Exception:
+                    pass
+            acc_copy = dict(acc)
+            acc_copy["warmup_schedule"] = sched_warmup.get(email, {})
+            acc_copy["is_active"] = (email == data.get("active_email", ""))
+            lock_info = get_manual_override_lock()
+            acc_copy["manual_lock"] = lock_info if (lock_info and lock_info.get("manual_account") == email) else None
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(acc_copy, ensure_ascii=False).encode("utf-8"))
+            return
         elif parsed.path == "/api/rotation-status":
             cfg = get_auto_rotation_config()
             self.send_response(200)
