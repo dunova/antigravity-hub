@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.43.4"
+__version__ = "2.44.0"
 __canonical_version_tag__ = "20261024-v2.43.4-EXPOSE_REAL_COUNTDOWN_ZERO_FAKE_READY"
-__last_updated__ = "2026-10-24 12:28:47"
+__last_updated__ = "2026-10-24 12:53:38"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -178,7 +178,16 @@ def atomic_write_json(file_path: str, data: Any, indent: int = 2) -> bool:
             json.dump(data, f, indent=indent, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_path, file_path)
+        try:
+            os.replace(tmp_path, file_path)
+        except OSError:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                os.rename(tmp_path, file_path)
+            except Exception:
+                import shutil
+                shutil.move(tmp_path, file_path)
         return True
     except Exception as e:
         logger.error(f"原子写入 {file_path} 失败: {e}")
@@ -1087,7 +1096,7 @@ class HubEngine:
                 logger.info(f"🔥 Hub 触发预热成功: {email} -> {res}")
                 now = int(time.time())
                 acc["last_warmup_ts"] = now
-                acc["next_warmup_ts"] = now + 3600 + random.randint(-300, 300)
+                acc["next_warmup_ts"] = res.get("locked_reset_ts", now + 18000)
                 # 触发配额刷新并写回
                 self.refresh_single_account_quota(email, acc)
                 return True
@@ -1100,89 +1109,26 @@ class HubEngine:
 
     def run_hourly_staggered_warmup(self, force: bool = False) -> int:
         """
-        【每小时全局智能错峰预热流水线 · 杜绝 4h59m 倒计时与阶梯无缝接力保障】
+        【每小时全局错峰预热流水线 · 摩天轮阶梯无缝接力保障】
         核心契约：
-        1. 绝不看到 4h59m：满额闲置账号必须提前在后台激活 5h 滑动窗口，保持随时可用且到期即满血；
-        2. 每小时全池巡检：全池 11 个账号每小时错峰打散激活，间隔 15~35 秒随机抖动，杜绝并发冲击；
+        1. 绝不看到 4h59m：全池 11 个账号在 5 小时时间轴上按 ~27 分钟阶梯等距打散，保持充足可用且到期即满血；
+        2. 每小时全池巡检：后台自动以 1-token 极简调用对齐流水线，杜绝并发冲击与假就绪；
         3. 梯次接力：高并发高难度任务打满一轮后，各账号已在不同倒计时阶段，接二连三快速满血恢复，告别全员死等 5 小时。
         """
         try:
             from antigravity_physical_switcher import AntigravityPhysicalManager
             mgr = AntigravityPhysicalManager()
-            sched = mgr.load_warmup_schedule()
             data = self.load_accounts()
-            accounts = data.get("accounts", {})
-            now_ts = int(time.time())
-
-            needed_accounts = []
-            for email, acc in accounts.items():
-                if not email or "@" not in email:
-                    continue
-                if acc.get("validation_blocked"):
-                    continue
-                rt = acc.get("refresh_token")
-                if not rt and isinstance(acc.get("token"), dict):
-                    rt = acc["token"].get("refresh_token")
-                if not rt:
-                    continue
-
-                g_w = acc.get("gemini", {}).get("quota_weekly", 1.0)
-                c_w = acc.get("claude", {}).get("quota_weekly", 1.0)
-                if g_w <= 0.001 and c_w <= 0.001:
-                    continue  # 双周配额耗尽，无法预热
-
-                acc_sched = sched.get(email, {})
-                locked_ts = acc_sched.get("locked_reset_ts", 0)
-                rem_sec = locked_ts - now_ts
-
-                # 判定是否需要预热：
-                # A. force=True：强制全池排队预热
-                # B. locked_ts <= now_ts：倒计时已走完归位（处于闲置无倒计时状态，极易卡在 4h59m）
-                # C. rem_sec < 900 (15分钟以内)：即将到期，平滑续接下一轮窗口
-                # D. 账号从未有有效预热倒计时记录
-                needs_warmup = (
-                    force 
-                    or locked_ts <= now_ts 
-                    or rem_sec < 900 
-                    or not acc_sched.get("locked_reset_iso")
-                )
-
-                if needs_warmup:
-                    needed_accounts.append((email, acc))
-
-            if not needed_accounts:
-                logger.info("ℹ️ [每小时错峰预热] 全池账号 5h 滑动窗口均在健康递进中，无需重复激活。")
-                return 0
-
-            # 随机打散打乱顺序，形成自然台阶
-            random.shuffle(needed_accounts)
-            logger.info(f"🔥 [每小时错峰预热] 识别到 {len(needed_accounts)} 个需要激活/续接的账号，启动平滑错峰流水线...")
-
-            success_count = 0
-            for idx, (email, acc) in enumerate(needed_accounts, 1):
-                acc_entry = dict(acc)
-                acc_entry["email"] = email
-                res = mgr.warmup_single_account(acc_entry, force=True)
-                st = res.get("status")
-                if st in ("success", "cooldown_active"):
-                    success_count += 1
-                    cur_now = int(time.time())
-                    acc["last_warmup_ts"] = cur_now
-                    # 下一次巡检：1 小时后 (约 3600 秒 ± 300 秒)
-                    acc["next_warmup_ts"] = cur_now + 3600 + random.randint(-300, 300)
-                    self.refresh_single_account_quota(email, acc)
-                    logger.info(f"  ✅ [{idx}/{len(needed_accounts)}] 账号 {email} 错峰预热成功: 5h 重置时刻锁定至 {res.get('locked_reset_iso')}")
-
-                # 错峰防并发冲击：每次激活后休眠 15 ~ 35 秒（最后一个账号不需要休眠）
-                if idx < len(needed_accounts):
-                    sleep_s = random.uniform(15.0, 35.0)
-                    time.sleep(sleep_s)
-
-            if success_count > 0:
-                self.save_accounts(data)
-                logger.info(f"🎯 [每小时错峰预热闭环] 成功激活 {success_count} 个账号，全池已建立阶梯滚动恢复防线！")
-
-            return success_count
+            accounts = list(data.get("accounts", {}).values())
+            
+            # 1. 梯次错峰重平衡与排班编排
+            res = mgr.rebalance_and_align_staggered_ladder(accounts, force=force)
+            
+            # 2. 检查并触发当前到期账号的 1-token 极简续接
+            due_count = mgr.check_and_trigger_due_staggered_warmup()
+            
+            logger.info(f"🎯 [错峰梯次流水线闭环] 阶梯对齐状态: {res.get('status')}, 全池编排: {res.get('count')} 账号, 到期续接数: {due_count}")
+            return res.get("count", 0) + due_count
         except Exception as e:
             logger.error(f"❌ 每小时错峰预热流水线异常: {e}")
             return 0
@@ -1257,7 +1203,7 @@ ENGINE = HubEngine()
 
 
 def format_reset_time(iso_str: str) -> str:
-    if not iso_str:
+    if not iso_str or iso_str == "--":
         return "--"
     try:
         # 解析 ISO UTC
@@ -1273,7 +1219,7 @@ def format_reset_time(iso_str: str) -> str:
 
         diff = int(target_ts - time.time())
         if diff <= 0:
-            return "已就绪"
+            return "即将恢复"
         days = diff // 86400
         hours = (diff % 86400) // 3600
         mins = (diff % 3600) // 60
@@ -1281,7 +1227,9 @@ def format_reset_time(iso_str: str) -> str:
             return f"{days}d {hours}h"
         if hours > 0:
             return f"{hours}h {mins}m"
-        return f"{mins}m"
+        if mins > 0:
+            return f"{mins}m"
+        return "<1m"
     except Exception:
         return iso_str[:16]
 
@@ -1316,18 +1264,18 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
         tip = f"周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
     elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪"):
-        # 只要有真实倒计时 (哪怕是 4h 59m 还是 3h 56m)，一律直接诚实呈现时间胶囊，严禁掩耳盗铃
+        # 只要有真实倒计时 (哪怕是 3h 56m 还是 27m)，一律直接诚实呈现时间胶囊
         reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
     elif val_5h >= 99.9:
         reset_5h_html = '<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额满血可用">满额</span>'
     else:
         reset_5h_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
 
-    # 周度重置倒计时呈现：
-    if reset_weekly_info and reset_weekly_info not in ("--", "已就绪"):
+    # 周度重置倒计时呈现 (彻底杜绝“就绪”假象，有倒计时显倒计时，无倒计时显满额)：
+    if reset_weekly_info and reset_weekly_info not in ("--", "已就绪", "就绪"):
         reset_w_html = f'<span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: {reset_weekly_info}">{reset_weekly_info}</span>'
-    elif reset_weekly_info == "已就绪" or val_w >= 99.9:
-        reset_w_html = '<span class="q-reset q-reset-ready font-mono" title="周度配额完全就绪">就绪</span>'
+    elif val_w >= 99.9:
+        reset_w_html = '<span class="q-reset q-reset-ready font-mono" title="周度配额满血可用">满额</span>'
     else:
         reset_w_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
 
@@ -1448,7 +1396,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             main_btn_html = f"""<div class="btn-in-use font-mono" title="当前主程序正在使用此账号护航">在用</div>
                                 <button class="btn btn-warmup font-mono" 
                                 onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="向该账号发送极轻量真实生成，提前锁定5h倒计时错峰就绪">预热</button>"""
+                                title="单账号极轻量 1-token 预热激活，接入 5h 错峰梯次流水线">预热</button>"""
         elif is_blocked:
             badge_html = '<span class="badge badge-blocked" title="Google账号需网页验证">⚠️待验证</span>'
             main_btn_html = f"""<button class="btn btn-unblock font-mono" 
@@ -1463,7 +1411,7 @@ def render_table_rows(include_oob: bool = False) -> str:
                                 title="切换为此账号，看门狗照常监控额度自动轮换">切换</button>
                                 <button class="btn btn-warmup font-mono" 
                                 onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="向该账号发送极轻量真实生成，提前锁定5h倒计时错峰就绪">预热</button>"""
+                                title="单账号极轻量 1-token 预热激活，接入 5h 错峰梯次流水线">预热</button>"""
             else:
                 main_btn_html = f"""<button class="btn btn-switch font-mono" 
                                 style="opacity:0.35;cursor:not-allowed;background:#ccc;"
@@ -3327,7 +3275,7 @@ def render_dashboard_html() -> str:
                 {rot_btn_html}
                 <button class="btn btn-top btn-warmup-all font-mono"
                         onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
-                        title="每小时全池智能打散错峰预热 (快捷键: W)">
+                        title="全池 11 账号阶梯错峰打散预热，接入 5h 流水线轮转 (快捷键: W)">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                     预热
                 </button>
@@ -3508,7 +3456,7 @@ def render_dashboard_html() -> str:
                         <div class="cfg-field">
                             <label class="toggle-wrap">
                                 <input type="checkbox" id="cfg-hourly-warmup" class="neo-checkbox" checked>
-                                <span>自动随机错峰巡检 (杜绝 4h59m 闲置)</span>
+                                <span>每小时自动随机错峰预热</span>
                             </label>
                         </div>
                     </div>
@@ -3516,9 +3464,9 @@ def render_dashboard_html() -> str:
                         <div class="cfg-label">预热目标模型</div>
                         <div class="cfg-field">
                             <select id="cfg-warmup-model" class="neo-select font-mono">
-                                <option value="gemini_first">Gemini 优先 (快速阶梯滚动)</option>
-                                <option value="dual">Gemini + Claude (双模型预热)</option>
-                                <option value="gemini_only">仅预热 Gemini</option>
+                                <option value="gemini_first">Gemini 优先</option>
+                                <option value="dual">Gemini + Claude</option>
+                                <option value="gemini_only">仅 Gemini</option>
                             </select>
                         </div>
                     </div>
@@ -3526,9 +3474,9 @@ def render_dashboard_html() -> str:
                         <div class="cfg-label">错峰打散窗口</div>
                         <div class="cfg-field">
                             <select id="cfg-warmup-stagger" class="neo-select font-mono">
-                                <option value="60">60 秒 (快速滚动)</option>
-                                <option value="120">120 秒 (均衡平滑)</option>
-                                <option value="180">180 秒 (最大打散防风控)</option>
+                                <option value="60">60 秒</option>
+                                <option value="120">120 秒</option>
+                                <option value="180">180 秒</option>
                             </select>
                         </div>
                     </div>
@@ -3536,7 +3484,7 @@ def render_dashboard_html() -> str:
                         <div class="cfg-label">立即预热</div>
                         <div class="cfg-field">
                             <button class="btn font-mono" style="background:#C084FC; font-weight:900; height:28px; padding:0 10px;" onclick="doWarmupAll(); closeSettingsModal();">
-                                ⚡ 立即触发全池错峰预热
+                                ⚡ 立即错峰预热
                             </button>
                         </div>
                     </div>
@@ -4429,7 +4377,7 @@ def render_dashboard_html() -> str:
 
         // 🔥 全池阶梯错峰预热直通函数
         async function doWarmupAll() {{
-            showToast("⏳ 正在启动全池阶梯错峰预热流水线...", "info");
+            showToast("⏳ 正在构建 5h 错峰梯次流水线...", "info");
             try {{
                 const resp = await fetch('/api/warmup-all', {{
                     method: 'POST'
@@ -4437,7 +4385,7 @@ def render_dashboard_html() -> str:
                 if (!resp.ok) throw new Error("HTTP " + resp.status);
                 const html = await resp.text();
                 applyTbodyAndOOB(html);
-                showToast("🎉 全池阶梯错峰预热已完成！各账号 5h 倒计时已锁定启动", "warmup");
+                showToast("🎉 全池 11 账号阶梯错峰打散完成，5h 流水线已锁定接力！", "warmup");
             }} catch (err) {{
                 showToast("❌ 错峰预热失败: " + err.message, "error");
             }}
@@ -5760,7 +5708,7 @@ def start_background_workers():
                 logger.error(f"后台配额刷新异常: {e}")
 
     def warmup_worker():
-        logger.info("后台每小时智能错峰预热守卫已启动 (杜绝 4h59m 倒计时与阶梯恢复流水线)")
+        logger.info("后台每小时智能错峰预热守卫已启动 (5h错峰梯次流水线与接力轮转)")
         time.sleep(5)  # 启动后稍等 5 秒让服务就绪
         last_global_round = 0
         while True:
@@ -5770,16 +5718,18 @@ def start_background_workers():
                 is_hourly_round = (now - last_global_round >= random.randint(3300, 3900))
                 if is_hourly_round or last_global_round == 0:
                     last_global_round = now
-                    logger.info("⏰ [定时触发] 每小时全局错峰预热轮次启动！")
+                    logger.info("⏰ [定时触发] 每小时全局错峰预热巡检启动！")
                     ENGINE.run_hourly_staggered_warmup(force=False)
                 else:
-                    # 快速扫描是否有倒计时归位的闲置账号（杜绝 4h59m 漏洞）
-                    ENGINE.run_hourly_staggered_warmup(force=False)
+                    # 高频巡检 (30s)：检查是否有梯次中到期的账号需要 1-token 极简续接轮转
+                    from antigravity_physical_switcher import AntigravityPhysicalManager
+                    mgr = AntigravityPhysicalManager()
+                    mgr.check_and_trigger_due_staggered_warmup()
 
-                time.sleep(60)
+                time.sleep(30)
             except Exception as e:
                 logger.error(f"后台预热调度异常: {e}")
-                time.sleep(60)
+                time.sleep(30)
 
     t_ingest = threading.Thread(target=auto_ingest_worker, daemon=True)
     t_quota = threading.Thread(target=quota_worker, daemon=True)
