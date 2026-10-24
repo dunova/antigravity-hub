@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.42.2"
-__canonical_version_tag__ = "20261024-v2.42.2-ZERO_NOISE_LOCAL_HTMX_SPEEDUP"
-__last_updated__ = "2026-10-24 11:31:04"
-__canonical_doctrine__ = "彻底切除冗余文字声明+顶栏自解释右侧按键零截断+彻底删除底端声明条+本地内存HTMX秒开秒渲染"
+__version__ = "2.42.3"
+__canonical_version_tag__ = "20261024-v2.42.3-ZERO_PREACHY_PURE_UI_ABSOLUTE_LAW"
+__last_updated__ = "2026-10-24 11:37:44"
+__canonical_doctrine__ = "最高禁止准则确立：严禁好为人师与过度声明+一切用UI自己说话+全域表头/控制条/弹窗彻底纯净化"
 
 
 # 配置常量
@@ -3122,20 +3122,20 @@ def render_dashboard_html() -> str:
             </div>
             <div class="filter-group">
                 <button class="filter-tab active" data-filter="all" onclick="setFilter('all', this)">全部 ({total_count})</button>
-                <button class="filter-tab" data-filter="usable" onclick="setFilter('usable', this)" title="仅展示 Gemini 周额度大于 0 的可用轮换账号"><span class="filter-dot dot-blue"></span>可用 (G&gt;0)</button>
-                <button class="filter-tab" data-filter="healthy" onclick="setFilter('healthy', this)"><span class="filter-dot dot-green"></span>充足 (&gt;50%)</button>
-                <button class="filter-tab" data-filter="warning" onclick="setFilter('warning', this)"><span class="filter-dot dot-red"></span>告急 (&lt;15%)</button>
-                <button class="filter-tab" data-filter="exhausted" onclick="setFilter('exhausted', this)" title="仅展示 Gemini 周额度已彻底归零的枯竭账号"><span class="filter-dot dot-gray"></span>已枯竭 (G=0)</button>
+                <button class="filter-tab" data-filter="usable" onclick="setFilter('usable', this)"><span class="filter-dot dot-blue"></span>可用</button>
+                <button class="filter-tab" data-filter="healthy" onclick="setFilter('healthy', this)"><span class="filter-dot dot-green"></span>充足</button>
+                <button class="filter-tab" data-filter="warning" onclick="setFilter('warning', this)"><span class="filter-dot dot-red"></span>告急</button>
+                <button class="filter-tab" data-filter="exhausted" onclick="setFilter('exhausted', this)"><span class="filter-dot dot-gray"></span>枯竭</button>
             </div>
             <div class="stats-counter" id="filter-counter">
-                显示: <b>{total_count}</b> / {total_count}
+                <b>{total_count}</b> / {total_count}
             </div>
             <div id="batch-action-bar" class="batch-bar font-mono" style="display:none;">
                 <span class="batch-count-label">已选 <b id="batch-selected-count">0</b> 项</span>
-                <button type="button" class="btn-batch btn-batch-export font-mono" onclick="doBatchExport()" title="导出所勾选账号凭据为标准 JSON 文件">
+                <button type="button" class="btn-batch btn-batch-export font-mono" onclick="doBatchExport()" title="导出所选 JSON">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导出
                 </button>
-                <button type="button" class="btn-batch btn-batch-delete font-mono" onclick="doBatchDelete()" title="批量删除所勾选账号（在用账号受保护不可删除，自动归档备份）">
+                <button type="button" class="btn-batch btn-batch-delete font-mono" onclick="doBatchDelete()" title="批量删除所选">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>删除
                 </button>
                 <button type="button" class="btn-batch btn-batch-clear font-mono" onclick="clearAllSelections()" title="清空全部勾选">取消</button>
@@ -3156,23 +3156,23 @@ def render_dashboard_html() -> str:
                 </colgroup>
                 <thead>
                     <tr>
-                        <th class="col-center th-check" title="全选 / 反选当前可见账号"><input type="checkbox" id="master-select-cb" class="neo-checkbox" onchange="toggleMasterSelect(this)" title="全选 / 反选当前所有筛选可见账号"></th>
-                        <th class="col-center th-num" title="拖拽手柄与序号">#</th>
+                        <th class="col-center th-check" title="全选 / 反选"><input type="checkbox" id="master-select-cb" class="neo-checkbox" onchange="toggleMasterSelect(this)"></th>
+                        <th class="col-center th-num">#</th>
                         <th class="col-center th-status">状态</th>
-                        <th class="th-email">账号 (点击复制)</th>
-                        <th class="th-gemini th-sortable" onclick="cycleGeminiSort()" title="点击切换排序：周额度 (少→多) → 5h额度 (少→多) → 恢复默认">
+                        <th class="th-email">账号</th>
+                        <th class="th-gemini th-sortable" onclick="cycleGeminiSort()">
                             <div class="th-sort-inner">
-                                <span>Gemini 配额 (5h / 周)</span>
+                                <span>Gemini</span>
                                 <span id="sort-gemini-badge" class="sort-badge font-mono" style="display:none;"></span>
                             </div>
                         </th>
-                        <th class="th-claude th-sortable" onclick="cycleClaudeSort()" title="点击切换排序：周额度 (少→多) → 5h额度 (少→多) → 恢复默认">
+                        <th class="th-claude th-sortable" onclick="cycleClaudeSort()">
                             <div class="th-sort-inner">
-                                <span>Claude 配额 (5h / 周)</span>
+                                <span>Claude</span>
                                 <span id="sort-claude-badge" class="sort-badge font-mono" style="display:none;"></span>
                             </div>
                         </th>
-                        <th class="col-center th-action" title="切换账号与上下微调顺序">操作</th>
+                        <th class="col-center th-action">操作</th>
                     </tr>
                 </thead>
                 <tbody id="account-tbody">
@@ -3181,14 +3181,14 @@ def render_dashboard_html() -> str:
             </table>
         </div>
 
-        <!-- 新野兽派底部分页与状态指示条 (单页上限 15 个，紧贴表格底部) -->
+        <!-- 新野兽派底部分页控制条 (极简自解释) -->
         <div class="pagination-bar font-mono" id="pagination-bar">
             <div class="page-info">
-                <span>单页上限: <b>15</b> 个</span>
+                <span>15 / 页</span>
                 <span class="page-dot">·</span>
-                <span id="page-indicator">第 <b>1</b> / 1 页</span>
+                <span id="page-indicator">1 / 1</span>
                 <span class="page-dot">·</span>
-                <span id="page-total">共 {total_count} 个账号</span>
+                <span id="page-total">{total_count} 项</span>
             </div>
             <div class="page-actions">
                 <button class="btn btn-page font-mono" id="btn-prev-page" onclick="changePage(-1)" disabled title="上一页">← 上一页</button>
@@ -3209,63 +3209,51 @@ def render_dashboard_html() -> str:
             </div>
 
             <div class="import-tabs">
-                <button class="import-tab-btn active" id="tab-btn-oauth" onclick="switchImportTab('oauth')">🌐 Google 授权添加新账号</button>
-                <button class="import-tab-btn" id="tab-btn-sync" onclick="switchImportTab('sync')">⚡ 从当前 IDE 一键吸纳</button>
-                <button class="import-tab-btn" id="tab-btn-file" onclick="switchImportTab('file')">📁 批量导入 JSON 备份</button>
+                <button class="import-tab-btn active" id="tab-btn-oauth" onclick="switchImportTab('oauth')">Google 授权</button>
+                <button class="import-tab-btn" id="tab-btn-sync" onclick="switchImportTab('sync')">IDE 钥匙串吸纳</button>
+                <button class="import-tab-btn" id="tab-btn-file" onclick="switchImportTab('file')">JSON 备份导入</button>
             </div>
 
             <div class="import-body-content">
                 <!-- TAB 1: Google OAuth 2.0 浏览器一键授权 (默认首屏) -->
                 <div id="import-pane-oauth" class="import-pane">
-                    <div class="import-tip-box">
-                        <b>🌐 Google OAuth 浏览器全自动获取 Token：</b><br>
-                        点击下方按钮拉起浏览器登录 Google 账号并点击「允许」，系统将通过本地回调自动换取 Refresh Token、识别邮箱并入库刷新配额，<b>全程无需手填任何 Token</b>。
-                    </div>
                     <div style="display:flex; flex-direction:column; gap:10px;">
                         <button class="btn-sync-action font-mono" id="btn-oauth-browser" onclick="doStartGoogleOAuth(false, this)">
-                            🌐 弹出浏览器登录 Google 授权 (推荐)
+                            🌐 登录 Google 账号授权
                         </button>
                         <button class="btn-submit-action font-mono" id="btn-oauth-isolated" onclick="doStartGoogleOAuth(true, this)">
-                            🛡️ 拉起独立 ego/隔离容器授权 (多号防串号)
+                            🛡️ 独立容器授权 (防串号)
                         </button>
                     </div>
                     <div id="oauth-status-box" style="display:none; margin-top:12px; padding:10px 12px; background:#FEF9C3; border:2px solid #000000; border-radius:6px; box-shadow:2px 2px 0px #000000;">
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                            <span id="oauth-status-text" style="font-size:11.5px; font-weight:900; color:#000000;">⏳ 等待浏览器完成 Google 授权回调...</span>
-                            <button class="btn font-mono" style="background:#FFFFFF; padding:0 8px; height:24px; font-size:10.5px;" onclick="copyCurrentOAuthUrl()">📋 复制授权链接</button>
+                            <span id="oauth-status-text" style="font-size:11.5px; font-weight:900; color:#000000;">⏳ 等待授权回调...</span>
+                            <button class="btn font-mono" style="background:#FFFFFF; padding:0 8px; height:24px; font-size:10.5px;" onclick="copyCurrentOAuthUrl()">复制链接</button>
                         </div>
                     </div>
                     <div style="margin-top:14px; padding-top:12px; border-top:1.5px dashed #9CA3AF;">
-                        <label class="form-label">🔗 跨设备/手动回调兜底（若在其它浏览器完成授权，直接粘贴回调 URL 或 Code）：</label>
                         <div style="display:flex; gap:8px;">
-                            <input type="text" id="oauth-manual-code" class="form-input font-mono" style="margin-bottom:0; flex:1;" placeholder="粘贴 http://127.0.0.1:18088/oauth-callback?code=4/0A...">
-                            <button class="btn-submit-action font-mono" style="width:108px; height:35px; flex-shrink:0;" onclick="doSubmitManualOAuthCode(this)">⚡ 解析入库</button>
+                            <input type="text" id="oauth-manual-code" class="form-input font-mono" style="margin-bottom:0; flex:1;" placeholder="粘贴回调 URL 或 Code">
+                            <button class="btn-submit-action font-mono" style="width:90px; height:35px; flex-shrink:0;" onclick="doSubmitManualOAuthCode(this)">解析入库</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- TAB 2: 钥匙串一键吸纳 -->
                 <div id="import-pane-sync" class="import-pane" style="display:none;">
-                    <div class="import-tip-box">
-                        <b>⚡ 从本机 Antigravity IDE 钥匙串直接提取：</b><br>
-                        自动读取当前 macOS Keychain 中已登录的 Antigravity IDE 账号凭据并同步入库。
-                    </div>
                     <button class="btn-sync-action font-mono" id="btn-sync-active" onclick="doSyncActiveAccount(this)">
-                        ⚡ 立即从 IDE 钥匙串检测并吸纳新账号
+                        ⚡ 立即从 IDE 钥匙串吸纳当前账号
                     </button>
                 </div>
 
                 <!-- TAB 3: JSON 备份导入 -->
                 <div id="import-pane-file" class="import-pane" style="display:none;">
-                    <div class="import-tip-box">
-                        <b>📋 兼容格式：</b>支持 Hub 导出备份包、账号数组列表或单账号字典。系统自动去重合并并拉取最新配额。
-                    </div>
                     <label class="form-label">选择 JSON 备份文件：</label>
                     <input type="file" id="import-file-input" accept=".json" class="form-input-file" onchange="handleFileUpload(event)">
                     <label class="form-label">或在此直接粘贴 JSON 文本：</label>
                     <textarea id="import-text-input" class="form-textarea font-mono" rows="5" placeholder='[&#10;  {{ "email": "user@gmail.com", "refresh_token": "1//04..." }}&#10;]'></textarea>
                     <button class="btn-submit-action font-mono" onclick="doSubmitJsonImport(this)">
-                        📥 开始解析并合并入库
+                        📥 解析合并入库
                     </button>
                 </div>
             </div>
