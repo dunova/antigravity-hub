@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.42.3"
-__canonical_version_tag__ = "20261024-v2.42.3-ZERO_PREACHY_PURE_UI_ABSOLUTE_LAW"
-__last_updated__ = "2026-10-24 11:37:44"
-__canonical_doctrine__ = "最高禁止准则确立：严禁好为人师与过度声明+一切用UI自己说话+全域表头/控制条/弹窗彻底纯净化"
+__version__ = "2.43.0"
+__canonical_version_tag__ = "20261024-v2.43.0-SETTINGS_MODAL_MAGPIE_FEATURES_GEMINI_OPTIMIZED_MASKING_DEL_46"
+__last_updated__ = "2026-10-24 11:59:48"
+__canonical_doctrine__ = "Magpie风格设置面板+针对Gemini优化+一键切至最高额度+彻底切除4.6标签+账号隐私打码脱敏"
 
 
 # 配置常量
@@ -46,6 +46,7 @@ ACCOUNTS_HUB_FILE = os.path.join(HUB_DIR, "accounts_hub.json")
 WARMUP_HUB_FILE = os.path.join(HUB_DIR, "warmup_hub.json")
 WARMUP_SCHEDULE_PATH = os.path.join(HUB_DIR, "warmup_schedule.json")
 AUTO_ROTATION_CONFIG_PATH = os.path.join(BASE_DATA_DIR, "auto_rotation_config.json")
+HUB_SETTINGS_PATH = os.path.join(HUB_DIR, "hub_settings.json")
 MANUAL_OVERRIDE_LOCK_PATH = os.path.join(BASE_DATA_DIR, "manual_override_lock.json")
 
 
@@ -301,6 +302,43 @@ def set_auto_rotation_config(mode: str = "gemini", enabled: Optional[bool] = Non
     atomic_write_json(AUTO_ROTATION_CONFIG_PATH, cfg)
     logger.info(f"💾 [轮换配置持久化] 三态模式已保存: mode={mode} (enabled={cfg['enabled']}, policy={cfg['policy']}) -> {AUTO_ROTATION_CONFIG_PATH}")
     return cfg
+
+def get_hub_settings() -> Dict[str, Any]:
+    """
+    【全局控制台设置】读取 Magpie 风格控制台设置。
+    """
+    defaults = {
+        "gemini_threshold": 0.0,
+        "default_sort": "gemini_5h_desc",
+        "hourly_warmup": True,
+        "warmup_model": "gemini_first",
+        "warmup_stagger_sec": 60,
+        "account_mask": False,
+        "auto_refresh_sec": 5,
+        "hide_exhausted": False,
+        "table_density": "standard",
+    }
+    if os.path.isfile(HUB_SETTINGS_PATH):
+        try:
+            with open(HUB_SETTINGS_PATH, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                defaults.update(saved)
+        except Exception as e:
+            logger.warning(f"读取设置文件异常: {e}")
+    return defaults
+
+
+def save_hub_settings(new_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    【全局控制台设置】持久化原子保存控制台设置。
+    """
+    cfg = get_hub_settings()
+    cfg.update(new_cfg)
+    cfg["updated_at"] = int(time.time())
+    atomic_write_json(HUB_SETTINGS_PATH, cfg)
+    logger.info(f"💾 [控制台设置持久化] 已保存设置 -> {HUB_SETTINGS_PATH}")
+    return cfg
+
 
 
 class KeychainFileLock:
@@ -1183,6 +1221,38 @@ class HubEngine:
 
 
 
+    def switch_top_gemini_account(self) -> Tuple[bool, str, str]:
+        """
+        针对 Gemini 专项优化：找出全池 Gemini 5h 剩余配额最充沛的健康账号并秒级物理切换
+        返回: (success: bool, msg: str, target_email: str)
+        """
+        data = self.load_accounts()
+        accounts = data.get("accounts", {})
+        active_email = data.get("active_email", "")
+
+        candidates = []
+        for email, acc in accounts.items():
+            g_info = acc.get("gemini", {})
+            g_5h = float(g_info.get("quota_5h", 0.0))
+            g_w = float(g_info.get("quota_weekly", 0.0))
+            if g_w > 0.0001:
+                candidates.append((email, g_5h, g_w))
+
+        if not candidates:
+            return False, "全池未检测到可用的 Gemini 账号", ""
+
+        # 按 5h 剩余配额降序、周配额降序
+        candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
+        best = candidates[0]
+
+        if best[0] == active_email and best[1] > 0.8:
+            return True, f"当前活跃账号 {active_email} Gemini 额度已处于顶峰 ({int(best[1]*100)}%)", active_email
+
+        target_email = best[0]
+        ok, msg = self.switch_account(target_email)
+        return ok, f"已切至 Gemini 额度最高账号: {target_email} ({int(best[1]*100)}%)", target_email
+
+
 ENGINE = HubEngine()
 
 
@@ -1278,11 +1348,11 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     cell_title = ""
     if model_type == "claude":
         if claude_ver == "5.5":
-            cell_title = ' title="Claude 5.5 · 官方付费 Pro 特权 (Opus 5.5 / Sonnet 5.5)"'
+            cell_title = ' title="Claude 5.5"'
         else:
-            cell_title = ' title="Claude 4.6 · 未付费 Pro (官方预计 11 月下架)"'
+            cell_title = ' title="Claude"'
     elif model_type == "gemini":
-        cell_title = ' title="Gemini 2.5 配额 (5h 滚动 / 周度总额)"'
+        cell_title = ' title="Gemini 2.5"'
 
     return f"""
     <div class="q-cell"{cell_title}>
@@ -1446,9 +1516,9 @@ def render_table_rows(include_oob: bool = False) -> str:
         short_name = email.split("@")[0] if "@" in email else email
 
         if claude_ver == "5.5":
-            pro_tag_html = '<span class="pro-tag pro-tag-55 font-mono" title="官方付费 Pro 特权 · 支持 Claude 5.5 (Opus 5.5 / Sonnet 5.5)">5.5</span>'
+            pro_tag_html = '<span class="pro-tag pro-tag-55 font-mono" title="Claude 5.5">5.5</span>'
         else:
-            pro_tag_html = '<span class="pro-tag pro-tag-46 font-mono" title="Google AI Pro 账号 · 支持 Claude 4.6 (Sonnet 4.6 / Opus 4.6 Thinking)">4.6</span>'
+            pro_tag_html = "" 
 
         row = f"""
         <tr class="account-row {active_class}" 
@@ -1467,7 +1537,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             <td class="col-status" style="background-color: {row_bg};"><div class="status-cell-wrap">{badge_html}</div></td>
             <td class="col-email" style="background-color: {row_bg};">
                 <div class="email-cell-inner">
-                    <span class="email-text font-mono" onclick="copyText('{email}')" title="点击复制完整账号凭据: {email}">{short_name}</span>
+                    <span class="email-text font-mono" onclick="copyText('{email}')" title="点击复制: {email}" data-raw-email="{email}" data-short-name="{short_name}">{short_name}</span>
                     {pro_tag_html}
                 </div>
             </td>
@@ -1758,8 +1828,8 @@ def render_dashboard_html() -> str:
         }}
 
         .btn-top {{
-            padding: 0 7px;
-            height: 28px;
+            padding: 0 5px;
+            height: 26px;
             font-size: 11px;
             font-weight: 900;
             border: 2px solid #000000;
@@ -1768,7 +1838,7 @@ def render_dashboard_html() -> str:
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 3px;
+            gap: 2.5px;
             cursor: pointer;
             box-sizing: border-box;
             transition: all 0.08s ease;
@@ -1786,6 +1856,13 @@ def render_dashboard_html() -> str:
         .btn-refresh-all {{ background: #22C55E; color: #000000; }}
         .btn-warmup-all {{ background: #C084FC; color: #000000; }}
         .btn-warmup-all:hover {{ background: #A855F7; }}
+        .btn-top-gemini {{ background: #4ADE80; color: #000000; font-weight: 900; }}
+        .btn-top-gemini:hover {{ background: #22C55E; }}
+        .btn-mask {{ background: #E2E8F0; color: #000000; font-weight: 900; }}
+        .btn-mask:hover {{ background: #CBD5E1; }}
+        .btn-mask.active {{ background: #FFE600 !important; color: #000000 !important; }}
+        .btn-settings {{ background: #F1F5F9; color: #000000; font-weight: 900; }}
+        .btn-settings:hover {{ background: #E2E8F0; }}
         .btn-rotation-gemini {{ background: #4ADE80; color: #000000; font-weight: 900; }}
         .btn-rotation-gemini:hover {{ background: #22C55E; }}
         .btn-rotation-claude {{ background: #F59E0B; color: #000000; font-weight: 900; }}
@@ -2815,6 +2892,138 @@ def render_dashboard_html() -> str:
             white-space: pre-wrap;
             word-break: break-word;
         }}
+
+        /* Magpie 高密显瘦与显示密度 */
+        .density-compact .account-row {{ height: 32px !important; }}
+        .density-compact .q-cell {{ padding: 0 !important; }}
+        .density-standard .account-row {{ height: 36px !important; }}
+        .density-relaxed .account-row {{ height: 42px !important; }}
+
+        /* Magpie 风格 Neo-Brutalism 设置弹窗 */
+        .settings-modal-box {{
+            background: #F4F0EA;
+            width: 500px;
+            max-width: 92vw;
+            border: 3px solid #000000;
+            border-radius: var(--radius-modal);
+            box-shadow: 6px 6px 0px #000000;
+            animation: popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }}
+        .settings-tabs {{
+            display: flex;
+            background: #EBE6DC;
+            border-bottom: 2px solid #000000;
+            padding: 0 4px;
+            gap: 2px;
+        }}
+        .settings-tab-btn {{
+            padding: 8px 12px;
+            font-size: 11px;
+            font-weight: 900;
+            border: none;
+            border-bottom: 2.5px solid transparent;
+            background: transparent;
+            cursor: pointer;
+            color: #4B5563;
+            transition: all 0.08s ease;
+        }}
+        .settings-tab-btn.active {{
+            color: #000000;
+            border-bottom-color: #000000;
+            background: #F4F0EA;
+        }}
+        .settings-body {{
+            padding: 14px 16px;
+            min-height: 200px;
+            background: #F4F0EA;
+        }}
+        .cfg-row {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 11px;
+            font-size: 12px;
+        }}
+        .cfg-label {{
+            font-weight: 800;
+            color: #111827;
+            width: 140px;
+            flex-shrink: 0;
+        }}
+        .cfg-field {{
+            flex: 1;
+            display: flex;
+            justify-content: flex-end;
+        }}
+        .neo-select {{
+            background: #FFFFFF;
+            border: 2px solid #000000;
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            box-shadow: 2px 2px 0px #000000;
+            outline: none;
+            cursor: pointer;
+            max-width: 250px;
+        }}
+        .neo-kbd {{
+            background: #000000;
+            color: #FFFFFF;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: 900;
+            font-size: 10px;
+        }}
+        .settings-footer {{
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 10px 16px;
+            background: #EBE6DC;
+            border-top: 2px solid #000000;
+        }}
+        .btn-settings-save {{
+            background: #22C55E;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: 4px;
+            padding: 0 14px;
+            height: 28px;
+            font-size: 11px;
+            font-weight: 900;
+            box-shadow: 2px 2px 0px #000000;
+            cursor: pointer;
+        }}
+        .btn-settings-save:hover {{
+            background: #16A34A;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000000;
+        }}
+        .btn-settings-cancel {{
+            background: #FFFFFF;
+            color: #000000;
+            border: 2px solid #000000;
+            border-radius: 4px;
+            padding: 0 12px;
+            height: 28px;
+            font-size: 11px;
+            font-weight: 800;
+            box-shadow: 2px 2px 0px #000000;
+            cursor: pointer;
+        }}
+        .toggle-wrap {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+        }}
+
         .modal-actions {{
             padding: 12px 16px;
             background: #E5E7EB;
@@ -3198,6 +3407,183 @@ def render_dashboard_html() -> str:
     </div>
 
     <!-- 📥 Neo-Brutalism 账号纳管与导入中心模态弹窗 -->
+
+    <!-- ⚙️ Neo-Brutalism Magpie 风格控制台设置模态弹窗 -->
+    <div id="settings-modal-backdrop" class="modal-backdrop font-mono" onclick="if(event.target===this)closeSettingsModal()">
+        <div class="settings-modal-box">
+            <div class="modal-header">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    <span>控制台设置</span>
+                </div>
+                <span class="modal-close" onclick="closeSettingsModal()" title="关闭窗口 (Esc)">✕</span>
+            </div>
+
+            <div class="settings-tabs">
+                <button class="settings-tab-btn active" id="tab-btn-cfg-gemini" onclick="switchSettingsTab('gemini')">Gemini 专精</button>
+                <button class="settings-tab-btn" id="tab-btn-cfg-warmup" onclick="switchSettingsTab('warmup')">错峰预热</button>
+                <button class="settings-tab-btn" id="tab-btn-cfg-display" onclick="switchSettingsTab('display')">界面与隐私</button>
+                <button class="settings-tab-btn" id="tab-btn-cfg-shortcuts" onclick="switchSettingsTab('shortcuts')">快捷键与集群</button>
+            </div>
+
+            <div class="settings-body">
+                <!-- TAB 1: Gemini 专精优化 -->
+                <div id="settings-pane-gemini" class="settings-pane">
+                    <div class="cfg-row">
+                        <div class="cfg-label">自动轮换模式</div>
+                        <div class="cfg-field">
+                            <select id="cfg-rot-mode" class="neo-select font-mono">
+                                <option value="gemini">Gemini (耗尽自动切号)</option>
+                                <option value="claude">Claude (耗尽自动切号)</option>
+                                <option value="off">关闭自动轮换</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cfg-row">
+                        <div class="cfg-label">Gemini 切号触发水位</div>
+                        <div class="cfg-field">
+                            <select id="cfg-gemini-threshold" class="neo-select font-mono">
+                                <option value="0">0% (彻底耗尽时切换)</option>
+                                <option value="0.05">5% (剩余 5% 提前接力)</option>
+                                <option value="0.10">10% (高并发保活)</option>
+                                <option value="0.15">15% (安全水位预备)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cfg-row">
+                        <div class="cfg-label">默认列表排序</div>
+                        <div class="cfg-field">
+                            <select id="cfg-default-sort" class="neo-select font-mono">
+                                <option value="gemini_5h_desc">Gemini 5h 降序 (最充沛优先)</option>
+                                <option value="gemini_w_desc">Gemini 周度降序</option>
+                                <option value="claude_5h_desc">Claude 5h 降序</option>
+                                <option value="default">默认原始导入顺序</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cfg-row" style="margin-top: 10px; padding-top: 10px; border-top: 1.5px dashed #CBD5E1;">
+                        <div class="cfg-label">快捷定锚</div>
+                        <div class="cfg-field">
+                            <button class="btn font-mono" style="background:#4ADE80; font-weight:900; height:28px; padding:0 10px;" onclick="doSwitchTopGemini(); closeSettingsModal();">
+                                ⚡ 一键切至全池 Gemini 额度最高账号
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: 错峰预热防线 -->
+                <div id="settings-pane-warmup" class="settings-pane" style="display:none;">
+                    <div class="cfg-row">
+                        <div class="cfg-label">每小时错峰预热</div>
+                        <div class="cfg-field">
+                            <label class="toggle-wrap">
+                                <input type="checkbox" id="cfg-hourly-warmup" class="neo-checkbox" checked>
+                                <span>自动随机错峰巡检 (杜绝 4h59m 闲置)</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="cfg-row">
+                        <div class="cfg-label">预热目标模型</div>
+                        <div class="cfg-field">
+                            <select id="cfg-warmup-model" class="neo-select font-mono">
+                                <option value="gemini_first">Gemini 优先 (快速阶梯滚动)</option>
+                                <option value="dual">Gemini + Claude (双模型预热)</option>
+                                <option value="gemini_only">仅预热 Gemini</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cfg-row">
+                        <div class="cfg-label">错峰打散窗口</div>
+                        <div class="cfg-field">
+                            <select id="cfg-warmup-stagger" class="neo-select font-mono">
+                                <option value="60">60 秒 (快速滚动)</option>
+                                <option value="120">120 秒 (均衡平滑)</option>
+                                <option value="180">180 秒 (最大打散防风控)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cfg-row" style="margin-top: 10px; padding-top: 10px; border-top: 1.5px dashed #CBD5E1;">
+                        <div class="cfg-label">立即预热</div>
+                        <div class="cfg-field">
+                            <button class="btn font-mono" style="background:#C084FC; font-weight:900; height:28px; padding:0 10px;" onclick="doWarmupAll(); closeSettingsModal();">
+                                ⚡ 立即触发全池错峰预热
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: 界面与隐私 -->
+                <div id="settings-pane-display" class="settings-pane" style="display:none;">
+                    <div class="cfg-row">
+                        <div class="cfg-label">账号脱敏打码</div>
+                        <div class="cfg-field">
+                            <label class="toggle-wrap">
+                                <input type="checkbox" id="cfg-mask-default" class="neo-checkbox" onchange="toggleAccountMaskFromSettings(this)">
+                                <span>开启账号隐私打码 (截图分享保护)</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="cfg-row">
+                        <div class="cfg-label">表格显示密度</div>
+                        <div class="cfg-field">
+                            <select id="cfg-table-density" class="neo-select font-mono" onchange="onDensityChange(this.value)">
+                                <option value="compact">Magpie 极简高密 (32px)</option>
+                                <option value="standard" selected>标准高密 (36px)</option>
+                                <option value="relaxed">舒适宽松 (42px)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cfg-row">
+                        <div class="cfg-label">状态同步频率</div>
+                        <div class="cfg-field">
+                            <select id="cfg-refresh-sec" class="neo-select font-mono" onchange="onRefreshSecChange(this.value)">
+                                <option value="3">3 秒 (极速响应)</option>
+                                <option value="5" selected>5 秒 (标准推荐)</option>
+                                <option value="10">10 秒 (低频节能)</option>
+                                <option value="0">关闭自动同步 (仅手动)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cfg-row">
+                        <div class="cfg-label">隐藏已枯竭账号</div>
+                        <div class="cfg-field">
+                            <label class="toggle-wrap">
+                                <input type="checkbox" id="cfg-hide-exhausted" class="neo-checkbox" onchange="onHideExhaustedChange(this)">
+                                <span>自动过滤隐藏周额度为 0 的账号</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: 快捷键与集群 -->
+                <div id="settings-pane-shortcuts" class="settings-pane" style="display:none;">
+                    <div style="background:#FFFFFF; border:2px solid #000000; border-radius:4px; padding:8px 12px; margin-bottom:12px;">
+                        <div style="font-weight:900; margin-bottom:6px; font-size:12px;">⌨️ 全局快捷键速查</div>
+                        <table style="width:100%; font-size:11px; border-collapse:collapse;">
+                            <tr><td style="padding:3px 0; width:50px;"><kbd class="neo-kbd">S</kbd></td><td>打开 / 关闭控制台设置</td></tr>
+                            <tr><td style="padding:3px 0;"><kbd class="neo-kbd">M</kbd></td><td>切换账号脱敏打码</td></tr>
+                            <tr><td style="padding:3px 0;"><kbd class="neo-kbd">G</kbd></td><td>一键定锚至全池 Gemini 最高额度账号</td></tr>
+                            <tr><td style="padding:3px 0;"><kbd class="neo-kbd">R</kbd></td><td>并发拉取最新配额数据</td></tr>
+                            <tr><td style="padding:3px 0;"><kbd class="neo-kbd">W</kbd></td><td>触发全池错峰预热</td></tr>
+                            <tr><td style="padding:3px 0;"><kbd class="neo-kbd">Esc</kbd></td><td>快速关闭所有弹窗</td></tr>
+                        </table>
+                    </div>
+                    <div style="background:#FFFFFF; border:2px solid #000000; border-radius:4px; padding:8px 12px;">
+                        <div style="font-weight:900; margin-bottom:4px; font-size:12px;">🖥️ 多机集群状态 (01 M4 节点)</div>
+                        <div style="font-size:11px; color:#374151;">
+                            节点 IP: <b class="font-mono">10.0.0.200</b> · 服务端口: <b class="font-mono">18088</b> · 账号数: <b class="font-mono">11</b>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-footer">
+                <button class="btn-settings-save font-mono" onclick="saveSettings()">保存应用</button>
+                <button class="btn-settings-cancel font-mono" onclick="closeSettingsModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <div id="import-modal-backdrop" class="modal-backdrop font-mono" onclick="if(event.target===this)closeImportModal()">
         <div class="import-modal-box">
             <div class="modal-header">
@@ -3276,6 +3662,237 @@ def render_dashboard_html() -> str:
     </div>
 
     <script>
+
+        // 🔒 账号脱敏打码 (Magpie 隐私保护体系)
+        let isMasked = localStorage.getItem('hub_account_mask') === '1';
+
+        function maskShortName(name) {{
+            if (!name) return '';
+            if (name.length <= 3) return name[0] + '***';
+            return name.slice(0, 2) + '***' + name.slice(-2);
+        }}
+
+        function applyAccountMask() {{
+            const btn = document.getElementById('btn-mask-toggle');
+            const maskText = document.getElementById('btn-mask-text');
+            const cfgCb = document.getElementById('cfg-mask-default');
+            if (btn) {{
+                if (isMasked) {{
+                    btn.classList.add('active');
+                    if (maskText) maskText.innerText = '已打码';
+                    document.body.classList.add('accounts-masked');
+                }} else {{
+                    btn.classList.remove('active');
+                    if (maskText) maskText.innerText = '打码';
+                    document.body.classList.remove('accounts-masked');
+                }}
+            }}
+            if (cfgCb) cfgCb.checked = isMasked;
+
+            // 更新表格账号列文字
+            document.querySelectorAll('.email-text').forEach(el => {{
+                let rawShort = el.getAttribute('data-short-name');
+                if (!rawShort) {{
+                    rawShort = el.innerText;
+                    el.setAttribute('data-short-name', rawShort);
+                }}
+                el.innerText = isMasked ? maskShortName(rawShort) : rawShort;
+            }});
+
+            // 更新顶栏活跃账号胶囊文字
+            const activeValEl = document.querySelector('.active-email-val');
+            if (activeValEl) {{
+                let rawActive = activeValEl.getAttribute('data-active-email');
+                if (!rawActive) {{
+                    rawActive = activeValEl.innerText;
+                    activeValEl.setAttribute('data-active-email', rawActive);
+                }}
+                activeValEl.innerText = isMasked ? maskShortName(rawActive) : rawActive;
+            }}
+        }}
+
+        function toggleAccountMask() {{
+            isMasked = !isMasked;
+            localStorage.setItem('hub_account_mask', isMasked ? '1' : '0');
+            applyAccountMask();
+            showToast(isMasked ? "🔒 账号已开启隐私脱敏打码" : "👁️ 账号已恢复明文显示", "info");
+        }}
+
+        function toggleAccountMaskFromSettings(cb) {{
+            isMasked = cb.checked;
+            localStorage.setItem('hub_account_mask', isMasked ? '1' : '0');
+            applyAccountMask();
+        }}
+
+        // ⚙️ 控制台设置面板交互逻辑 (Magpie 风格)
+        function openSettingsModal() {{
+            const backdrop = document.getElementById('settings-modal-backdrop');
+            if (backdrop) {{
+                backdrop.classList.add('show');
+                loadSettingsToUI();
+            }}
+        }}
+
+        function closeSettingsModal() {{
+            const backdrop = document.getElementById('settings-modal-backdrop');
+            if (backdrop) backdrop.classList.remove('show');
+        }}
+
+        function toggleSettingsModal() {{
+            const backdrop = document.getElementById('settings-modal-backdrop');
+            if (backdrop && backdrop.classList.contains('show')) {{
+                closeSettingsModal();
+            }} else {{
+                openSettingsModal();
+            }}
+        }}
+
+        function switchSettingsTab(tabName) {{
+            ['gemini', 'warmup', 'display', 'shortcuts'].forEach(t => {{
+                const btn = document.getElementById('tab-btn-cfg-' + t);
+                const pane = document.getElementById('settings-pane-' + t);
+                if (btn) btn.classList.toggle('active', t === tabName);
+                if (pane) pane.style.display = (t === tabName) ? 'block' : 'none';
+            }});
+        }}
+
+        function loadSettingsToUI() {{
+            const rotMode = document.getElementById('cfg-rot-mode');
+            const rotBtn = document.getElementById('btn-rotation-toggle');
+            if (rotMode && rotBtn) {{
+                rotMode.value = rotBtn.getAttribute('data-mode') || 'gemini';
+            }}
+            const maskCb = document.getElementById('cfg-mask-default');
+            if (maskCb) maskCb.checked = isMasked;
+
+            const density = localStorage.getItem('hub_table_density') || 'standard';
+            const densitySelect = document.getElementById('cfg-table-density');
+            if (densitySelect) densitySelect.value = density;
+
+            const defaultSort = localStorage.getItem('hub_default_sort') || 'gemini_5h_desc';
+            const sortSelect = document.getElementById('cfg-default-sort');
+            if (sortSelect) sortSelect.value = defaultSort;
+
+            const refreshSec = localStorage.getItem('hub_refresh_sec') || '5';
+            const refreshSelect = document.getElementById('cfg-refresh-sec');
+            if (refreshSelect) refreshSelect.value = refreshSec;
+
+            const hideExhausted = localStorage.getItem('hub_hide_exhausted') === '1';
+            const hideCb = document.getElementById('cfg-hide-exhausted');
+            if (hideCb) hideCb.checked = hideExhausted;
+        }}
+
+        function onDensityChange(val) {{
+            localStorage.setItem('hub_table_density', val);
+            applyTableDensity();
+        }}
+
+        function applyTableDensity() {{
+            const val = localStorage.getItem('hub_table_density') || 'standard';
+            const app = document.querySelector('.app-container');
+            if (app) {{
+                app.classList.remove('density-compact', 'density-standard', 'density-relaxed');
+                app.classList.add('density-' + val);
+            }}
+        }}
+
+        let __tableRefreshIntervalId = null;
+        function onRefreshSecChange(val) {{
+            localStorage.setItem('hub_refresh_sec', val);
+            setupAutoRefreshTimer();
+        }}
+
+        function setupAutoRefreshTimer() {{
+            if (__tableRefreshIntervalId) {{
+                clearInterval(__tableRefreshIntervalId);
+                __tableRefreshIntervalId = null;
+            }}
+            const sec = parseInt(localStorage.getItem('hub_refresh_sec') || '5', 10);
+            if (sec > 0) {{
+                __tableRefreshIntervalId = setInterval(fetchTableSafely, sec * 1000);
+            }}
+        }}
+
+        function onHideExhaustedChange(cb) {{
+            localStorage.setItem('hub_hide_exhausted', cb.checked ? '1' : '0');
+            filterTable();
+        }}
+
+        async function saveSettings() {{
+            const rotMode = document.getElementById('cfg-rot-mode')?.value || 'gemini';
+            const gThreshold = parseFloat(document.getElementById('cfg-gemini-threshold')?.value || '0');
+            const defaultSort = document.getElementById('cfg-default-sort')?.value || 'gemini_5h_desc';
+            const hourlyWarmup = document.getElementById('cfg-hourly-warmup')?.checked ?? true;
+            const warmupModel = document.getElementById('cfg-warmup-model')?.value || 'gemini_first';
+            const warmupStagger = parseInt(document.getElementById('cfg-warmup-stagger')?.value || '60', 10);
+
+            localStorage.setItem('hub_default_sort', defaultSort);
+
+            try {{
+                await fetch('/api/settings', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{
+                        mode: rotMode,
+                        gemini_threshold: gThreshold,
+                        default_sort: defaultSort,
+                        hourly_warmup: hourlyWarmup,
+                        warmup_model: warmupModel,
+                        warmup_stagger_sec: warmupStagger,
+                        account_mask: isMasked,
+                        table_density: localStorage.getItem('hub_table_density') || 'standard',
+                        auto_refresh_sec: parseInt(localStorage.getItem('hub_refresh_sec') || '5', 10),
+                        hide_exhausted: localStorage.getItem('hub_hide_exhausted') === '1'
+                    }})
+                }});
+
+                const rotBtn = document.getElementById('btn-rotation-toggle');
+                if (rotBtn && rotBtn.getAttribute('data-mode') !== rotMode) {{
+                    await fetch('/api/toggle-rotation', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ mode: rotMode }})
+                    }});
+                    fetchTableSafely();
+                }}
+
+                closeSettingsModal();
+                showToast("⚙️ 设置已成功保存并即时生效", "success");
+            }} catch (err) {{
+                showToast("❌ 设置保存失败: " + err.message, "error");
+            }}
+        }}
+
+        // 🚀 Gemini 专精优化：一键切至全池 Gemini 额度最高账号
+        async function doSwitchTopGemini(btn) {{
+            if (btn) {{
+                btn.disabled = true;
+                btn.style.opacity = '0.7';
+            }}
+            showToast("⚡ 正在智能切至全池 Gemini 额度顶峰账号...", "info");
+            try {{
+                const resp = await fetch('/api/switch_top_gemini', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }}
+                }});
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                const data = await resp.json();
+                if (data.success) {{
+                    showToast(data.msg, "success");
+                    if (data.html) applyTbodyAndOOB(data.html);
+                }} else {{
+                    showToast("⚠️ " + data.msg, "warning");
+                }}
+            }} catch (err) {{
+                showToast("❌ 切换失败: " + err.message, "error");
+            }} finally {{
+                if (btn) {{
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }}
+            }}
+        }}
+
         let currentFilter = 'all';
         let __oauthPollTimer = null;
         let __currentOAuthUrl = '';
@@ -3627,6 +4244,7 @@ def render_dashboard_html() -> str:
                 }});
                 __cachedTbodyHTML = tbody.innerHTML;
                 filterTable();
+                applyAccountMask();
                 if (typeof initDragSort === 'function') {{
                     initDragSort();
                 }}
@@ -3814,11 +4432,17 @@ def render_dashboard_html() -> str:
             const cBadge = document.getElementById('sort-claude-badge');
 
             if (gBadge) {{
-                if (currentSortMode === 'gemini_w_asc') {{
-                    gBadge.textContent = '周少→多';
+                if (currentSortMode === 'gemini_5h_desc') {{
+                    gBadge.textContent = '5h多→少';
+                    gBadge.style.display = 'inline-flex';
+                }} else if (currentSortMode === 'gemini_w_desc') {{
+                    gBadge.textContent = '周多→少';
                     gBadge.style.display = 'inline-flex';
                 }} else if (currentSortMode === 'gemini_5h_asc') {{
                     gBadge.textContent = '5h少→多';
+                    gBadge.style.display = 'inline-flex';
+                }} else if (currentSortMode === 'gemini_w_asc') {{
+                    gBadge.textContent = '周少→多';
                     gBadge.style.display = 'inline-flex';
                 }} else {{
                     gBadge.textContent = '';
@@ -3935,21 +4559,34 @@ def render_dashboard_html() -> str:
                 if (currentSortMode !== 'default') {{
                     let valA = 0;
                     let valB = 0;
-                    if (currentSortMode === 'gemini_w_asc') {{
+                    if (currentSortMode === 'gemini_5h_desc') {{
+                        valA = parseFloat(a.getAttribute('data-gemini-5h') || '0');
+                        valB = parseFloat(b.getAttribute('data-gemini-5h') || '0');
+                        if (valA !== valB) return valB - valA;
+                    }} else if (currentSortMode === 'gemini_w_desc') {{
                         valA = parseFloat(a.getAttribute('data-gemini-w') || '0');
                         valB = parseFloat(b.getAttribute('data-gemini-w') || '0');
+                        if (valA !== valB) return valB - valA;
+                    }} else if (currentSortMode === 'gemini_w_asc') {{
+                        valA = parseFloat(a.getAttribute('data-gemini-w') || '0');
+                        valB = parseFloat(b.getAttribute('data-gemini-w') || '0');
+                        if (valA !== valB) return valA - valB;
                     }} else if (currentSortMode === 'gemini_5h_asc') {{
                         valA = parseFloat(a.getAttribute('data-gemini-5h') || '0');
                         valB = parseFloat(b.getAttribute('data-gemini-5h') || '0');
+                        if (valA !== valB) return valA - valB;
+                    }} else if (currentSortMode === 'claude_5h_desc') {{
+                        valA = parseFloat(a.getAttribute('data-claude-5h') || '0');
+                        valB = parseFloat(b.getAttribute('data-claude-5h') || '0');
+                        if (valA !== valB) return valB - valA;
                     }} else if (currentSortMode === 'claude_w_asc') {{
                         valA = parseFloat(a.getAttribute('data-claude-w') || '0');
                         valB = parseFloat(b.getAttribute('data-claude-w') || '0');
+                        if (valA !== valB) return valA - valB;
                     }} else if (currentSortMode === 'claude_5h_asc') {{
                         valA = parseFloat(a.getAttribute('data-claude-5h') || '0');
                         valB = parseFloat(b.getAttribute('data-claude-5h') || '0');
-                    }}
-                    if (valA !== valB) {{
-                        return valA - valB; // 严格从小到大升序
+                        if (valA !== valB) return valA - valB;
                     }}
                 }}
                 // 默认模式或数值相同时按原始入库索引稳定对齐
@@ -4062,13 +4699,49 @@ def render_dashboard_html() -> str:
             }}
         }});
 
+        // ⌨️ 全局键盘快捷键 (Magpie 标准快捷键体系)
+        window.addEventListener('keydown', (e) => {{
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 'Escape') {{
+                closeSettingsModal();
+                closeImportModal();
+                closeNeoModal(false);
+            }} else if (e.key === 's' || e.key === 'S') {{
+                e.preventDefault();
+                toggleSettingsModal();
+            }} else if (e.key === 'm' || e.key === 'M') {{
+                e.preventDefault();
+                toggleAccountMask();
+            }} else if (e.key === 'g' || e.key === 'G') {{
+                e.preventDefault();
+                doSwitchTopGemini();
+            }} else if (e.key === 'r' || e.key === 'R') {{
+                e.preventDefault();
+                const refreshBtn = document.querySelector('.btn-refresh-all');
+                if (refreshBtn) doRefreshQuota(refreshBtn);
+            }} else if (e.key === 'w' || e.key === 'W') {{
+                e.preventDefault();
+                doWarmupAll();
+            }}
+        }});
+
         // 窗口重新获得焦点时立即静默触发一次最新状态同步
         window.addEventListener('focus', () => {{
             fetchTableSafely();
         }});
 
-        // 每 5 秒静默同步全池最新状态（0 冲突、0 剥离、绝对稳态）
-        setInterval(fetchTableSafely, 5000);
+        // 定时同步调度与初态挂载
+        setupAutoRefreshTimer();
+        window.addEventListener('DOMContentLoaded', () => {{
+            applyAccountMask();
+            applyTableDensity();
+            const defSort = localStorage.getItem('hub_default_sort');
+            if (defSort && defSort !== 'default' && currentSortMode === 'default') {{
+                currentSortMode = defSort;
+                updateSortBadges();
+                filterTable();
+            }}
+        }});
 
         window.addEventListener('DOMContentLoaded', () => {{
             setTimeout(() => {{
@@ -4502,6 +5175,15 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
             self.wfile.write(json.dumps(data).encode("utf-8"))
+        elif parsed.path == "/api/settings":
+            cfg = get_hub_settings()
+            rot_cfg = get_auto_rotation_config()
+            cfg["rotation_mode"] = rot_cfg.get("mode", "gemini")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(cfg).encode("utf-8"))
+            return
         elif parsed.path == "/api/rotation-status":
             cfg = get_auto_rotation_config()
             self.send_response(200)
@@ -4630,6 +5312,40 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(html.encode("utf-8"))
+
+        elif parsed.path == "/api/settings":
+            try:
+                data = json.loads(post_data)
+                updated = save_hub_settings(data)
+                if "mode" in data:
+                    set_auto_rotation_config(mode=data["mode"])
+                resp_bytes = json.dumps(updated).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(resp_bytes)
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
+                return
+
+        elif parsed.path == "/api/switch_top_gemini":
+            ok, msg, target_email = ENGINE.switch_top_gemini_account()
+            html = render_table_rows(include_oob=True)
+            resp = {
+                "success": ok,
+                "msg": msg,
+                "target_email": target_email,
+                "html": html
+            }
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(resp).encode("utf-8"))
+            return
 
         elif parsed.path == "/api/toggle-rotation":
             cur_cfg = get_auto_rotation_config()
