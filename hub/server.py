@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.42.1"
-__canonical_version_tag__ = "20261024-v2.42.1-MAGPIE_SLIM_HIGH_DENSITY_LAYOUT_LOCK"
-__last_updated__ = "2026-10-24 11:12:41"
-__canonical_doctrine__ = "对齐Magpie高密显瘦布局+严格锁定最小宽度840px防截断+收窄账号列间隙消除白板+高度自适应"
+__version__ = "2.42.2"
+__canonical_version_tag__ = "20261024-v2.42.2-ZERO_NOISE_LOCAL_HTMX_SPEEDUP"
+__last_updated__ = "2026-10-24 11:31:04"
+__canonical_doctrine__ = "彻底切除冗余文字声明+顶栏自解释右侧按键零截断+彻底删除底端声明条+本地内存HTMX秒开秒渲染"
 
 
 # 配置常量
@@ -48,6 +48,13 @@ WARMUP_SCHEDULE_PATH = os.path.join(HUB_DIR, "warmup_schedule.json")
 AUTO_ROTATION_CONFIG_PATH = os.path.join(BASE_DATA_DIR, "auto_rotation_config.json")
 MANUAL_OVERRIDE_LOCK_PATH = os.path.join(BASE_DATA_DIR, "manual_override_lock.json")
 
+
+HTMX_STATIC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "htmx.min.js")
+try:
+    with open(HTMX_STATIC_PATH, "rb") as _f:
+        HTMX_JS_BYTES = _f.read()
+except Exception:
+    HTMX_JS_BYTES = b""
 
 OAUTH_CREDS_PATH = os.path.expanduser("~/.gemini/oauth_creds.json")
 GOOGLE_ACCOUNTS_PATH = os.path.expanduser("~/.gemini/google_accounts.json")
@@ -1317,19 +1324,19 @@ def render_active_pill_html(active_email: str, oob: bool = False) -> str:
     lock_info = get_manual_override_lock()
     now_ts = time.time()
 
-    shield_svg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
-    zap_svg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:4px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+    shield_svg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
+    zap_svg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
 
     if lock_info and lock_info.get("manual_account") == active_email and lock_info.get("locked_until", 0) > now_ts:
         rem_sec = int(lock_info.get("locked_until", 0) - now_ts)
         rem_min = max(1, rem_sec // 60)
-        return f"""<span id="active-email-pill" class="active-pill font-mono locked-manual" title="人工指定保护中：后台看门狗已被物理阻断，不自动切号 (点击复制完整账号: {active_email})" onclick="copyText('{active_email}')"{oob_attr}>
-            {shield_svg}人工锁定: <span class="active-email-val">{short_name}</span> <span class="lock-tag font-mono">({rem_min}m)</span>
-            <button class="btn-unlock-pill font-mono" onclick="doUnlockProtection(); event.preventDefault(); event.stopPropagation();" title="点击恢复后台自动轮转">解除</button>
+        return f"""<span id="active-email-pill" class="active-pill font-mono locked-manual" title="人工保护中: {active_email} (剩余{rem_min}分，点击复制)" onclick="copyText('{active_email}')"{oob_attr}>
+            {shield_svg}<span class="active-email-val">{short_name}</span> <span class="lock-tag font-mono">{rem_min}m</span>
+            <button class="btn-unlock-pill font-mono" onclick="doUnlockProtection(); event.preventDefault(); event.stopPropagation();" title="恢复自动轮转">✕</button>
         </span>"""
     else:
-        return f"""<span id="active-email-pill" class="active-pill font-mono auto-mode" title="自动轮转模式中 (点击快速复制完整账号: {active_email})" onclick="copyText('{active_email}')"{oob_attr}>
-            {zap_svg}活跃: <span class="active-email-val">{short_name}</span> <span class="auto-tag font-mono">(自动)</span>
+        return f"""<span id="active-email-pill" class="active-pill font-mono auto-mode" title="当前活跃账号: {active_email} (点击复制)" onclick="copyText('{active_email}')"{oob_attr}>
+            {zap_svg}<span class="active-email-val">{short_name}</span>
         </span>"""
 
 
@@ -1495,19 +1502,19 @@ def render_rotation_button_html(oob: bool = False) -> str:
 
     if mode == "gemini":
         btn_cls = "btn-rotation-gemini"
-        btn_text = "⚡ 轮转: Gemini"
+        btn_text = "Gemini"
         btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>'
-        btn_title = "当前模式：自动轮转 Gemini（仅关注 Gemini 额度，耗尽自动切号，忽略 Claude 额度；点击切换为自动轮转 Claude）"
+        btn_title = "轮转模式: Gemini (耗尽自动切号，点击切换为 Claude 轮转)"
     elif mode == "claude":
         btn_cls = "btn-rotation-claude"
-        btn_text = "⚡ 轮转: Claude"
+        btn_text = "Claude"
         btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>'
-        btn_title = "当前模式：自动轮转 Claude（仅关注 Claude 额度，耗尽自动切号，忽略 Gemini 额度；点击彻底关闭轮转）"
+        btn_title = "轮转模式: Claude (耗尽自动切号，点击关闭自动轮转)"
     else:  # 'off'
         btn_cls = "btn-rotation-off"
-        btn_text = "🚫 轮转: 关闭"
+        btn_text = "已关闭"
         btn_icon = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
-        btn_title = "当前模式：彻底关闭自动轮转（看门狗已冻结，不会自动切号；点击开启自动轮转 Gemini）"
+        btn_title = "轮转模式: 已关闭 (看门狗已冻结，点击开启 Gemini 轮转)"
 
     oob_attr = ' hx-swap-oob="outerHTML:#btn-rotation-toggle"' if oob else ''
     return f"""<button id="btn-rotation-toggle"{oob_attr} class="btn btn-top {btn_cls} font-mono"
@@ -1543,7 +1550,7 @@ def render_dashboard_html() -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Antigravity Hub · Neo-Brutalism</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/htmx.min.js"></script>
     <style>
         :root {{
             --bg-color: #F4F0EA;
@@ -1634,49 +1641,49 @@ def render_dashboard_html() -> str:
             border: var(--border-thick);
             border-radius: var(--radius-card);
             background: var(--yellow-main);
-            padding: 6px 12px;
+            padding: 5px 8px;
             box-shadow: var(--shadow-hard);
             margin-bottom: 6px;
             width: 100% !important;
             box-sizing: border-box;
             white-space: nowrap !important;
-            gap: 10px;
+            gap: 6px;
         }}
 
         .top-left {{
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            justify-content: flex-start;
-            flex: 1 1 0;
+            flex-shrink: 0;
             gap: 4px;
         }}
 
         .top-center {{
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            flex: 2 1 0;
+            flex-shrink: 0;
         }}
 
         .top-right {{
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: flex-end;
-            flex: 1 1 0;
-            gap: 5px;
+            flex-shrink: 0;
+            margin-left: auto;
+            gap: 4px;
         }}
 
         .brand-title {{
             background: #FFFFFF;
             color: #000000;
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 900;
             letter-spacing: 0.5px;
-            padding: 0 10px;
-            height: 30px;
+            padding: 0 8px;
+            height: 28px;
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
             box-shadow: 2px 2px 0px #000000;
@@ -1690,16 +1697,16 @@ def render_dashboard_html() -> str:
             color: #000000;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
-            padding: 0 12px;
-            height: 30px;
-            min-width: 165px;
+            padding: 0 10px;
+            height: 28px;
+            min-width: auto !important;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
-            font-size: 11.5px;
+            gap: 4px;
+            font-size: 11px;
             font-weight: 900;
-            box-shadow: 2.5px 2.5px 0px #000000;
+            box-shadow: 2px 2px 0px #000000;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
             cursor: pointer;
@@ -1709,7 +1716,7 @@ def render_dashboard_html() -> str:
         .active-pill:hover {{
             background: #FFE600;
             transform: translate(-1px, -1px);
-            box-shadow: 3.5px 3.5px 0px #000000;
+            box-shadow: 3px 3px 0px #000000;
         }}
 
         .active-pill.locked-manual {{
@@ -1720,23 +1727,21 @@ def render_dashboard_html() -> str:
             background: #FECDD3;
         }}
         .lock-tag {{
-            font-size: 11px;
+            font-size: 10px;
             color: #E11D48;
-            font-weight: 800;
+            font-weight: 900;
         }}
         .auto-tag {{
-            font-size: 11px;
-            color: #16A34A;
-            font-weight: 800;
+            display: none;
         }}
         .btn-unlock-pill {{
-            margin-left: 6px;
+            margin-left: 4px;
             background: #E11D48;
             color: #FFFFFF;
             border: 1.5px solid #000000;
-            border-radius: 4px;
-            padding: 1px 6px;
-            font-size: 10px;
+            border-radius: 3px;
+            padding: 0 4px;
+            font-size: 9.5px;
             font-weight: 900;
             cursor: pointer;
             box-shadow: 1px 1px 0px #000000;
@@ -1753,9 +1758,9 @@ def render_dashboard_html() -> str:
         }}
 
         .btn-top {{
-            padding: 0 10px;
-            height: 30px;
-            font-size: 11.5px;
+            padding: 0 7px;
+            height: 28px;
+            font-size: 11px;
             font-weight: 900;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
@@ -1763,7 +1768,7 @@ def render_dashboard_html() -> str:
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 4px;
+            gap: 3px;
             cursor: pointer;
             box-sizing: border-box;
             transition: all 0.08s ease;
@@ -3067,14 +3072,13 @@ def render_dashboard_html() -> str:
     <div id="toast" class="toast font-mono"></div>
 
     <div class="app-container">
-        <!-- 新野兽派顶栏控制条 (宽阔微高 + 三点平衡居中) -->
+        <!-- 新野兽派顶栏控制条 (纯净自解释 + 按钮零截断) -->
         <div class="top-bar">
             <div class="top-left">
-                <span class="brand-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    ANTIGRAVITY HUB
+                <span class="brand-title font-mono" title="Antigravity Hub v{__version__}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    HUB
                 </span>
-                <span class="version-badge font-mono">v{__version__}</span>
             </div>
             <div class="top-center">
                 {active_pill_html}
@@ -3085,26 +3089,26 @@ def render_dashboard_html() -> str:
                 <button class="btn btn-top btn-import font-mono"
                         onclick="openImportModal(); event.preventDefault(); event.stopPropagation();"
                         title="导入账号备份、批量添加或从 IDE 钥匙串一键吸纳">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     导入
                 </button>
                 <button class="btn btn-top btn-export font-mono"
                         onclick="doExportAccounts(); event.preventDefault(); event.stopPropagation();"
                         title="导出全池账号备份 JSON">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     导出
                 </button>
                 <button class="btn btn-top btn-refresh-all font-mono"
                         onclick="doRefreshQuota(this); event.preventDefault(); event.stopPropagation();"
                         title="立即同步最新活跃状态并触发全池配额并发刷新">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
                     刷新
                 </button>
                 <button class="btn btn-top btn-warmup-all font-mono"
                         onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
                         title="每小时全池智能打散错峰预热，强行激活5h滚动倒计时，杜绝4h59m闲置阻断">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    错峰预热
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    预热
                 </button>
             </div>
         </div>
@@ -3190,11 +3194,6 @@ def render_dashboard_html() -> str:
                 <button class="btn btn-page font-mono" id="btn-prev-page" onclick="changePage(-1)" disabled title="上一页">← 上一页</button>
                 <button class="btn btn-page font-mono" id="btn-next-page" onclick="changePage(1)" disabled title="下一页">下一页 →</button>
             </div>
-        </div>
-
-        <!-- 底端紧凑高密收束条 (杜绝纵向过度拉伸悬空大白板) -->
-        <div style="margin-top: 6px; padding: 4px 8px; text-align: center; font-size: 10px; font-weight: 800; color: #4B5563; background: #E5E7EB; border: 1.5px solid #000000; border-radius: 6px; box-shadow: 1.5px 1.5px 0px #000000; width: 100%; box-sizing: border-box;" class="font-mono">
-            ⚡ ANTIGRAVITY HUB · 127.0.0.1:18088 · 全局每小时错峰预热防线 · 锁定最小宽度 840px
         </div>
     </div>
 
@@ -4475,7 +4474,14 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/" or parsed.path == "/index.html":
+        if parsed.path == "/static/htmx.min.js":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript; charset=utf-8")
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            self.end_headers()
+            self.wfile.write(HTMX_JS_BYTES)
+            return
+        elif parsed.path == "/" or parsed.path == "/index.html":
             try:
                 ENGINE.auto_ingest_system_account()
             except Exception:
