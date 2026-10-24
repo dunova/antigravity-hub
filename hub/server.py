@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.43.3"
-__canonical_version_tag__ = "20261024-v2.43.3-PURE_ASTERISK_MASK_ZERO_DIGIT_LETTER"
-__last_updated__ = "2026-10-24 12:20:19"
+__version__ = "2.43.4"
+__canonical_version_tag__ = "20261024-v2.43.4-EXPOSE_REAL_COUNTDOWN_ZERO_FAKE_READY"
+__last_updated__ = "2026-10-24 12:28:47"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -1311,26 +1311,15 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     c_5h = "#16A34A" if val_5h >= 50 else ("#EA580C" if val_5h >= 15 else "#DC2626")
     c_w = "#16A34A" if val_w >= 50 else ("#EA580C" if val_w >= 15 else "#DC2626")
     
-    # 5小时恢复倒计时与状态呈现：
+    # 5小时恢复倒计时与状态呈现 (彻底杜绝任何形式的假就绪伪饰，100% 诚实呈现真实时间胶囊):
     if is_weekly_exhausted:
         tip = f"周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
+    elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪"):
+        # 只要有真实倒计时 (哪怕是 4h 59m 还是 3h 56m)，一律直接诚实呈现时间胶囊，严禁掩耳盗铃
+        reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
     elif val_5h >= 99.9:
-        is_warmup_in_progress = (
-            reset_5h_info 
-            and reset_5h_info not in ("--", "已就绪") 
-            and not reset_5h_info.startswith("4h 5") 
-            and not reset_5h_info.startswith("4h 4") 
-            and not reset_5h_info.startswith("5h")
-        )
-        if is_warmup_in_progress:
-            reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="预热阶梯倒计时: {reset_5h_info}">{reset_5h_info}</span>'
-        else:
-            reset_5h_html = '<span class="q-reset q-reset-ready font-mono" title="满血待命，随时可用">就绪</span>'
-    elif reset_5h_info and reset_5h_info not in ("--", "已就绪"):
-        reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滚动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
-    elif reset_5h_info == "已就绪":
-        reset_5h_html = '<span class="q-reset q-reset-ready font-mono" title="已恢复就绪">就绪</span>'
+        reset_5h_html = '<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额满血可用">满额</span>'
     else:
         reset_5h_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
 
