@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.43.0"
-__canonical_version_tag__ = "20261024-v2.43.0-SETTINGS_MODAL_MAGPIE_FEATURES_GEMINI_OPTIMIZED_MASKING_DEL_46"
-__last_updated__ = "2026-10-24 11:59:48"
-__canonical_doctrine__ = "Magpie风格设置面板+针对Gemini优化+一键切至最高额度+彻底切除4.6标签+账号隐私打码脱敏"
+__version__ = "2.43.1"
+__canonical_version_tag__ = "20261024-v2.43.1-TOGGLE_MASK_MAGPIE_HIGH_DENSITY_ZERO_WHITESPACE"
+__last_updated__ = "2026-10-24 12:10:40"
+__canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
 # 配置常量
@@ -1401,12 +1401,12 @@ def render_active_pill_html(active_email: str, oob: bool = False) -> str:
         rem_sec = int(lock_info.get("locked_until", 0) - now_ts)
         rem_min = max(1, rem_sec // 60)
         return f"""<span id="active-email-pill" class="active-pill font-mono locked-manual" title="人工保护中: {active_email} (剩余{rem_min}分，点击复制)" onclick="copyText('{active_email}')"{oob_attr}>
-            {shield_svg}<span class="active-email-val">{short_name}</span> <span class="lock-tag font-mono">{rem_min}m</span>
+            {shield_svg}<span class="active-email-val" data-active-email="{short_name}">{short_name}</span> <span class="lock-tag font-mono">{rem_min}m</span>
             <button class="btn-unlock-pill font-mono" onclick="doUnlockProtection(); event.preventDefault(); event.stopPropagation();" title="恢复自动轮转">✕</button>
         </span>"""
     else:
         return f"""<span id="active-email-pill" class="active-pill font-mono auto-mode" title="当前活跃账号: {active_email} (点击复制)" onclick="copyText('{active_email}')"{oob_attr}>
-            {zap_svg}<span class="active-email-val">{short_name}</span>
+            {zap_svg}<span class="active-email-val" data-active-email="{short_name}">{short_name}</span>
         </span>"""
 
 
@@ -1651,11 +1651,11 @@ def render_dashboard_html() -> str:
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Space Grotesk", sans-serif;
-            padding: 4px 0 10px 0;
+            padding: 2px 0 6px 0;
             margin: 0;
             font-size: 12px;
             line-height: 1.2;
-            min-width: 840px !important;
+            min-width: 750px !important;
             -webkit-font-smoothing: antialiased;
             display: flex;
             flex-direction: column;
@@ -1680,11 +1680,11 @@ def render_dashboard_html() -> str:
         /* 🚀 官方 Magpie 级高密显瘦版心：严格锁定最小宽度 840px，最大宽度 870px，杜绝过度拉伸或压缩切边 */
         .app-container {{
             width: 100%;
-            max-width: 870px !important;
-            min-width: 840px !important;
+            max-width: 770px !important;
+            min-width: 750px !important;
             margin: 0 auto;
             box-sizing: border-box;
-            padding: 0 8px;
+            padding: 0 4px;
             flex-shrink: 0;
         }}
 
@@ -1858,9 +1858,29 @@ def render_dashboard_html() -> str:
         .btn-warmup-all:hover {{ background: #A855F7; }}
         .btn-top-gemini {{ background: #4ADE80; color: #000000; font-weight: 900; }}
         .btn-top-gemini:hover {{ background: #22C55E; }}
-        .btn-mask {{ background: #E2E8F0; color: #000000; font-weight: 900; }}
-        .btn-mask:hover {{ background: #CBD5E1; }}
-        .btn-mask.active {{ background: #FFE600 !important; color: #000000 !important; }}
+        .btn-mask {{
+            background: #000000 !important;
+            color: #FFFFFF !important;
+            font-weight: 900 !important;
+            border: 2px solid #000000 !important;
+            box-shadow: 2px 2px 0px #000000 !important;
+            padding: 0 7px !important;
+        }}
+        .btn-mask:hover {{
+            background: #27272A !important;
+            transform: translate(-1px, -1px);
+            box-shadow: 3px 3px 0px #000000 !important;
+        }}
+        .btn-mask.active {{
+            background: #FFE600 !important;
+            color: #000000 !important;
+            font-weight: 900 !important;
+            border: 2px solid #000000 !important;
+            box-shadow: 2px 2px 0px #000000 !important;
+        }}
+        .btn-mask.active:hover {{
+            background: #FACC15 !important;
+        }}
         .btn-settings {{ background: #F1F5F9; color: #000000; font-weight: 900; }}
         .btn-settings:hover {{ background: #E2E8F0; }}
         .btn-rotation-gemini {{ background: #4ADE80; color: #000000; font-weight: 900; }}
@@ -3294,7 +3314,36 @@ def render_dashboard_html() -> str:
             </div>
             {stats_html}
             <div class="top-right">
+                <button class="btn btn-top btn-mask font-mono" id="btn-mask-toggle"
+                        onclick="toggleAccountMask(); event.preventDefault(); event.stopPropagation();"
+                        title="按一下打码，再按一下明文 (快捷键: M)">
+                    <span id="btn-mask-icon">🕶️</span> <span id="btn-mask-text">打码</span>
+                </button>
+                <button class="btn btn-top btn-settings font-mono"
+                        onclick="openSettingsModal(); event.preventDefault(); event.stopPropagation();"
+                        title="控制台设置 (快捷键: S)">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:1px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    设置
+                </button>
+                <button class="btn btn-top btn-top-gemini font-mono"
+                        onclick="doSwitchTopGemini(this); event.preventDefault(); event.stopPropagation();"
+                        title="针对Gemini优化：一键切至全池Gemini最高额度账号 (快捷键: G)">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:1px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    TopG
+                </button>
                 {rot_btn_html}
+                <button class="btn btn-top btn-warmup-all font-mono"
+                        onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
+                        title="每小时全池智能打散错峰预热 (快捷键: W)">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    预热
+                </button>
+                <button class="btn btn-top btn-refresh-all font-mono"
+                        onclick="doRefreshQuota(this); event.preventDefault(); event.stopPropagation();"
+                        title="立即并发刷新最新配额 (快捷键: R)">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                    刷新
+                </button>
                 <button class="btn btn-top btn-import font-mono"
                         onclick="openImportModal(); event.preventDefault(); event.stopPropagation();"
                         title="导入账号备份、批量添加或从 IDE 钥匙串一键吸纳">
@@ -3304,20 +3353,8 @@ def render_dashboard_html() -> str:
                 <button class="btn btn-top btn-export font-mono"
                         onclick="doExportAccounts(); event.preventDefault(); event.stopPropagation();"
                         title="导出全池账号备份 JSON">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                     导出
-                </button>
-                <button class="btn btn-top btn-refresh-all font-mono"
-                        onclick="doRefreshQuota(this); event.preventDefault(); event.stopPropagation();"
-                        title="立即同步最新活跃状态并触发全池配额并发刷新">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-                    刷新
-                </button>
-                <button class="btn btn-top btn-warmup-all font-mono"
-                        onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
-                        title="每小时全池智能打散错峰预热，强行激活5h滚动倒计时，杜绝4h59m闲置阻断">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    预热
                 </button>
             </div>
         </div>
@@ -3355,13 +3392,13 @@ def render_dashboard_html() -> str:
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 34px;">   <!-- 批量勾选复选框 (34px) -->
-                    <col style="width: 36px;">   <!-- # 序号+拖拽手柄 (36px) -->
-                    <col style="width: 68px;">   <!-- 状态 (68px) -->
-                    <col style="width: 126px;">  <!-- 账号+PRO (126px，高密紧凑，彻底消灭右侧大空白) -->
-                    <col style="width: 220px;">  <!-- Gemini 配额 (220px) -->
-                    <col style="width: 220px;">  <!-- Claude 配额 (220px) -->
-                    <col style="width: 136px;">  <!-- 切换+预热+调序操作 (136px，居中无截断) -->
+                    <col style="width: 30px;">   <!-- 批量勾选复选框 (30px) -->
+                    <col style="width: 32px;">   <!-- # 序号+拖拽手柄 (32px) -->
+                    <col style="width: 60px;">   <!-- 状态 (60px) -->
+                    <col style="width: 96px;">   <!-- 账号 (从126px压至96px高密紧凑，消灭大空白) -->
+                    <col style="width: 204px;">  <!-- Gemini 配额 (204px) -->
+                    <col style="width: 204px;">  <!-- Claude 配额 (204px) -->
+                    <col style="width: 124px;">  <!-- 操作 (124px) -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -3674,37 +3711,40 @@ def render_dashboard_html() -> str:
 
         function applyAccountMask() {{
             const btn = document.getElementById('btn-mask-toggle');
+            const maskIcon = document.getElementById('btn-mask-icon');
             const maskText = document.getElementById('btn-mask-text');
             const cfgCb = document.getElementById('cfg-mask-default');
             if (btn) {{
                 if (isMasked) {{
                     btn.classList.add('active');
-                    if (maskText) maskText.innerText = '已打码';
-                    document.body.classList.add('accounts-masked');
+                    if (maskIcon) maskIcon.innerText = '👁️';
+                    if (maskText) maskText.innerText = '明文';
+                    btn.title = "当前处于打码脱敏状态，按一下显示【明文】(快捷键: M)";
                 }} else {{
                     btn.classList.remove('active');
+                    if (maskIcon) maskIcon.innerText = '🕶️';
                     if (maskText) maskText.innerText = '打码';
-                    document.body.classList.remove('accounts-masked');
+                    btn.title = "当前处于明文状态，按一下进行【打码】脱敏 (快捷键: M)";
                 }}
             }}
             if (cfgCb) cfgCb.checked = isMasked;
 
-            // 更新表格账号列文字
+            // 更新表格每一行的账号文本
             document.querySelectorAll('.email-text').forEach(el => {{
                 let rawShort = el.getAttribute('data-short-name');
                 if (!rawShort) {{
-                    rawShort = el.innerText;
+                    rawShort = el.innerText.trim();
                     el.setAttribute('data-short-name', rawShort);
                 }}
                 el.innerText = isMasked ? maskShortName(rawShort) : rawShort;
             }});
 
-            // 更新顶栏活跃账号胶囊文字
+            // 更新顶栏活跃账号胶囊文本
             const activeValEl = document.querySelector('.active-email-val');
             if (activeValEl) {{
                 let rawActive = activeValEl.getAttribute('data-active-email');
                 if (!rawActive) {{
-                    rawActive = activeValEl.innerText;
+                    rawActive = activeValEl.innerText.trim();
                     activeValEl.setAttribute('data-active-email', rawActive);
                 }}
                 activeValEl.innerText = isMasked ? maskShortName(rawActive) : rawActive;
@@ -3715,7 +3755,7 @@ def render_dashboard_html() -> str:
             isMasked = !isMasked;
             localStorage.setItem('hub_account_mask', isMasked ? '1' : '0');
             applyAccountMask();
-            showToast(isMasked ? "🔒 账号已开启隐私脱敏打码" : "👁️ 账号已恢复明文显示", "info");
+            showToast(isMasked ? "🔒 已开启打码 (再次点击显示明文)" : "👁️ 已显示明文 (再次点击打码脱敏)", "info");
         }}
 
         function toggleAccountMaskFromSettings(cb) {{
