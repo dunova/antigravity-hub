@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.42.0"
-__canonical_version_tag__ = "20261024-v2.42.0-UI_PERFECTION_AND_CLEAN_TIER_MATRIX"
-__last_updated__ = "2026-10-24 10:58:41"
-__canonical_doctrine__ = "物理切除家庭组重复共享账号+全池模型矩阵实测去伪(全面修正5.5显示)+Neo-Brutalism高密精致UI全方位优化与每小时自动随机错峰预热"
+__version__ = "2.42.1"
+__canonical_version_tag__ = "20261024-v2.42.1-MAGPIE_SLIM_HIGH_DENSITY_LAYOUT_LOCK"
+__last_updated__ = "2026-10-24 11:12:41"
+__canonical_doctrine__ = "对齐Magpie高密显瘦布局+严格锁定最小宽度840px防截断+收窄账号列间隙消除白板+高度自适应"
 
 
 # 配置常量
@@ -1571,18 +1571,19 @@ def render_dashboard_html() -> str:
         }}
 
         html, body {{
-            min-height: 100% !important;
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Space Grotesk", sans-serif;
-            padding: 16px 0 24px 0;
+            padding: 4px 0 10px 0;
             margin: 0;
             font-size: 12px;
             line-height: 1.2;
+            min-width: 840px !important;
             -webkit-font-smoothing: antialiased;
             display: flex;
-            justify-content: center;
-            align-items: flex-start;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
             overflow-x: hidden;
             overflow-y: auto;
         }}
@@ -1599,14 +1600,14 @@ def render_dashboard_html() -> str:
             font-variant-numeric: tabular-nums;
         }}
 
-        /* 🚀 弹性全自适应版心：宽度自由撑开，两翼 16px 舒适呼吸留白，支持用户自由拖拽缩放任意尺寸 */
+        /* 🚀 官方 Magpie 级高密显瘦版心：严格锁定最小宽度 840px，最大宽度 870px，杜绝过度拉伸或压缩切边 */
         .app-container {{
             width: 100%;
-            max-width: 1060px;
-            min-width: 600px;
+            max-width: 870px !important;
+            min-width: 840px !important;
             margin: 0 auto;
             box-sizing: border-box;
-            padding: 0 16px;
+            padding: 0 8px;
             flex-shrink: 0;
         }}
 
@@ -1633,13 +1634,13 @@ def render_dashboard_html() -> str:
             border: var(--border-thick);
             border-radius: var(--radius-card);
             background: var(--yellow-main);
-            padding: 8px 16px;
+            padding: 6px 12px;
             box-shadow: var(--shadow-hard);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             width: 100% !important;
             box-sizing: border-box;
             white-space: nowrap !important;
-            gap: 12px;
+            gap: 10px;
         }}
 
         .top-left {{
@@ -1662,20 +1663,20 @@ def render_dashboard_html() -> str:
             align-items: center;
             justify-content: flex-end;
             flex: 1 1 0;
-            gap: 6px;
+            gap: 5px;
         }}
 
         .brand-title {{
             background: #FFFFFF;
             color: #000000;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 900;
             letter-spacing: 0.5px;
-            padding: 0 12px;
-            height: 32px;
+            padding: 0 10px;
+            height: 30px;
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
             box-shadow: 2px 2px 0px #000000;
@@ -1689,14 +1690,14 @@ def render_dashboard_html() -> str:
             color: #000000;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
-            padding: 0 16px;
-            height: 32px;
-            min-width: 190px;
+            padding: 0 12px;
+            height: 30px;
+            min-width: 165px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 900;
             box-shadow: 2.5px 2.5px 0px #000000;
             white-space: nowrap !important;
@@ -1752,9 +1753,9 @@ def render_dashboard_html() -> str:
         }}
 
         .btn-top {{
-            padding: 0 12px;
-            height: 32px;
-            font-size: 12px;
+            padding: 0 10px;
+            height: 30px;
+            font-size: 11.5px;
             font-weight: 900;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
@@ -1762,7 +1763,7 @@ def render_dashboard_html() -> str:
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 5px;
+            gap: 4px;
             cursor: pointer;
             box-sizing: border-box;
             transition: all 0.08s ease;
@@ -1797,25 +1798,25 @@ def render_dashboard_html() -> str:
             border: var(--border-thick);
             border-radius: var(--radius-card);
             box-shadow: var(--shadow-hard);
-            padding: 6px 14px;
-            margin-bottom: 8px;
+            padding: 5px 10px;
+            margin-bottom: 6px;
             width: 100% !important;
             box-sizing: border-box;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: nowrap !important;
             white-space: nowrap !important;
         }}
         .search-box {{
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             background: #F4F0EA;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
             box-shadow: 2px 2px 0px #000000;
-            padding: 0 10px;
-            height: 28px;
-            width: 165px;
+            padding: 0 8px;
+            height: 26px;
+            width: 145px;
             flex-shrink: 0;
             box-sizing: border-box;
             position: relative;
@@ -1828,21 +1829,21 @@ def render_dashboard_html() -> str:
             border: none;
             background: transparent;
             outline: none;
-            font-size: 11.5px;
+            font-size: 11px;
             font-weight: 800;
             width: 100%;
             color: #000000;
         }}
         .kbd-hint {{
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: 900;
             background: #E5E7EB;
             color: #4B5563;
             border: 1px solid #9CA3AF;
             border-radius: 3px;
-            padding: 0 4px;
-            line-height: 14px;
-            height: 14px;
+            padding: 0 3px;
+            line-height: 13px;
+            height: 13px;
             user-select: none;
             margin-left: auto;
         }}
@@ -1861,7 +1862,7 @@ def render_dashboard_html() -> str:
         .filter-group {{
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             flex-shrink: 0;
         }}
         .filter-tab {{
@@ -1870,17 +1871,17 @@ def render_dashboard_html() -> str:
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
             box-shadow: 2px 2px 0px #000000;
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 900;
-            padding: 0 10px;
-            height: 28px;
+            padding: 0 8px;
+            height: 26px;
             flex-shrink: 0;
             cursor: pointer;
             box-sizing: border-box;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 5px;
+            gap: 4px;
             transition: all 0.08s ease;
         }}
         .filter-tab:hover {{
@@ -1905,7 +1906,7 @@ def render_dashboard_html() -> str:
             box-shadow: 2px 2px 0px #DC2626 !important;
         }}
         .tab-cnt {{
-            font-size: 10px;
+            font-size: 9.5px;
             opacity: 0.95;
             font-weight: 800;
         }}
@@ -1933,10 +1934,10 @@ def render_dashboard_html() -> str:
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
             box-shadow: 2px 2px 0px #000000;
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 900;
-            padding: 0 12px;
-            height: 28px;
+            padding: 0 10px;
+            height: 26px;
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -1970,8 +1971,8 @@ def render_dashboard_html() -> str:
 
         /* 表头新野兽派全撞色系统 (规范大小写，5h/4h 精准原样呈现) */
         thead th {{
-            padding: 7px 6px;
-            font-size: 11px;
+            padding: 6px 4px;
+            font-size: 10.5px;
             font-weight: 900;
             letter-spacing: 0.5px;
             border-right: 2px solid #000000;
@@ -1985,7 +1986,7 @@ def render_dashboard_html() -> str:
 
         .th-num {{ background: #FFFFFF; text-align: center; }}
         .th-status {{ background: #38BDF8; text-align: center; }}
-        .th-email {{ background: #FDE047; text-align: left; padding-left: 10px; }}
+        .th-email {{ background: #FDE047; text-align: left; padding-left: 6px; }}
         .th-gemini {{ background: #7DD3FC; text-align: center; }}
         .th-claude {{ background: #FB923C; text-align: center; }}
         .th-warmup {{ background: #C084FC; text-align: center; }}
@@ -2028,12 +2029,12 @@ def render_dashboard_html() -> str:
         }}
 
         tbody tr {{
-            height: 36px;
+            height: 34px;
         }}
 
         /* 所有单元格：实线 2px 纯黑分割网格，严格统一 box-sizing */
         tbody td {{
-            padding: 4px 6px;
+            padding: 3px 4px;
             border-right: 2px solid #000000;
             border-bottom: 2px solid #000000;
             vertical-align: middle;
@@ -2076,14 +2077,14 @@ def render_dashboard_html() -> str:
             box-sizing: border-box;
         }}
 
-        /* 状态徽章：严格定宽 62px × 22px + 1.5px 描边与投影，安全呼吸空间，零边框重叠 */
+        /* 状态徽章：严格定宽 58px × 21px + 1.5px 描边与投影，安全呼吸空间，零边框重叠 */
         .badge {{
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 62px;
-            height: 22px;
-            font-size: 10px;
+            width: 58px;
+            height: 21px;
+            font-size: 9.5px;
             font-weight: 900;
             border: 1.5px solid #000000;
             border-radius: var(--radius-pill);
@@ -2091,7 +2092,7 @@ def render_dashboard_html() -> str:
             line-height: 1;
             letter-spacing: 0.5px;
             box-sizing: border-box;
-            gap: 3px;
+            gap: 2.5px;
         }}
         .badge-active {{ background: #22C55E; color: #000000; }}
         .badge-standby {{ background: #38BDF8; color: #000000; }}
@@ -2111,9 +2112,9 @@ def render_dashboard_html() -> str:
             100% {{ transform: scale(0.9); opacity: 0.6; }}
         }}
 
-        /* 账号邮箱与 PRO 徽章紧凑贴合 (左内边距 10px 远离分隔线，紧跟名字 6px 间隙) */
+        /* 账号邮箱与 PRO 徽章紧凑贴合 (左内边距 6px 远离分隔线，紧跟名字 5px 间隙，彻底消灭右侧大空白) */
         .col-email {{
-            padding: 0 10px !important;
+            padding: 0 6px !important;
             white-space: nowrap !important;
             box-sizing: border-box;
             overflow: hidden;
@@ -2122,18 +2123,18 @@ def render_dashboard_html() -> str:
         .email-cell-inner {{
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             vertical-align: middle;
         }}
         .email-text {{
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 900;
             display: inline-block;
             color: #000000;
             vertical-align: middle;
             white-space: nowrap !important;
             cursor: pointer;
-            padding: 1px 3px;
+            padding: 1px 2px;
             border-radius: 3px;
             transition: background 0.1s ease;
         }}
@@ -2143,14 +2144,14 @@ def render_dashboard_html() -> str:
         }}
         
         .pro-tag {{
-            font-size: 9.5px;
+            font-size: 9px;
             font-weight: 900;
             background: var(--pink-accent);
             color: #FFFFFF;
-            width: 30px !important;
-            min-width: 30px !important;
-            max-width: 30px !important;
-            height: 18px;
+            width: 28px !important;
+            min-width: 28px !important;
+            max-width: 28px !important;
+            height: 17px;
             border: 1.5px solid #000000;
             border-radius: 3px;
             box-shadow: 1.5px 1.5px 0px #000000;
@@ -2176,9 +2177,9 @@ def render_dashboard_html() -> str:
             box-shadow: 1.5px 1.5px 0px #000000 !important;
         }}
 
-        /* 配额单元格：双轨绝对等长 + 52px 绝对对称槽位 */
+        /* 配额单元格：双轨绝对等长 + 50px 绝对对称槽位 */
         .col-quota {{
-            padding: 3px 8px !important;
+            padding: 2px 6px !important;
             box-sizing: border-box;
             overflow: hidden;
         }}
@@ -2355,19 +2356,19 @@ def render_dashboard_html() -> str:
             content: " ⏳";
         }}
         
-        /* 切换按键与在用徽章：严格定宽 58px × 24px，圆角 5px，手感充沛 */
+        /* 切换按键与在用徽章：严格定宽 54px × 22px，圆角 4px，手感充沛紧凑 */
         .btn-switch {{ 
-            width: 58px !important; 
-            min-width: 58px !important; 
-            max-width: 58px !important; 
-            height: 24px !important;
+            width: 54px !important; 
+            min-width: 54px !important; 
+            max-width: 54px !important; 
+            height: 22px !important;
             flex-shrink: 0 !important; 
             background: var(--cyan-accent); 
             color: #000000; 
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 900;
             border: 2px solid #000000;
-            border-radius: 5px;
+            border-radius: 4px;
             box-shadow: 2px 2px 0px #000000;
             padding: 0 !important;
             display: inline-flex;
@@ -2377,17 +2378,17 @@ def render_dashboard_html() -> str:
         }}
         
         .btn-warmup {{ 
-            width: 44px !important; 
-            min-width: 44px !important; 
-            max-width: 44px !important; 
-            height: 24px !important;
+            width: 38px !important; 
+            min-width: 38px !important; 
+            max-width: 38px !important; 
+            height: 22px !important;
             flex-shrink: 0 !important; 
             background: #FB923C; 
             color: #000000; 
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 900;
             border: 2px solid #000000;
-            border-radius: 5px;
+            border-radius: 4px;
             box-shadow: 2px 2px 0px #000000;
             padding: 0 !important;
             display: inline-flex;
@@ -2406,16 +2407,16 @@ def render_dashboard_html() -> str:
         }}
 
         .btn-in-use {{
-            width: 58px !important;
-            min-width: 58px !important;
-            max-width: 58px !important;
-            height: 24px !important;
+            width: 54px !important;
+            min-width: 54px !important;
+            max-width: 54px !important;
+            height: 22px !important;
             background: #4ADE80 !important;
             color: #000000 !important;
-            font-size: 11px !important;
+            font-size: 10.5px !important;
             font-weight: 900 !important;
             border: 2px solid #000000 !important;
-            border-radius: 5px !important;
+            border-radius: 4px !important;
             box-shadow: 2px 2px 0px #000000 !important;
             display: inline-flex !important;
             align-items: center !important;
@@ -2429,17 +2430,17 @@ def render_dashboard_html() -> str:
         }}
 
         .btn-unblock {{ 
-            width: 58px !important; 
-            min-width: 58px !important; 
-            max-width: 58px !important; 
-            height: 24px;
+            width: 54px !important; 
+            min-width: 54px !important; 
+            max-width: 54px !important; 
+            height: 22px;
             flex-shrink: 0 !important; 
             background: #FF4B4B; 
             color: #FFFFFF; 
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 900;
             border: 2px solid #000000;
-            border-radius: 5px;
+            border-radius: 4px;
             box-shadow: 2px 2px 0px #000000;
             padding: 0 !important;
             display: inline-flex;
@@ -2560,13 +2561,13 @@ def render_dashboard_html() -> str:
 
         .btn-in-use,
         .active-badge-action {{
-            width: 60px !important;
-            min-width: 60px !important;
-            max-width: 60px !important;
-            height: 24px !important;
+            width: 54px !important;
+            min-width: 54px !important;
+            max-width: 54px !important;
+            height: 22px !important;
             background: #4ADE80 !important;
             color: #000000 !important;
-            font-size: 11px !important;
+            font-size: 10.5px !important;
             font-weight: 900 !important;
             border: 2px solid #000000 !important;
             border-radius: var(--radius-btn) !important;
@@ -2993,7 +2994,7 @@ def render_dashboard_html() -> str:
             transform: translate(1.5px, 1.5px);
             box-shadow: 1px 1px 0px #000000;
         }}
-        /* 新野兽派底部分页控制栏 (粗黑框 + 硬投影 + 紧凑微圆角) */
+        /* 新野兽派底部分页控制栏 (紧随表格底边，margin-top: 6px，彻底消除空洞) */
         .pagination-bar {{
             display: flex;
             align-items: center;
@@ -3002,19 +3003,19 @@ def render_dashboard_html() -> str:
             border: var(--border-thick);
             border-radius: var(--radius-card);
             box-shadow: var(--shadow-hard);
-            padding: 4px 12px;
-            margin-top: 12px;
+            padding: 3px 10px;
+            margin-top: 6px;
             width: 100% !important;
             min-width: 100% !important;
             max-width: 100% !important;
             box-sizing: border-box;
-            height: 34px;
+            height: 30px;
         }}
         .page-info {{
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            font-size: 11px;
+            gap: 6px;
+            font-size: 10.5px;
             font-weight: 800;
             color: #111827;
         }}
@@ -3025,18 +3026,18 @@ def render_dashboard_html() -> str:
         .page-actions {{
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }}
         .btn-page {{
             background: #F4F0EA;
             color: #000000;
-            border: 2px solid #000000;
+            border: 1.5px solid #000000;
             border-radius: var(--radius-btn);
-            box-shadow: 2px 2px 0px #000000;
-            font-size: 10.5px;
+            box-shadow: 1.5px 1.5px 0px #000000;
+            font-size: 10px;
             font-weight: 900;
-            padding: 0 10px;
-            height: 24px;
+            padding: 0 8px;
+            height: 22px;
             cursor: pointer;
             box-sizing: border-box;
             transition: all 0.08s ease;
@@ -3044,7 +3045,7 @@ def render_dashboard_html() -> str:
         .btn-page:hover:not(:disabled) {{
             background: #FFE600;
             transform: translate(-1px, -1px);
-            box-shadow: 3px 3px 0px #000000;
+            box-shadow: 2.5px 2.5px 0px #000000;
         }}
         .btn-page:active:not(:disabled) {{
             transform: translate(1px, 1px);
@@ -3055,7 +3056,7 @@ def render_dashboard_html() -> str:
             cursor: not-allowed;
             background: transparent;
             box-shadow: none;
-            border: 1.5px solid #D1D5DB;
+            border: 1px solid #D1D5DB;
             color: #9CA3AF;
         }}
     </style>
@@ -3137,17 +3138,17 @@ def render_dashboard_html() -> str:
             </div>
         </div>
 
-        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 横向滚动防护) -->
+        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 锁定最小宽度 840px 防截断) -->
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 36px;">   <!-- 批量勾选复选框 (36px) -->
-                    <col style="width: 42px;">   <!-- # 序号+拖拽手柄 (42px) -->
-                    <col style="width: 76px;">   <!-- 状态 (76px) -->
-                    <col style="width: 190px;">  <!-- 账号+PRO (190px，自适应充沛呼吸空间，彻底根除截断) -->
-                    <col style="width: 235px;">  <!-- Gemini 配额 (235px) -->
-                    <col style="width: 235px;">  <!-- Claude 配额 (235px) -->
-                    <col style="width: 146px;">  <!-- 切换+预热+调序操作 (146px 充沛空间，消除切边) -->
+                    <col style="width: 34px;">   <!-- 批量勾选复选框 (34px) -->
+                    <col style="width: 36px;">   <!-- # 序号+拖拽手柄 (36px) -->
+                    <col style="width: 68px;">   <!-- 状态 (68px) -->
+                    <col style="width: 126px;">  <!-- 账号+PRO (126px，高密紧凑，彻底消灭右侧大空白) -->
+                    <col style="width: 220px;">  <!-- Gemini 配额 (220px) -->
+                    <col style="width: 220px;">  <!-- Claude 配额 (220px) -->
+                    <col style="width: 136px;">  <!-- 切换+预热+调序操作 (136px，居中无截断) -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -3176,7 +3177,7 @@ def render_dashboard_html() -> str:
             </table>
         </div>
 
-        <!-- 新野兽派底部分页与状态指示条 (单页上限 15 个，自适应翻页) -->
+        <!-- 新野兽派底部分页与状态指示条 (单页上限 15 个，紧贴表格底部) -->
         <div class="pagination-bar font-mono" id="pagination-bar">
             <div class="page-info">
                 <span>单页上限: <b>15</b> 个</span>
@@ -3189,6 +3190,11 @@ def render_dashboard_html() -> str:
                 <button class="btn btn-page font-mono" id="btn-prev-page" onclick="changePage(-1)" disabled title="上一页">← 上一页</button>
                 <button class="btn btn-page font-mono" id="btn-next-page" onclick="changePage(1)" disabled title="下一页">下一页 →</button>
             </div>
+        </div>
+
+        <!-- 底端紧凑高密收束条 (杜绝纵向过度拉伸悬空大白板) -->
+        <div style="margin-top: 6px; padding: 4px 8px; text-align: center; font-size: 10px; font-weight: 800; color: #4B5563; background: #E5E7EB; border: 1.5px solid #000000; border-radius: 6px; box-shadow: 1.5px 1.5px 0px #000000; width: 100%; box-sizing: border-box;" class="font-mono">
+            ⚡ ANTIGRAVITY HUB · 127.0.0.1:18088 · 全局每小时错峰预热防线 · 锁定最小宽度 840px
         </div>
     </div>
 
