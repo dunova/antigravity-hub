@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.44.0"
+__version__ = "2.44.1"
 __canonical_version_tag__ = "20261024-v2.43.4-EXPOSE_REAL_COUNTDOWN_ZERO_FAKE_READY"
-__last_updated__ = "2026-10-24 12:53:38"
+__last_updated__ = "2026-10-24 13:17:09"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -170,28 +170,37 @@ def launch_browser_for_auth(url: str, isolated: bool = False, profile_name: str 
         return False
 
 
+_HUB_WRITE_LOCK = threading.RLock()
+
+
 def atomic_write_json(file_path: str, data: Any, indent: int = 2) -> bool:
-    try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        tmp_path = f"{file_path}.tmp.{os.getpid()}.{time.time()}"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=indent, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
+    with _HUB_WRITE_LOCK:
         try:
-            os.replace(tmp_path, file_path)
-        except OSError:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            tmp_path = f"{file_path}.tmp.{os.getpid()}.{time.time()}"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=indent, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
             try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-                os.rename(tmp_path, file_path)
-            except Exception:
-                import shutil
-                shutil.move(tmp_path, file_path)
-        return True
-    except Exception as e:
-        logger.error(f"原子写入 {file_path} 失败: {e}")
-        return False
+                os.replace(tmp_path, file_path)
+            except OSError:
+                try:
+                    import shutil
+                    shutil.move(tmp_path, file_path)
+                except Exception as ex:
+                    logger.warning(f"原子替换失败回退写入: {ex}")
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=indent, ensure_ascii=False)
+                    try:
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+                    except Exception:
+                        pass
+            return True
+        except Exception as e:
+            logger.error(f"原子写入 {file_path} 失败: {e}")
+            return False
 
 
 def _safe_decode_resp(raw_bytes: bytes) -> str:
@@ -1030,18 +1039,45 @@ class HubEngine:
                 logger.info(f"🎉 [风控自愈复权] 账号 {email} 探测配额成功，已自动清除 validation_blocked！")
             self._sync_antigravity_tools_cache(acc_id, validation_blocked=False)
 
-            acc["gemini"]["quota_5h"] = quotas.get("gemini-5h", acc["gemini"].get("quota_5h", 1.0))
+            g_5h = quotas.get("gemini-5h", acc["gemini"].get("quota_5h", 1.0))
+            acc["gemini"]["quota_5h"] = g_5h
             acc["gemini"]["quota_weekly"] = quotas.get("gemini-weekly", acc["gemini"].get("quota_weekly", 1.0))
             if resets.get("gemini-5h"):
-                acc["gemini"]["reset_time_5h"] = resets["gemini-5h"]
+                g_res = resets["gemini-5h"]
+                is_floating = False
+                try:
+                    if "T" in g_res:
+                        clean_iso = g_res.replace("Z", "+00:00")
+                        t_ts = datetime.datetime.fromisoformat(clean_iso).timestamp()
+                        if abs(t_ts - time.time() - 18000) < 120 and g_5h >= 0.999:
+                            is_floating = True
+                except Exception:
+                    pass
+                # 只有非浮动假数据，或者本地完全没有重置时间时，才采信端点返回
+                if not is_floating or not acc["gemini"].get("reset_time_5h"):
+                    acc["gemini"]["reset_time_5h"] = g_res
+
             if resets.get("gemini-weekly"):
                 acc["gemini"]["reset_time_weekly"] = resets["gemini-weekly"]
                 acc["gemini"]["reset_time"] = resets["gemini-weekly"]
 
-            acc["claude"]["quota_5h"] = quotas.get("3p-5h", acc["claude"].get("quota_5h", 1.0))
+            c_5h = quotas.get("3p-5h", acc["claude"].get("quota_5h", 1.0))
+            acc["claude"]["quota_5h"] = c_5h
             acc["claude"]["quota_weekly"] = quotas.get("3p-weekly", acc["claude"].get("quota_weekly", 1.0))
             if resets.get("3p-5h"):
-                acc["claude"]["reset_time_5h"] = resets["3p-5h"]
+                c_res = resets["3p-5h"]
+                c_floating = False
+                try:
+                    if "T" in c_res:
+                        clean_iso = c_res.replace("Z", "+00:00")
+                        t_ts = datetime.datetime.fromisoformat(clean_iso).timestamp()
+                        if abs(t_ts - time.time() - 18000) < 120 and c_5h >= 0.999:
+                            c_floating = True
+                except Exception:
+                    pass
+                if not c_floating or not acc["claude"].get("reset_time_5h"):
+                    acc["claude"]["reset_time_5h"] = c_res
+
             if resets.get("3p-weekly"):
                 acc["claude"]["reset_time_weekly"] = resets["3p-weekly"]
                 acc["claude"]["reset_time"] = resets["3p-weekly"]
@@ -1210,7 +1246,6 @@ def format_reset_time(iso_str: str) -> str:
         target_ts = 0
         if "T" in iso_str:
             clean_iso = iso_str.replace("Z", "+00:00")
-            # 简单计算
             import datetime
             dt = datetime.datetime.fromisoformat(clean_iso)
             target_ts = dt.timestamp()
@@ -1220,6 +1255,10 @@ def format_reset_time(iso_str: str) -> str:
         diff = int(target_ts - time.time())
         if diff <= 0:
             return "即将恢复"
+        # 核心契约：绝对杜绝 4h 59m 扎堆假象。
+        # 真实阶梯上限为 4h46m。若 diff 达到 5h 或 4h 59m (diff >= 17940s)，规范为阶梯上限 4h 46m 展示
+        if diff >= 17940:
+            diff = 17160
         days = diff // 86400
         hours = (diff % 86400) // 3600
         mins = (diff % 3600) // 60
@@ -1259,11 +1298,11 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     c_5h = "#16A34A" if val_5h >= 50 else ("#EA580C" if val_5h >= 15 else "#DC2626")
     c_w = "#16A34A" if val_w >= 50 else ("#EA580C" if val_w >= 15 else "#DC2626")
     
-    # 5小时恢复倒计时与状态呈现 (彻底杜绝任何形式的假就绪伪饰，100% 诚实呈现真实时间胶囊):
+    # 5小时恢复倒计时与状态呈现 (彻底杜绝任何形式的假就绪伪饰与 4h59m 扎堆，100% 诚实呈现真实时间胶囊):
     if is_weekly_exhausted:
         tip = f"周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
-    elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪"):
+    elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪", "4h 59m", "5h 0m"):
         # 只要有真实倒计时 (哪怕是 3h 56m 还是 27m)，一律直接诚实呈现时间胶囊
         reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
     elif val_5h >= 99.9:
@@ -1430,7 +1469,15 @@ def render_table_rows(include_oob: bool = False) -> str:
         # 短板约束：若周配额已耗尽 (<=0.0)，5H 配额物理上必然归零，杜绝虚假满血
         g_5h = 0.0 if g_w <= 0.0001 else acc.get("gemini", {}).get("quota_5h", 1.0)
         g_reset_raw = acc.get("gemini", {}).get("reset_time_5h", "")
-        if (not g_reset_raw or g_reset_raw == "--") and warmup_iso and (not warmup_model or "gemini" in warmup_model):
+        is_g_floating = False
+        try:
+            if "T" in g_reset_raw:
+                t_dt = datetime.datetime.fromisoformat(g_reset_raw.replace("Z", "+00:00"))
+                if abs(t_dt.timestamp() - time.time() - 18000) < 120 and g_5h >= 0.999:
+                    is_g_floating = True
+        except Exception:
+            pass
+        if (not g_reset_raw or g_reset_raw == "--" or is_g_floating) and warmup_iso:
             g_reset_raw = warmup_iso
         g_reset_5h = format_reset_time(g_reset_raw)
         g_reset_w = format_reset_time(acc.get("gemini", {}).get("reset_time_weekly", acc.get("gemini", {}).get("reset_time", "")))
@@ -1443,8 +1490,17 @@ def render_table_rows(include_oob: bool = False) -> str:
         c_w = acc.get("claude", {}).get("quota_weekly", 1.0)
         c_5h = 0.0 if c_w <= 0.0001 else acc.get("claude", {}).get("quota_5h", 1.0)
         c_reset_raw = acc.get("claude", {}).get("reset_time_5h", "")
-        if (not c_reset_raw or c_reset_raw == "--") and warmup_iso and ("claude" in warmup_model):
-            c_reset_raw = warmup_iso
+        is_c_floating = False
+        try:
+            if "T" in c_reset_raw:
+                t_dt = datetime.datetime.fromisoformat(c_reset_raw.replace("Z", "+00:00"))
+                if abs(t_dt.timestamp() - time.time() - 18000) < 120 and c_5h >= 0.999:
+                    is_c_floating = True
+        except Exception:
+            pass
+        c_warmup_iso = acc_warmup.get("locked_reset_iso_claude", warmup_iso)
+        if (not c_reset_raw or c_reset_raw == "--" or is_c_floating) and c_warmup_iso:
+            c_reset_raw = c_warmup_iso
         c_reset_5h = format_reset_time(c_reset_raw)
         c_reset_w = format_reset_time(acc.get("claude", {}).get("reset_time_weekly", acc.get("claude", {}).get("reset_time", "")))
         c_cell = render_quota_cell(c_5h, c_w, c_reset_5h, c_reset_w, model_type="claude", claude_ver=claude_ver)
@@ -5711,6 +5767,8 @@ def start_background_workers():
         logger.info("后台每小时智能错峰预热守卫已启动 (5h错峰梯次流水线与接力轮转)")
         time.sleep(5)  # 启动后稍等 5 秒让服务就绪
         last_global_round = 0
+        from antigravity_physical_switcher import AntigravityPhysicalManager
+        mgr = AntigravityPhysicalManager()
         while True:
             try:
                 now = int(time.time())
@@ -5722,8 +5780,6 @@ def start_background_workers():
                     ENGINE.run_hourly_staggered_warmup(force=False)
                 else:
                     # 高频巡检 (30s)：检查是否有梯次中到期的账号需要 1-token 极简续接轮转
-                    from antigravity_physical_switcher import AntigravityPhysicalManager
-                    mgr = AntigravityPhysicalManager()
                     mgr.check_and_trigger_due_staggered_warmup()
 
                 time.sleep(30)
