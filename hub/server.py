@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.44.2"
+__version__ = "2.44.3"
 __canonical_version_tag__ = "20261024-v2.44.2-PURGE_FAKE_17160_RESTORE_PHYSICAL_COUNTDOWN"
-__last_updated__ = "2026-10-24 13:36:28"
+__last_updated__ = "2026-10-24 13:58:53"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
