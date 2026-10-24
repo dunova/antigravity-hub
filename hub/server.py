@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.43.2"
-__canonical_version_tag__ = "20261024-v2.43.2-REFINED_SVG_MASK_NO_BLACK_BG"
-__last_updated__ = "2026-10-24 12:14:53"
+__version__ = "2.43.3"
+__canonical_version_tag__ = "20261024-v2.43.3-PURE_ASTERISK_MASK_ZERO_DIGIT_LETTER"
+__last_updated__ = "2026-10-24 12:20:19"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -3704,13 +3704,14 @@ def render_dashboard_html() -> str:
 
     <script>
 
-        // 🔒 账号脱敏打码 (Magpie 隐私保护体系)
+        // 🔒 账号脱敏打码 (纯星号掩码 · 零字母零数字 · 防任何猜测)
         let isMasked = localStorage.getItem('hub_account_mask') === '1';
 
         function maskShortName(name) {{
             if (!name) return '';
-            if (name.length <= 3) return name[0] + '***';
-            return name.slice(0, 2) + '***' + name.slice(-2);
+            // 彻底切除所有数字和字母，全量替换为纯星号掩码（与字符等长，至少6位）
+            const len = Math.max(6, name.length);
+            return '*'.repeat(len);
         }}
 
         const SVG_MASK_EYE_OFF = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
@@ -3736,18 +3737,29 @@ def render_dashboard_html() -> str:
             }}
             if (cfgCb) cfgCb.checked = isMasked;
 
-            // 更新表格每一行的账号文本
+            // 更新表格每一行的账号文本与防悬停泄密
             document.querySelectorAll('.email-text').forEach(el => {{
                 let rawShort = el.getAttribute('data-short-name');
                 if (!rawShort) {{
                     rawShort = el.innerText.trim();
                     el.setAttribute('data-short-name', rawShort);
                 }}
-                el.innerText = isMasked ? maskShortName(rawShort) : rawShort;
+                let rawEmail = el.getAttribute('data-raw-email') || rawShort;
+                if (!el.getAttribute('data-orig-title')) {{
+                    el.setAttribute('data-orig-title', el.getAttribute('title') || ('点击复制: ' + rawEmail));
+                }}
+                if (isMasked) {{
+                    el.innerText = maskShortName(rawShort);
+                    el.title = "已脱敏 (点击复制凭据)";
+                }} else {{
+                    el.innerText = rawShort;
+                    el.title = el.getAttribute('data-orig-title') || ('点击复制: ' + rawEmail);
+                }}
             }});
 
-            // 更新顶栏活跃账号胶囊文本
+            // 更新顶栏活跃账号胶囊文本与防悬停泄密
             const activeValEl = document.querySelector('.active-email-val');
+            const activePillEl = document.getElementById('active-email-pill');
             if (activeValEl) {{
                 let rawActive = activeValEl.getAttribute('data-active-email');
                 if (!rawActive) {{
@@ -3755,6 +3767,16 @@ def render_dashboard_html() -> str:
                     activeValEl.setAttribute('data-active-email', rawActive);
                 }}
                 activeValEl.innerText = isMasked ? maskShortName(rawActive) : rawActive;
+            }}
+            if (activePillEl) {{
+                if (!activePillEl.getAttribute('data-orig-title')) {{
+                    activePillEl.setAttribute('data-orig-title', activePillEl.getAttribute('title') || '当前活跃账号');
+                }}
+                if (isMasked) {{
+                    activePillEl.title = "活跃账号: 已脱敏保护 (点击复制)";
+                }} else {{
+                    activePillEl.title = activePillEl.getAttribute('data-orig-title') || "当前活跃账号 (点击复制)";
+                }}
             }}
         }}
 
@@ -4722,6 +4744,7 @@ def render_dashboard_html() -> str:
 
             updateSortBadges();
             restoreSelectionState();
+            applyAccountMask();
         }}
 
         // 支持 URL 参数 ?filter=usable 自动触发筛选与 ?sort=gemini_w 自动触发排序
