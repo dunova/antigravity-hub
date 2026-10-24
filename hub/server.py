@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.43.1"
-__canonical_version_tag__ = "20261024-v2.43.1-TOGGLE_MASK_MAGPIE_HIGH_DENSITY_ZERO_WHITESPACE"
-__last_updated__ = "2026-10-24 12:10:40"
+__version__ = "2.43.2"
+__canonical_version_tag__ = "20261024-v2.43.2-REFINED_SVG_MASK_NO_BLACK_BG"
+__last_updated__ = "2026-10-24 12:14:53"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -1859,27 +1859,31 @@ def render_dashboard_html() -> str:
         .btn-top-gemini {{ background: #4ADE80; color: #000000; font-weight: 900; }}
         .btn-top-gemini:hover {{ background: #22C55E; }}
         .btn-mask {{
-            background: #000000 !important;
-            color: #FFFFFF !important;
-            font-weight: 900 !important;
-            border: 2px solid #000000 !important;
-            box-shadow: 2px 2px 0px #000000 !important;
-            padding: 0 7px !important;
+            background: #F1F5F9;
+            color: #000000;
+            font-weight: 900;
+            border: 2px solid #000000;
+            box-shadow: 2px 2px 0px #000000;
+            padding: 0 7px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
         }}
         .btn-mask:hover {{
-            background: #27272A !important;
+            background: #E2E8F0;
             transform: translate(-1px, -1px);
-            box-shadow: 3px 3px 0px #000000 !important;
+            box-shadow: 3px 3px 0px #000000;
         }}
         .btn-mask.active {{
-            background: #FFE600 !important;
-            color: #000000 !important;
-            font-weight: 900 !important;
-            border: 2px solid #000000 !important;
-            box-shadow: 2px 2px 0px #000000 !important;
+            background: #FFE600;
+            color: #000000;
+            font-weight: 900;
+            border: 2px solid #000000;
+            box-shadow: 2px 2px 0px #000000;
         }}
         .btn-mask.active:hover {{
-            background: #FACC15 !important;
+            background: #FACC15;
         }}
         .btn-settings {{ background: #F1F5F9; color: #000000; font-weight: 900; }}
         .btn-settings:hover {{ background: #E2E8F0; }}
@@ -3317,7 +3321,7 @@ def render_dashboard_html() -> str:
                 <button class="btn btn-top btn-mask font-mono" id="btn-mask-toggle"
                         onclick="toggleAccountMask(); event.preventDefault(); event.stopPropagation();"
                         title="按一下打码，再按一下明文 (快捷键: M)">
-                    <span id="btn-mask-icon">🕶️</span> <span id="btn-mask-text">打码</span>
+                    <span id="btn-mask-icon" style="display:inline-flex; align-items:center;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg></span><span id="btn-mask-text">打码</span>
                 </button>
                 <button class="btn btn-top btn-settings font-mono"
                         onclick="openSettingsModal(); event.preventDefault(); event.stopPropagation();"
@@ -3709,6 +3713,9 @@ def render_dashboard_html() -> str:
             return name.slice(0, 2) + '***' + name.slice(-2);
         }}
 
+        const SVG_MASK_EYE_OFF = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+        const SVG_MASK_EYE_ON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+
         function applyAccountMask() {{
             const btn = document.getElementById('btn-mask-toggle');
             const maskIcon = document.getElementById('btn-mask-icon');
@@ -3717,12 +3724,12 @@ def render_dashboard_html() -> str:
             if (btn) {{
                 if (isMasked) {{
                     btn.classList.add('active');
-                    if (maskIcon) maskIcon.innerText = '👁️';
+                    if (maskIcon) maskIcon.innerHTML = SVG_MASK_EYE_ON;
                     if (maskText) maskText.innerText = '明文';
                     btn.title = "当前处于打码脱敏状态，按一下显示【明文】(快捷键: M)";
                 }} else {{
                     btn.classList.remove('active');
-                    if (maskIcon) maskIcon.innerText = '🕶️';
+                    if (maskIcon) maskIcon.innerHTML = SVG_MASK_EYE_OFF;
                     if (maskText) maskText.innerText = '打码';
                     btn.title = "当前处于明文状态，按一下进行【打码】脱敏 (快捷键: M)";
                 }}
