@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.44.1"
-__canonical_version_tag__ = "20261024-v2.43.4-EXPOSE_REAL_COUNTDOWN_ZERO_FAKE_READY"
-__last_updated__ = "2026-10-24 13:17:09"
+__version__ = "2.44.2"
+__canonical_version_tag__ = "20261024-v2.44.2-PURGE_FAKE_17160_RESTORE_PHYSICAL_COUNTDOWN"
+__last_updated__ = "2026-10-24 13:36:28"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -1255,10 +1255,6 @@ def format_reset_time(iso_str: str) -> str:
         diff = int(target_ts - time.time())
         if diff <= 0:
             return "即将恢复"
-        # 核心契约：绝对杜绝 4h 59m 扎堆假象。
-        # 真实阶梯上限为 4h46m。若 diff 达到 5h 或 4h 59m (diff >= 17940s)，规范为阶梯上限 4h 46m 展示
-        if diff >= 17940:
-            diff = 17160
         days = diff // 86400
         hours = (diff % 86400) // 3600
         mins = (diff % 3600) // 60
@@ -1302,8 +1298,8 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     if is_weekly_exhausted:
         tip = f"周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
-    elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪", "4h 59m", "5h 0m"):
-        # 只要有真实倒计时 (哪怕是 3h 56m 还是 27m)，一律直接诚实呈现时间胶囊
+    elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪"):
+        # 只要有真实倒计时，一律直接诚实呈现时间胶囊
         reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
     elif val_5h >= 99.9:
         reset_5h_html = '<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额满血可用">满额</span>'
