@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 __version__ = "2.44.7"
 __canonical_version_tag__ = "20261024-v2.44.2-PURGE_FAKE_17160_RESTORE_PHYSICAL_COUNTDOWN"
-__last_updated__ = "2026-10-25 13:05:03"
+__last_updated__ = "2026-10-25 13:10:02"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -2188,6 +2188,9 @@ def render_dashboard_html() -> str:
 
         /* 状态单元格：0 内边距 + flex 完全居中，彻底根除边框重叠 */
         .col-status {{
+            width: 70px !important;
+            min-width: 70px !important;
+            max-width: 70px !important;
             padding: 0 !important;
             text-align: center;
             vertical-align: middle;
@@ -2305,6 +2308,9 @@ def render_dashboard_html() -> str:
 
         /* 配额单元格：双轨绝对等长 + 50px 绝对对称槽位 */
         .col-quota {{
+            width: 212px !important;
+            min-width: 212px !important;
+            max-width: 212px !important;
             padding: 2px 4px !important;
             box-sizing: border-box;
             overflow: hidden;
@@ -2444,6 +2450,9 @@ def render_dashboard_html() -> str:
 
         /* 操作按钮容器与定宽按键 */
         .col-actions {{
+            width: 132px !important;
+            min-width: 132px !important;
+            max-width: 132px !important;
             padding: 0 !important;
             text-align: center;
             vertical-align: middle;
@@ -3414,12 +3423,12 @@ def render_dashboard_html() -> str:
             <table>
                 <colgroup>
                     <col style="width: 28px;">   <!-- 批量勾选复选框 (28px 居中) -->
-                    <col style="width: 30px;">   <!-- # 序号+拖拽手柄 (30px 居中) -->
-                    <col style="width: 72px;">   <!-- 状态 (72px 扩宽，彻底根除 STANDBY/ACTIVE 截断) -->
-                    <col style="width: 96px;">   <!-- 账号 (96px 紧凑 Mono) -->
-                    <col style="width: 216px;">  <!-- Gemini 配额 (216px 水平绝对居中) -->
-                    <col style="width: 216px;">  <!-- Claude 配额 (216px 水平绝对居中) -->
-                    <col style="width: 126px;">  <!-- 操作 (126px 居中宽裕) -->
+                    <col style="width: 28px;">   <!-- # 序号+拖拽手柄 (28px 居中) -->
+                    <col style="width: 70px;">   <!-- 状态 (70px 扩宽，彻底根除 STANDBY/ACTIVE 截断) -->
+                    <col style="width: 90px;">   <!-- 账号 (90px 紧凑 Mono) -->
+                    <col style="width: 212px;">  <!-- Gemini 配额 (212px 水平绝对居中) -->
+                    <col style="width: 212px;">  <!-- Claude 配额 (212px 水平绝对居中) -->
+                    <col style="width: 132px;">  <!-- 操作 (132px 宽裕无截断，▲▼完整展示) -->
                 </colgroup>
                 <thead>
                     <tr>
