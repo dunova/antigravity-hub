@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.44.6"
+__version__ = "2.44.7"
 __canonical_version_tag__ = "20261024-v2.44.2-PURGE_FAKE_17160_RESTORE_PHYSICAL_COUNTDOWN"
-__last_updated__ = "2026-10-25 12:27:39"
+__last_updated__ = "2026-10-25 13:05:03"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -1521,7 +1521,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             data-claude-5h="{c_5h}"
             data-claude-w="{c_w}"
             data-is-active="{'1' if is_active else '0'}">
-            <td class="col-center col-check" style="background-color: {row_bg}; width: 34px; padding: 0 4px;"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
+            <td class="col-center col-check" style="background-color: {row_bg};"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
             <td class="col-center font-mono num-col" style="background-color: {row_bg};">{num_html}</td>
             <td class="col-status" style="background-color: {row_bg};"><div class="status-cell-wrap">{badge_html}</div></td>
             <td class="col-email" style="background-color: {row_bg};">
@@ -1669,9 +1669,9 @@ def render_dashboard_html() -> str:
 
         /* 🚀 官方高密显瘦黄金版心：严格锁定 834px，配额线瘦身50%，零按键挤压与截断 */
         .app-container {{
-            width: 834px !important;
-            max-width: 834px !important;
-            min-width: 834px !important;
+            width: 784px !important;
+            max-width: 784px !important;
+            min-width: 784px !important;
             margin: 0 auto;
             box-sizing: border-box;
             padding: 0 4px;
@@ -2208,16 +2208,17 @@ def render_dashboard_html() -> str:
             align-items: center;
             justify-content: center;
             width: 58px;
-            height: 21px;
-            font-size: 9.5px;
+            height: 20px;
+            font-size: 9px;
             font-weight: 900;
             border: 1.5px solid #000000;
             border-radius: var(--radius-pill);
             box-shadow: 1.5px 1.5px 0px #000000;
             line-height: 1;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.2px;
             box-sizing: border-box;
-            gap: 2.5px;
+            gap: 2px;
+            white-space: nowrap !important;
         }}
         .badge-active {{ background: #22C55E; color: #000000; }}
         .badge-standby {{ background: #38BDF8; color: #000000; }}
@@ -2304,13 +2305,17 @@ def render_dashboard_html() -> str:
 
         /* 配额单元格：双轨绝对等长 + 50px 绝对对称槽位 */
         .col-quota {{
-            padding: 2px 6px !important;
+            padding: 2px 4px !important;
             box-sizing: border-box;
             overflow: hidden;
+            text-align: center;
+            vertical-align: middle;
         }}
         .q-cell {{
             display: flex;
             flex-direction: column;
+            align-items: center;
+            justify-content: center;
             gap: 2.5px;
             width: 100%;
             box-sizing: border-box;
@@ -2318,6 +2323,7 @@ def render_dashboard_html() -> str:
         .q-row {{
             display: flex;
             align-items: center;
+            justify-content: center; /* 核心：水平绝对居中，彻底消灭右侧大空洞 */
             gap: 5px;
             font-size: 10.5px;
             font-weight: 900;
@@ -2700,11 +2706,11 @@ def render_dashboard_html() -> str:
 
         /* 🔲 Neo-Brutalism 复选框与批量控制 */
         .th-check, .col-check {{
-            width: 34px !important;
-            min-width: 34px !important;
-            max-width: 34px !important;
+            width: 28px !important;
+            min-width: 28px !important;
+            max-width: 28px !important;
             text-align: center !important;
-            padding: 0 4px !important;
+            padding: 0 !important;
             vertical-align: middle !important;
             box-sizing: border-box !important;
         }}
@@ -3407,13 +3413,13 @@ def render_dashboard_html() -> str:
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 32px;">   <!-- 批量勾选复选框 (32px) -->
-                    <col style="width: 32px;">   <!-- # 序号+拖拽手柄 (32px) -->
-                    <col style="width: 62px;">   <!-- 状态 (62px) -->
-                    <col style="width: 100px;">  <!-- 账号 (100px) -->
-                    <col style="width: 236px;">  <!-- Gemini 配额 (236px 舒展对齐) -->
-                    <col style="width: 236px;">  <!-- Claude 配额 (236px 舒展对齐) -->
-                    <col style="width: 136px;">  <!-- 操作 (136px 宽裕无截断) -->
+                    <col style="width: 28px;">   <!-- 批量勾选复选框 (28px 居中) -->
+                    <col style="width: 30px;">   <!-- # 序号+拖拽手柄 (30px 居中) -->
+                    <col style="width: 72px;">   <!-- 状态 (72px 扩宽，彻底根除 STANDBY/ACTIVE 截断) -->
+                    <col style="width: 96px;">   <!-- 账号 (96px 紧凑 Mono) -->
+                    <col style="width: 216px;">  <!-- Gemini 配额 (216px 水平绝对居中) -->
+                    <col style="width: 216px;">  <!-- Claude 配额 (216px 水平绝对居中) -->
+                    <col style="width: 126px;">  <!-- 操作 (126px 居中宽裕) -->
                 </colgroup>
                 <thead>
                     <tr>
