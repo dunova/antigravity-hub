@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.44.4"
+__version__ = "2.44.5"
 __canonical_version_tag__ = "20261024-v2.44.2-PURGE_FAKE_17160_RESTORE_PHYSICAL_COUNTDOWN"
-__last_updated__ = "2026-10-24 14:14:49"
+__last_updated__ = "2026-10-25 12:12:45"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -1640,16 +1640,16 @@ def render_dashboard_html() -> str:
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Space Grotesk", sans-serif;
-            padding: 4px 6px 8px 6px;
+            padding: 4px 0 8px 0;
             margin: 0;
             width: 100%;
             font-size: 12px;
             line-height: 1.2;
-            min-width: 750px !important;
+            min-width: 724px !important;
             -webkit-font-smoothing: antialiased;
             display: flex;
             flex-direction: column;
-            align-items: stretch;
+            align-items: center;
             justify-content: flex-start;
             overflow-x: hidden;
             overflow-y: auto;
@@ -1667,14 +1667,15 @@ def render_dashboard_html() -> str:
             font-variant-numeric: tabular-nums;
         }}
 
-        /* 🚀 满格响应式版心：废除写死 770px 导致的侧边巨大白板，100% 贴合视口弹性拉伸 */
+        /* 🚀 官方高密显瘦版心：锁定 724px 精准宽度，线条减半，紧凑整洁 */
         .app-container {{
-            width: 100%;
-            min-width: 750px;
-            margin: 0;
+            width: 724px !important;
+            max-width: 724px !important;
+            min-width: 724px !important;
+            margin: 0 auto;
             box-sizing: border-box;
             padding: 0;
-            flex: 1;
+            flex-shrink: 0;
             display: flex;
             flex-direction: column;
             gap: 6px;
@@ -1736,7 +1737,7 @@ def render_dashboard_html() -> str:
         }}
 
         .brand-title {{
-            background: #FFFFFF;
+            background: #00F0FF;
             color: #000000;
             font-size: 11.5px;
             font-weight: 900;
@@ -1755,11 +1756,11 @@ def render_dashboard_html() -> str:
             user-select: none;
         }}
         .active-pill {{
-            background: #FFFFFF;
-            color: #000000;
+            background: #DCFCE7;
+            color: #065F46;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
-            padding: 0 10px;
+            padding: 0 8px;
             height: 28px;
             min-width: auto !important;
             display: inline-flex;
@@ -1776,36 +1777,36 @@ def render_dashboard_html() -> str:
             transition: all 0.08s ease;
         }}
         .active-pill:hover {{
-            background: #FFE600;
+            background: #BBF7D0;
             transform: translate(-1px, -1px);
             box-shadow: 3px 3px 0px #000000;
         }}
-
         .active-pill.locked-manual {{
             background: #FFE4E6;
             border-color: #E11D48;
+            color: #9F1239;
         }}
         .active-pill.locked-manual:hover {{
             background: #FECDD3;
         }}
         .version-badge {{
-            background: #FFFFFF;
-            color: #000000;
+            background: #FEF08A;
+            color: #713F12;
             border: 1.5px solid #000000;
             border-radius: var(--radius-btn);
             padding: 0 5px;
-            height: 22px;
+            height: 20px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 9.5px;
             font-weight: 800;
-            box-shadow: 1.5px 1.5px 0px #000000;
+            box-shadow: 1px 1px 0px #000000;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
             user-select: none;
             letter-spacing: -0.2px;
-            margin-left: 3px;
+            margin-left: 2px;
         }}
         .lock-tag {{
             font-size: 10px;
@@ -1910,16 +1911,16 @@ def render_dashboard_html() -> str:
         .control-bar {{
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-start;
             background: #FFFFFF;
             border: var(--border-thick);
             border-radius: var(--radius-card);
             box-shadow: var(--shadow-hard);
-            padding: 5px 10px;
+            padding: 5px 8px;
             margin-bottom: 6px;
             width: 100% !important;
             box-sizing: border-box;
-            gap: 6px;
+            gap: 8px;
             flex-wrap: nowrap !important;
             white-space: nowrap !important;
         }}
@@ -2339,9 +2340,12 @@ def render_dashboard_html() -> str:
         .tag-5h-c {{ background: #FB923C; color: #000000; }}
         .tag-w-c {{ background: #FB923C; color: #000000; }}
 
-        /* 进度条：两行等宽 flex: 1 1 auto，上下垂直绝对等长！ */
+        /* 进度条：定宽 72px (比原 170px 缩减 57%)，紧凑高密，线条精练！ */
         .q-track {{
-            flex: 1 1 auto !important;
+            width: 72px !important;
+            min-width: 72px !important;
+            max-width: 72px !important;
+            flex-shrink: 0 !important;
             height: 8px;
             background: #FFFFFF;
             border: 1.5px solid #000000;
@@ -2352,24 +2356,24 @@ def render_dashboard_html() -> str:
         }}
         .q-fill {{ height: 100%; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }}
         
-        /* 百分比数值：严格定宽 44px，居右对齐，等宽防抖 */
+        /* 百分比数值：严格定宽 38px，居右对齐，等宽防抖 */
         .q-val {{
-            width: 44px !important;
-            min-width: 44px !important;
-            max-width: 44px !important;
+            width: 38px !important;
+            min-width: 38px !important;
+            max-width: 38px !important;
             flex-shrink: 0 !important;
             text-align: right;
             font-weight: 900;
-            font-size: 11px;
+            font-size: 10px;
             box-sizing: border-box;
             white-space: nowrap !important;
         }}
 
-        /* 52px 固定重置时间槽 */
+        /* 48px 固定重置时间槽 */
         .q-slot {{
-            width: 52px !important;
-            min-width: 52px !important;
-            max-width: 52px !important;
+            width: 48px !important;
+            min-width: 48px !important;
+            max-width: 48px !important;
             flex-shrink: 0 !important;
             display: inline-flex;
             justify-content: center;
@@ -2377,9 +2381,9 @@ def render_dashboard_html() -> str:
             box-sizing: border-box;
         }}
         .q-reset {{
-            width: 50px !important;
-            min-width: 50px !important;
-            max-width: 50px !important;
+            width: 46px !important;
+            min-width: 46px !important;
+            max-width: 46px !important;
             flex-shrink: 0 !important;
             font-size: 9px;
             font-weight: 900;
@@ -3314,8 +3318,6 @@ def render_dashboard_html() -> str:
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                     HUB
                 </span>
-            </div>
-            <div class="top-center">
                 {active_pill_html}
                 <span class="version-badge font-mono" title="Antigravity Hub v{__version__}">v{__version__}</span>
             </div>
@@ -3399,13 +3401,13 @@ def render_dashboard_html() -> str:
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 32px;">   <!-- 批量勾选复选框 -->
-                    <col style="width: 34px;">   <!-- # 序号+拖拽手柄 -->
-                    <col style="width: 62px;">   <!-- 状态 -->
-                    <col style="width: 100px;">  <!-- 账号 -->
-                    <col style="width: calc((100% - 352px) / 2);">  <!-- Gemini 配额 (弹性充满) -->
-                    <col style="width: calc((100% - 352px) / 2);">  <!-- Claude 配额 (弹性充满) -->
-                    <col style="width: 124px;">  <!-- 操作 -->
+                    <col style="width: 30px;">   <!-- 批量勾选复选框 (30px) -->
+                    <col style="width: 30px;">   <!-- # 序号+拖拽手柄 (30px) -->
+                    <col style="width: 56px;">   <!-- 状态 (56px) -->
+                    <col style="width: 90px;">   <!-- 账号 (90px) -->
+                    <col style="width: 202px;">  <!-- Gemini 配额 (202px 精简紧凑) -->
+                    <col style="width: 202px;">  <!-- Claude 配额 (202px 精简紧凑) -->
+                    <col style="width: 114px;">  <!-- 操作 (114px) -->
                 </colgroup>
                 <thead>
                     <tr>
