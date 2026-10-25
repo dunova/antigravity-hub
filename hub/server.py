@@ -33,9 +33,9 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.44.5"
+__version__ = "2.44.6"
 __canonical_version_tag__ = "20261024-v2.44.2-PURGE_FAKE_17160_RESTORE_PHYSICAL_COUNTDOWN"
-__last_updated__ = "2026-10-25 12:12:45"
+__last_updated__ = "2026-10-25 12:27:39"
 __canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
 
 
@@ -1640,12 +1640,12 @@ def render_dashboard_html() -> str:
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Space Grotesk", sans-serif;
-            padding: 4px 0 8px 0;
+            padding: 6px 0 10px 0;
             margin: 0;
             width: 100%;
             font-size: 12px;
             line-height: 1.2;
-            min-width: 724px !important;
+            min-width: 834px !important;
             -webkit-font-smoothing: antialiased;
             display: flex;
             flex-direction: column;
@@ -1667,14 +1667,14 @@ def render_dashboard_html() -> str:
             font-variant-numeric: tabular-nums;
         }}
 
-        /* 🚀 官方高密显瘦版心：锁定 724px 精准宽度，线条减半，紧凑整洁 */
+        /* 🚀 官方高密显瘦黄金版心：严格锁定 834px，配额线瘦身50%，零按键挤压与截断 */
         .app-container {{
-            width: 724px !important;
-            max-width: 724px !important;
-            min-width: 724px !important;
+            width: 834px !important;
+            max-width: 834px !important;
+            min-width: 834px !important;
             margin: 0 auto;
             box-sizing: border-box;
-            padding: 0;
+            padding: 0 4px;
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
@@ -1756,11 +1756,11 @@ def render_dashboard_html() -> str:
             user-select: none;
         }}
         .active-pill {{
-            background: #DCFCE7;
-            color: #065F46;
+            background: #DCFCE7 !important;
+            color: #000000 !important;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
-            padding: 0 8px;
+            padding: 0 9px;
             height: 28px;
             min-width: auto !important;
             display: inline-flex;
@@ -1777,17 +1777,17 @@ def render_dashboard_html() -> str:
             transition: all 0.08s ease;
         }}
         .active-pill:hover {{
-            background: #BBF7D0;
+            background: #BBF7D0 !important;
             transform: translate(-1px, -1px);
             box-shadow: 3px 3px 0px #000000;
         }}
         .active-pill.locked-manual {{
-            background: #FFE4E6;
-            border-color: #E11D48;
-            color: #9F1239;
+            background: #FFE4E6 !important;
+            border-color: #E11D48 !important;
+            color: #9F1239 !important;
         }}
         .active-pill.locked-manual:hover {{
-            background: #FECDD3;
+            background: #FECDD3 !important;
         }}
         .version-badge {{
             background: #FEF08A;
@@ -1800,13 +1800,13 @@ def render_dashboard_html() -> str:
             align-items: center;
             justify-content: center;
             font-size: 9.5px;
-            font-weight: 800;
+            font-weight: 900;
             box-shadow: 1px 1px 0px #000000;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
             user-select: none;
             letter-spacing: -0.2px;
-            margin-left: 2px;
+            margin-left: 3px;
         }}
         .lock-tag {{
             font-size: 10px;
@@ -1911,7 +1911,7 @@ def render_dashboard_html() -> str:
         .control-bar {{
             display: flex;
             align-items: center;
-            justify-content: flex-start;
+            justify-content: space-between;
             background: #FFFFFF;
             border: var(--border-thick);
             border-radius: var(--radius-card);
@@ -1920,9 +1920,15 @@ def render_dashboard_html() -> str:
             margin-bottom: 6px;
             width: 100% !important;
             box-sizing: border-box;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: nowrap !important;
             white-space: nowrap !important;
+        }}
+        .control-left-group {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
         }}
         .search-box {{
             display: inline-flex;
@@ -2340,11 +2346,11 @@ def render_dashboard_html() -> str:
         .tag-5h-c {{ background: #FB923C; color: #000000; }}
         .tag-w-c {{ background: #FB923C; color: #000000; }}
 
-        /* 进度条：定宽 72px (比原 170px 缩减 57%)，紧凑高密，线条精练！ */
+        /* 进度条：定宽 82px (精准缩短 52%)，紧凑高密，线条精练！ */
         .q-track {{
-            width: 72px !important;
-            min-width: 72px !important;
-            max-width: 72px !important;
+            width: 82px !important;
+            min-width: 82px !important;
+            max-width: 82px !important;
             flex-shrink: 0 !important;
             height: 8px;
             background: #FFFFFF;
@@ -2356,24 +2362,24 @@ def render_dashboard_html() -> str:
         }}
         .q-fill {{ height: 100%; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }}
         
-        /* 百分比数值：严格定宽 38px，居右对齐，等宽防抖 */
+        /* 百分比数值：严格定宽 40px，居右对齐，等宽防抖 */
         .q-val {{
-            width: 38px !important;
-            min-width: 38px !important;
-            max-width: 38px !important;
+            width: 40px !important;
+            min-width: 40px !important;
+            max-width: 40px !important;
             flex-shrink: 0 !important;
             text-align: right;
             font-weight: 900;
-            font-size: 10px;
+            font-size: 10.5px;
             box-sizing: border-box;
             white-space: nowrap !important;
         }}
 
-        /* 48px 固定重置时间槽 */
+        /* 50px 固定重置时间槽 */
         .q-slot {{
-            width: 48px !important;
-            min-width: 48px !important;
-            max-width: 48px !important;
+            width: 50px !important;
+            min-width: 50px !important;
+            max-width: 50px !important;
             flex-shrink: 0 !important;
             display: inline-flex;
             justify-content: center;
@@ -2381,9 +2387,9 @@ def render_dashboard_html() -> str:
             box-sizing: border-box;
         }}
         .q-reset {{
-            width: 46px !important;
-            min-width: 46px !important;
-            max-width: 46px !important;
+            width: 48px !important;
+            min-width: 48px !important;
+            max-width: 48px !important;
             flex-shrink: 0 !important;
             font-size: 9px;
             font-weight: 900;
@@ -3401,13 +3407,13 @@ def render_dashboard_html() -> str:
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 30px;">   <!-- 批量勾选复选框 (30px) -->
-                    <col style="width: 30px;">   <!-- # 序号+拖拽手柄 (30px) -->
-                    <col style="width: 56px;">   <!-- 状态 (56px) -->
-                    <col style="width: 90px;">   <!-- 账号 (90px) -->
-                    <col style="width: 202px;">  <!-- Gemini 配额 (202px 精简紧凑) -->
-                    <col style="width: 202px;">  <!-- Claude 配额 (202px 精简紧凑) -->
-                    <col style="width: 114px;">  <!-- 操作 (114px) -->
+                    <col style="width: 32px;">   <!-- 批量勾选复选框 (32px) -->
+                    <col style="width: 32px;">   <!-- # 序号+拖拽手柄 (32px) -->
+                    <col style="width: 62px;">   <!-- 状态 (62px) -->
+                    <col style="width: 100px;">  <!-- 账号 (100px) -->
+                    <col style="width: 236px;">  <!-- Gemini 配额 (236px 舒展对齐) -->
+                    <col style="width: 236px;">  <!-- Claude 配额 (236px 舒展对齐) -->
+                    <col style="width: 136px;">  <!-- 操作 (136px 宽裕无截断) -->
                 </colgroup>
                 <thead>
                     <tr>
