@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.0"
-__canonical_version_tag__ = "20261107-v2.45.0-LINUX_OMARCHY_GEMINI4_THREE_TRACK"
-__last_updated__ = "2026-11-07 18:45:00"
-__canonical_doctrine__ = "Linux全量移植+Omarchy原生暗黑+Gemini4/3.8/Claude三轨独立+按需留空+零风控"
+__version__ = "2.45.2"
+__canonical_version_tag__ = "20261107-v2.45.2-MAC_ORIGINAL_NEO_UI_RESPONSIVE_GEMINI4"
+__last_updated__ = "2026-11-07 19:22:00"
+__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+半屏平铺924px与独立窗口自适应零截断+本地LS直连读取Gemini4+零风控"
 
 
 # 配置常量
@@ -232,6 +232,15 @@ def _safe_decode_resp(raw_bytes: bytes) -> str:
         except Exception:
             pass
     return raw_bytes.decode("utf-8", errors="ignore")
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    try:
+        if val is None or val == "":
+            return default
+        return float(val)
+    except Exception:
+        return default
 
 
 def get_manual_override_lock() -> Optional[Dict[str, Any]]:
@@ -693,6 +702,103 @@ class HubEngine:
         pool_cfg_path = os.path.join(os.path.dirname(HUB_DIR), "antigravity_account_pool.json")
         atomic_write_json(pool_cfg_path, pool_entries)
 
+    def sync_from_local_language_server(self, data: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        【零风控本地守护直连】从本机运行中的 Antigravity language_server (127.0.0.1)
+        GetUserStatus 接口实时读取当前活跃账号的 Gemini 4 Argon 周额度与 Claude 5.5 模型矩阵。
+        100% 本地回环通信，0 外部网络请求，0 风控风险！
+        """
+        import glob
+        daemon_dir = os.path.expanduser("~/.gemini/antigravity/daemon")
+        if not os.path.isdir(daemon_dir):
+            return False
+
+        own_data = (data is None)
+        if own_data:
+            data = self.load_accounts()
+        accounts = data.get("accounts", {})
+        if not accounts:
+            return False
+
+        updated_any = False
+        for jf in glob.glob(os.path.join(daemon_dir, "*.json")):
+            try:
+                with open(jf, "r", encoding="utf-8") as f:
+                    d_info = json.load(f)
+                pid = d_info.get("pid")
+                http_port = d_info.get("httpPort")
+                csrf_token = d_info.get("csrfToken")
+                if not pid or not http_port or not csrf_token:
+                    continue
+                try:
+                    os.kill(int(pid), 0)
+                except OSError:
+                    continue
+
+                url = f"http://127.0.0.1:{http_port}/exa.language_server_pb.LanguageServerService/GetUserStatus"
+                req = urllib.request.Request(
+                    url,
+                    data=b"{}",
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-codeium-csrf-token": str(csrf_token)
+                    },
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    resp_j = json.loads(resp.read().decode("utf-8", errors="ignore"))
+
+                u_status = resp_j.get("userStatus", {})
+                email = (u_status.get("email") or "").strip().lower()
+                if not email or email not in accounts:
+                    continue
+
+                acc = accounts[email]
+                configs = u_status.get("cascadeModelConfigData", {}).get("clientModelConfigs", [])
+                if not configs:
+                    continue
+
+                g4_found = None
+                c_models = []
+                for m in configs:
+                    m_id = str(m.get("modelId") or "")
+                    m_lbl = str(m.get("label") or "")
+                    q_info = m.get("quotaInfo") or {}
+                    if "gemini-4" in m_id.lower() or "argon" in m_id.lower() or "gemini 4" in m_lbl.lower():
+                        rem = q_info.get("remainingFraction")
+                        reset = q_info.get("resetTime", "")
+                        if rem is not None and g4_found is None:
+                            g4_found = {
+                                "quota_weekly": float(rem),
+                                "reset_time_weekly": str(reset or "")
+                            }
+                    if "claude" in m_id.lower():
+                        c_models.append(m_id)
+
+                if g4_found is not None:
+                    prev_g4 = acc.get("gemini4")
+                    if prev_g4 != g4_found:
+                        acc["gemini4"] = g4_found
+                        updated_any = True
+                else:
+                    if acc.get("gemini4") is not None:
+                        acc["gemini4"] = None
+                        updated_any = True
+
+                if c_models:
+                    has_55 = any(("5-5" in cm or "5.5" in cm) for cm in c_models)
+                    new_ver = "5.5" if has_55 else "4.6"
+                    if acc.get("claude_models") != c_models or acc.get("claude_version") != new_ver:
+                        acc["claude_models"] = c_models
+                        acc["claude_version"] = new_ver
+                        updated_any = True
+            except Exception as e:
+                logger.debug(f"本地 language_server 状态同步跳过 ({jf}): {e}")
+
+        if updated_any and own_data:
+            self.save_accounts(data)
+        return updated_any
+
     def auto_ingest_system_account(self) -> Optional[Tuple[str, bool]]:
         """
         【新登录账号 100% 自动热维护纳管】
@@ -830,6 +936,8 @@ class HubEngine:
                             self.switch_account(locked_acc)
                             return locked_acc, False
                     data["active_email"] = detected_email
+                    updated = True
+                if self.sync_from_local_language_server(data):
                     updated = True
                 if updated:
                     self.save_accounts(data)
@@ -1158,6 +1266,7 @@ class HubEngine:
                     if ok:
                         success_count += 1
 
+            self.sync_from_local_language_server(data)
             self.save_accounts(data)
             logger.info(f"✅ 全池配额极速并发刷新完成！成功: {success_count}/{len(accounts)}")
             return success_count
@@ -1736,7 +1845,7 @@ def render_dashboard_html() -> str:
             width: 100%;
             font-size: 12px;
             line-height: 1.2;
-            min-width: 864px !important;
+            min-width: 924px !important;
             -webkit-font-smoothing: antialiased;
             display: flex;
             flex-direction: column;
@@ -1758,11 +1867,11 @@ def render_dashboard_html() -> str:
             font-variant-numeric: tabular-nums;
         }}
 
-        /* 🚀 官方高密显瘦黄金版心：严格锁定 854px，三轨配额并列无截断 */
+        /* 🚀 官方高密显瘦黄金版心：自适应 924px~1034px，半屏平铺与独立窗口均 100% 零截断 */
         .app-container {{
-            width: 854px !important;
-            max-width: 854px !important;
-            min-width: 854px !important;
+            width: 100% !important;
+            max-width: 1034px !important;
+            min-width: 924px !important;
             margin: 0 auto;
             box-sizing: border-box;
             padding: 0 4px;
@@ -2202,6 +2311,7 @@ def render_dashboard_html() -> str:
         .th-num {{ background: #FFFFFF; text-align: center; }}
         .th-status {{ background: #38BDF8; text-align: center; }}
         .th-email {{ background: #FDE047; text-align: left; padding-left: 6px; }}
+        .th-gemini4 {{ background: #C084FC; text-align: center; }}
         .th-gemini {{ background: #7DD3FC; text-align: center; }}
         .th-claude {{ background: #FB923C; text-align: center; }}
         .th-warmup {{ background: #C084FC; text-align: center; }}
@@ -2397,7 +2507,7 @@ def render_dashboard_html() -> str:
             box-shadow: 1.5px 1.5px 0px #000000 !important;
         }}
 
-        /* 配额单元格：三轨绝对对齐 */
+        /* 配额单元格：三轨绝对对齐 (自适应 924px~1034px 零截断) */
         .col-quota {{
             padding: 2px 4px !important;
             box-sizing: border-box;
@@ -2406,26 +2516,15 @@ def render_dashboard_html() -> str:
             vertical-align: middle;
         }}
         .col-quota-g4 {{
-            width: 140px !important;
-            min-width: 140px !important;
-            max-width: 140px !important;
+            min-width: 180px;
         }}
         .col-quota-g38 {{
-            width: 190px !important;
-            min-width: 190px !important;
-            max-width: 190px !important;
+            min-width: 192px;
         }}
         .col-quota-claude {{
-            width: 190px !important;
-            min-width: 190px !important;
-            max-width: 190px !important;
+            min-width: 192px;
         }}
         .tag-w-g4 {{ background: #A855F7; color: #FFFFFF; }}
-        .q-cell-g4 .q-track {{
-            width: 68px !important;
-            min-width: 68px !important;
-            max-width: 68px !important;
-        }}
         .q-cell-empty {{
             min-height: 22px;
             display: flex;
@@ -2452,7 +2551,7 @@ def render_dashboard_html() -> str:
             display: flex;
             align-items: center;
             justify-content: center; /* 核心：水平绝对居中，彻底消灭右侧大空洞 */
-            gap: 5px;
+            gap: 4px;
             font-size: 10.5px;
             font-weight: 900;
             width: 100%;
@@ -2480,12 +2579,11 @@ def render_dashboard_html() -> str:
         .tag-5h-c {{ background: #FB923C; color: #000000; }}
         .tag-w-c {{ background: #FB923C; color: #000000; }}
 
-        /* 进度条：定宽 82px (精准缩短 52%)，紧凑高密，线条精练！ */
+        /* 进度条：弹性 52px~82px，兼容半屏平铺与宽屏独立窗口，紧凑高密零截断！ */
         .q-track {{
-            width: 82px !important;
-            min-width: 82px !important;
+            flex: 1 1 56px !important;
+            min-width: 48px !important;
             max-width: 82px !important;
-            flex-shrink: 0 !important;
             height: 8px;
             background: #FFFFFF;
             border: 1.5px solid #000000;
@@ -3446,111 +3544,6 @@ def render_dashboard_html() -> str:
             border: 1px solid #D1D5DB;
             color: #9CA3AF;
         }}
-        /* 🐧 Omarchy 风格原生暗黑主题 (Tokyo Night / Omarchy deep slate) */
-        body.theme-omarchy {{
-            --bg-color: #0f1117;
-            --text-color: #c0caf5;
-            background-color: #0f1117 !important;
-            color: #c0caf5 !important;
-        }}
-        body.theme-omarchy .top-bar {{
-            background: #1a1b26 !important;
-            border: 2px solid #2ac3de !important;
-            box-shadow: 4px 4px 0px #050608 !important;
-            color: #c0caf5 !important;
-        }}
-        body.theme-omarchy .top-bar-title {{
-            color: #7dcfff !important;
-        }}
-        body.theme-omarchy .control-bar {{
-            background: #1a1b26 !important;
-            border: 2px solid #24283b !important;
-            box-shadow: 3px 3px 0px #050608 !important;
-            color: #c0caf5 !important;
-        }}
-        body.theme-omarchy .table-wrap {{
-            border: 2px solid #24283b !important;
-            box-shadow: 4px 4px 0px #050608 !important;
-            background: #16161e !important;
-        }}
-        body.theme-omarchy thead th {{
-            background: #1f2335 !important;
-            color: #7aa2f7 !important;
-            border-bottom: 2px solid #24283b !important;
-            border-right: 2px solid #24283b !important;
-        }}
-        body.theme-omarchy tbody td {{
-            border-bottom: 1.5px solid #24283b !important;
-            border-right: 1.5px solid #24283b !important;
-            color: #c0caf5 !important;
-            background-color: #1a1b26 !important;
-        }}
-        body.theme-omarchy tbody tr:hover td {{
-            background-color: #24283b !important;
-        }}
-        body.theme-omarchy tbody tr.is-active-row td {{
-            background-color: #1e293b !important;
-            color: #38bdf8 !important;
-        }}
-        body.theme-omarchy .email-text {{
-            color: #e0af68 !important;
-        }}
-        body.theme-omarchy .num-col {{
-            color: #7aa2f7 !important;
-        }}
-        body.theme-omarchy .q-track {{
-            background: #1f2335 !important;
-            border-color: #3b4261 !important;
-        }}
-        body.theme-omarchy .q-reset {{
-            background: #24283b !important;
-            color: #a9b1d6 !important;
-            border-color: #414868 !important;
-        }}
-        body.theme-omarchy .btn {{
-            background: #24283b !important;
-            color: #c0caf5 !important;
-            border-color: #3b4261 !important;
-            box-shadow: 2px 2px 0px #050608 !important;
-        }}
-        body.theme-omarchy .btn:hover {{
-            background: #3b4261 !important;
-            color: #ffffff !important;
-        }}
-        body.theme-omarchy .btn-switch {{
-            background: #0284c7 !important;
-            color: #ffffff !important;
-        }}
-        body.theme-omarchy .btn-in-use {{
-            background: #059669 !important;
-            color: #ffffff !important;
-        }}
-        body.theme-omarchy .search-box {{
-            background: #1f2335 !important;
-            border-color: #3b4261 !important;
-        }}
-        body.theme-omarchy .search-input {{
-            color: #c0caf5 !important;
-        }}
-        body.theme-omarchy .stats-counter {{
-            background: #1f2335 !important;
-            border-color: #3b4261 !important;
-            color: #c0caf5 !important;
-        }}
-        body.theme-omarchy .filter-tab {{
-            background: #1f2335 !important;
-            color: #a9b1d6 !important;
-            border-color: #3b4261 !important;
-        }}
-        body.theme-omarchy .filter-tab.active {{
-            background: #7aa2f7 !important;
-            color: #0f1117 !important;
-        }}
-        body.theme-omarchy .pagination-bar {{
-            background: #1a1b26 !important;
-            border-color: #24283b !important;
-            color: #7aa2f7 !important;
-        }}
     </style>
 </head>
 <body data-hub-version="{__version__}">
@@ -3571,11 +3564,6 @@ def render_dashboard_html() -> str:
             </div>
             {stats_html}
             <div class="top-right">
-                <button class="btn btn-top btn-theme font-mono" id="btn-theme-toggle"
-                        onclick="toggleOmarchyTheme(); event.preventDefault(); event.stopPropagation();"
-                        title="切换主题风格 (Omarchy 暗黑 / Neo-Brutalism)">
-                    <span id="btn-theme-icon">🐧</span> <span id="btn-theme-text">Omarchy</span>
-                </button>
                 <button class="btn btn-top btn-mask font-mono" id="btn-mask-toggle"
                         onclick="toggleAccountMask(); event.preventDefault(); event.stopPropagation();"
                         title="按一下打码，再按一下明文 (快捷键: M)">
@@ -3650,18 +3638,18 @@ def render_dashboard_html() -> str:
             </div>
         </div>
 
-        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 锁定最小宽度 854px 防截断) -->
+        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 兼容半屏平铺 924px 防截断) -->
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 28px;">   <!-- 批量勾选复选框 (28px 居中) -->
+                    <col style="width: 26px;">   <!-- 批量勾选复选框 (26px 居中) -->
                     <col style="width: 28px;">   <!-- # 序号+拖拽手柄 (28px 居中) -->
-                    <col style="width: 68px;">   <!-- 状态 (68px) -->
-                    <col style="width: 88px;">   <!-- 账号 (88px 紧凑 Mono) -->
-                    <col style="width: 140px;">  <!-- Gemini 4 (周额度) (140px) -->
-                    <col style="width: 190px;">  <!-- Gemini 3.8 (190px) -->
-                    <col style="width: 190px;">  <!-- Claude (190px) -->
-                    <col style="width: 122px;">  <!-- 操作 (122px) -->
+                    <col style="width: 66px;">   <!-- 状态 (66px) -->
+                    <col style="width: 104px;">  <!-- 账号 + 5.5 徽章 (104px 紧凑 Mono) -->
+                    <col style="width: 19%;">    <!-- Gemini 4 (周额度) (自适应 ~182px-212px) -->
+                    <col style="width: 21%;">    <!-- Gemini 3.8 (自适应 ~194px-218px) -->
+                    <col style="width: 21%;">    <!-- Claude (自适应 ~194px-218px) -->
+                    <col style="width: 130px;">  <!-- 操作 (130px) -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -4755,17 +4743,6 @@ def render_dashboard_html() -> str:
         }}
         window.toggleAutoRotation = cycleAutoRotation;
 
-        // 🐧 Omarchy 主题切换与持久化
-        function toggleOmarchyTheme() {{
-            const isOmarchy = document.body.classList.toggle('theme-omarchy');
-            localStorage.setItem('hub_theme', isOmarchy ? 'omarchy' : 'neo');
-            const btn = document.getElementById('btn-theme-toggle');
-            if (btn) {{
-                btn.innerHTML = isOmarchy ? '<span>☀️ Neo</span>' : '<span>🐧 Omarchy</span>';
-            }}
-            showToast(isOmarchy ? "🐧 已切换至 Omarchy 暗黑风格" : "☀️ 已切换至 Neo-Brutalism 原版风格", "info");
-        }}
-
         let currentPage = 1;
         const PAGE_SIZE = 15;
         let __cachedTbodyHTML = '';
@@ -4868,15 +4845,10 @@ def render_dashboard_html() -> str:
             filterTable();
         }}
 
-        // 页面初始加载时初始化主题与原始行数据
+        // 页面初始加载时初始化原始行数据（强制移除任何历史暗黑主题残留，100% 保持 Mac 原版浅色 Neo-Brutalism）
         window.addEventListener('DOMContentLoaded', function() {{
-            const savedTheme = localStorage.getItem('hub_theme');
-            const isDark = (savedTheme === 'omarchy' || !savedTheme);
-            if (isDark) {{
-                document.body.classList.add('theme-omarchy');
-                const btn = document.getElementById('btn-theme-toggle');
-                if (btn) btn.innerHTML = '<span>☀️ Neo</span>';
-            }}
+            localStorage.removeItem('hub_theme');
+            document.body.classList.remove('theme-omarchy');
 
             const tbody = document.getElementById('account-tbody');
             if (tbody && tbody.children.length > 0) {{
@@ -6077,13 +6049,17 @@ def start_background_workers():
                 logger.error(f"后台新账号热维护异常: {e}")
 
     def quota_worker():
-        logger.info("后台配额并发定时刷新线程已启动 (周期: 30 秒高频守护)")
+        logger.info("后台本地状态同步已启动 (15s 本地 language_server 零风控同步)")
+        try:
+            ENGINE.sync_from_local_language_server()
+        except Exception:
+            pass
         while True:
             try:
-                time.sleep(30)
-                ENGINE.refresh_all_quotas()
+                time.sleep(15)
+                ENGINE.sync_from_local_language_server()
             except Exception as e:
-                logger.error(f"后台配额刷新异常: {e}")
+                logger.error(f"后台本地配额同步异常: {e}")
 
     def warmup_worker():
         logger.info("后台每小时智能错峰预热守卫已启动 (5h错峰梯次流水线与接力轮转)")

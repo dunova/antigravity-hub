@@ -1,9 +1,12 @@
 [Desktop Entry]
+Version=1.0
 Name=Antigravity Hub
-Comment=Antigravity 多账号配额看板与轮换守护中枢
-Exec=brave --app=http://127.0.0.1:18088
-Icon=preferences-system-network
+Comment=Antigravity Hub Web App (Brave Hardware Accelerated)
+Exec=brave --app=http://127.0.0.1:18088/
+StartupWMClass=brave-127.0.0.1__-Default
 Terminal=false
 Type=Application
+Icon=antigravity
+StartupNotify=true
 Categories=Development;Utility;
 Keywords=antigravity;hub;quota;gemini;claude;
