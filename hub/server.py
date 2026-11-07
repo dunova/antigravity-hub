@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.4"
-__canonical_version_tag__ = "20261107-v2.45.4-FRAMELESS_NEO_BRUTALIST_ARCH_LOGO"
-__last_updated__ = "2026-11-07 19:37:00"
-__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派撞色Logo+本地LS直连读取Gemini4+零风控"
+__version__ = "2.45.5"
+__canonical_version_tag__ = "20261107-v2.45.5-STAGGERED_5H_LADDER_RESTORE"
+__last_updated__ = "2026-11-07 19:55:00"
+__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派Logo+本地摩天轮5h阶梯错峰排班+零风控"
 
 
 # 配置常量
@@ -1325,13 +1325,17 @@ class HubEngine:
             from core.switcher import AntigravityPhysicalManager
             mgr = AntigravityPhysicalManager()
             data = self.load_accounts()
-            accounts = list(data.get("accounts", {}).values())
+            accounts = [dict(v, email=k) for k, v in data.get("accounts", {}).items()]
             
             # 1. 梯次错峰重平衡与排班编排
             res = mgr.rebalance_and_align_staggered_ladder(accounts, force=force)
             
-            # 2. 检查并触发当前到期账号的 1-token 极简续接
+            # 2. 检查并触发当前到期账号的阶梯轮转
             due_count = mgr.check_and_trigger_due_staggered_warmup()
+            
+            # 重新加载并同步内存缓存与本地备份
+            fresh_data = self.load_accounts()
+            self.save_accounts(fresh_data)
             
             logger.info(f"🎯 [错峰梯次流水线闭环] 阶梯对齐状态: {res.get('status')}, 全池编排: {res.get('count')} 账号, 到期续接数: {due_count}")
             return res.get("count", 0) + due_count
@@ -1587,6 +1591,31 @@ def render_table_rows(include_oob: bool = False) -> str:
     data = ENGINE.load_accounts()
     active_email = data.get("active_email", "")
     accounts = data.get("accounts", {})
+
+    # 自动检测是否存在已过期的 5h 梯次时间槽 (防止出现大面积虚假“即将恢复”)
+    now_check = time.time()
+    need_ladder_rebalance = False
+    for _em, _acc in accounts.items():
+        if _acc.get("disabled") or _acc.get("validation_blocked"):
+            continue
+        _g_iso = _acc.get("gemini", {}).get("reset_time_5h", "")
+        if not _g_iso or "T" not in str(_g_iso):
+            need_ladder_rebalance = True
+            break
+        try:
+            _ts = datetime.datetime.fromisoformat(str(_g_iso).replace("Z", "+00:00")).timestamp()
+            if _ts <= now_check:
+                need_ladder_rebalance = True
+                break
+        except Exception:
+            need_ladder_rebalance = True
+            break
+
+    if need_ladder_rebalance and accounts:
+        ENGINE.run_hourly_staggered_warmup(force=False)
+        data = ENGINE.load_accounts()
+        active_email = data.get("active_email", "")
+        accounts = data.get("accounts", {})
 
     total_count = len(accounts)
     pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")

@@ -48,9 +48,10 @@ NATIVE_OAUTH_USER_AGENT = "vscode/1.X.X (Antigravity/4.3.0)"
 
 # 基础目录与存储配置
 BASE_DATA_DIR = os.environ.get("ANTIGRAVITY_HUB_DIR", os.path.expanduser("~/.antigravity_hub"))
-ACCOUNTS_HUB_FILE = os.path.join(BASE_DATA_DIR, "accounts_hub.json")
+HUB_DIR = os.path.join(BASE_DATA_DIR, "data")
+ACCOUNTS_HUB_FILE = os.path.join(HUB_DIR, "accounts_hub.json")
 MANUAL_OVERRIDE_LOCK_PATH = os.path.join(BASE_DATA_DIR, "manual_override_lock.json")
-WARMUP_SCHEDULE_FILE = os.path.join(BASE_DATA_DIR, "warmup_schedule.json")
+WARMUP_SCHEDULE_FILE = os.path.join(HUB_DIR, "warmup_schedule.json")
 WARMUP_GENERATE_ENDPOINTS = [
     "https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent",
     "https://cloudcode-pa.googleapis.com/v1internal:generateContent",
@@ -161,8 +162,9 @@ class AntigravityPhysicalManager:
 
     def __init__(self, data_dir: str = BASE_DATA_DIR):
         self.data_dir = data_dir
-        self.accounts_file = os.path.join(self.data_dir, "accounts_hub.json")
-        os.makedirs(self.data_dir, exist_ok=True)
+        self.hub_dir = os.path.join(self.data_dir, "data")
+        self.accounts_file = os.path.join(self.hub_dir, "accounts_hub.json")
+        os.makedirs(self.hub_dir, exist_ok=True)
 
     def load_hub_accounts(self) -> Dict[str, Any]:
         """加载 Hub 数据库中的账号信息"""
@@ -643,12 +645,194 @@ class AntigravityPhysicalManager:
         logger.info(f"     ✅ 账号 {email} 真实预热成功！模型: {ping_model}, 官方5h周期已锁定，将于 {locked_reset_iso} ({rem_h:.2f}h后) 满血重置！")
         return {"email": email, "status": "success", "model_warmed": ping_model, "locked_reset_ts": locked_reset_ts, "locked_reset_iso": locked_reset_iso}
 
-    def rebalance_and_align_staggered_ladder(self, accounts: List[Dict[str, Any]], force: bool = False) -> Dict[str, Any]:
-        """安全保护：零风控模式下仅管理本地排班数据，绝不向 Google 端点发起批量伪造请求"""
-        return {"status": "aligned_safe", "count": len(accounts)}
+    @staticmethod
+    def _parse_iso_to_ts(iso_str: str) -> int:
+        if not iso_str or "T" not in str(iso_str):
+            return 0
+        try:
+            import datetime
+            clean_iso = str(iso_str).replace("Z", "+00:00")
+            return int(datetime.datetime.fromisoformat(clean_iso).timestamp())
+        except Exception:
+            return 0
+
+    def rebalance_and_align_staggered_ladder(self, accounts: Optional[List[Dict[str, Any]]] = None, force: bool = False) -> Dict[str, Any]:
+        """
+        【摩天轮阶梯错峰流水线编排器 · 5小时无缝接力保障 (100% 纯本地零风控计算)】
+        目标：
+        1. 针对全池 N 个健康账号，在 5 小时 (18000秒 = 300分钟) 滑动窗口轴上等距打散梯次；
+        2. 梯级步长 = 18000 // N (11账号时约 1636 秒 ≈ 27.27 分钟)；
+        3. 杜绝 4h59m 扎堆与“即将恢复”死锁：真实保留各账号在走倒计时，过期/未激活账号均布至未占用阶梯槽位；
+        4. 纯本地时间轴编排，绝不向 Google 外部接口发起任何批量测试或伪造请求。
+        """
+        if accounts is None:
+            hd_init = self.load_hub_accounts()
+            accounts = [dict(v, email=k) for k, v in hd_init.get("accounts", {}).items()]
+        if not accounts:
+            return {"status": "empty", "count": 0}
+
+        now_ts = int(time.time())
+        sched = self.load_warmup_schedule()
+
+        hd = {}
+        if os.path.exists(ACCOUNTS_HUB_FILE):
+            try:
+                with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as hf:
+                    hd = json.load(hf)
+            except Exception as ex:
+                logger.warning(f"读取 accounts_hub.json 异常: {ex}")
+
+        hub_accs = hd.get("accounts", {})
+        valid_accounts = []
+        for idx_order, a in enumerate(accounts):
+            em = a.get("email", "")
+            if not em or a.get("disabled") or a.get("validation_blocked"):
+                continue
+            a_copy = dict(a)
+            a_copy["_order"] = idx_order
+            valid_accounts.append(a_copy)
+
+        n = len(valid_accounts)
+        if n == 0:
+            return {"status": "no_valid_accounts", "count": 0}
+
+        step_sec = max(900, 18000 // n)
+        ladder_slots = [min(18000, int(round((i + 0.5) * step_sec))) for i in range(n)]
+
+        acc_states = []
+        for a in valid_accounts:
+            em = a["email"]
+            s = sched.get(em, {})
+            hub_entry = hub_accs.get(em, a)
+
+            # 优先识别账号在 accounts_hub.json 中真实在走的 5h 恢复窗口，其次取 warmup_schedule
+            g_iso = hub_entry.get("gemini", {}).get("reset_time_5h", "")
+            g_ts = self._parse_iso_to_ts(g_iso)
+            s_ts = int(s.get("locked_reset_ts", 0) or 0)
+            l_ts = g_ts if (g_ts > now_ts and (g_ts - now_ts) <= 18000) else s_ts
+            rem = l_ts - now_ts
+            g_q5h = _safe_float(hub_entry.get("gemini", {}).get("quota_5h", 1.0), 1.0)
+            is_consuming_g = (g_q5h < 0.999 and 60 < rem <= 18000)
+            has_valid = (l_ts > now_ts and 60 < rem <= 18000) and (not force or is_consuming_g)
+
+            # Claude 独立真实恢复窗口检测 (如活跃账号正在消费 Claude)
+            c_iso = hub_entry.get("claude", {}).get("reset_time_5h", "")
+            c_ts = self._parse_iso_to_ts(c_iso)
+            sc_ts = int(s.get("locked_reset_ts_claude", 0) or 0)
+            lc_ts = c_ts if (c_ts > now_ts and (c_ts - now_ts) <= 18000) else sc_ts
+            rem_c = lc_ts - now_ts
+            c_q5h = _safe_float(hub_entry.get("claude", {}).get("quota_5h", 1.0), 1.0)
+            is_consuming_c = (c_q5h < 0.999 and 60 < rem_c <= 18000)
+            has_valid_c = (lc_ts > now_ts and 60 < rem_c <= 18000) and (not force or is_consuming_c)
+
+            acc_states.append({
+                "email": em,
+                "acc": a,
+                "order": a["_order"],
+                "locked_reset_ts": l_ts if has_valid else 0,
+                "remaining_sec": rem if has_valid else 0,
+                "has_valid_window": has_valid,
+                "locked_reset_ts_claude": lc_ts if has_valid_c else 0,
+                "has_valid_window_claude": has_valid_c,
+            })
+
+        # 为已有有效窗口的账号优先锁定最接近的摩天轮阶梯槽位，其余过期账号按列表顺序填补剩余空槽
+        available_slot_indices = set(range(n))
+        assigned_slot_for_email: Dict[str, int] = {}
+
+        valid_window_items = sorted(
+            [x for x in acc_states if x["has_valid_window"]],
+            key=lambda x: (x["remaining_sec"], x["order"])
+        )
+        for item in valid_window_items:
+            best_slot = min(available_slot_indices, key=lambda si: abs(ladder_slots[si] - item["remaining_sec"]))
+            available_slot_indices.remove(best_slot)
+            assigned_slot_for_email[item["email"]] = best_slot
+
+        expired_items = sorted(
+            [x for x in acc_states if not x["has_valid_window"]],
+            key=lambda x: x["order"]
+        )
+        for item, slot_idx in zip(expired_items, sorted(available_slot_indices)):
+            assigned_slot_for_email[item["email"]] = slot_idx
+
+        logger.info(f"🎡 [摩天轮错峰编排] 正在为全池 {n} 个账号构建阶梯流水线 (梯级: {step_sec // 60}m {step_sec % 60}s)...")
+
+        for item in acc_states:
+            em = item["email"]
+            slot_idx = assigned_slot_for_email[em]
+            slot_target_rem = ladder_slots[slot_idx]
+
+            if item["has_valid_window"]:
+                target_ts = item["locked_reset_ts"]
+            else:
+                target_ts = now_ts + slot_target_rem
+            target_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(target_ts))
+
+            if item["has_valid_window_claude"]:
+                target_ts_c = item["locked_reset_ts_claude"]
+            else:
+                target_ts_c = target_ts
+            target_iso_c = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(target_ts_c))
+
+            s_entry = sched.setdefault(em, {})
+            s_entry["email"] = em
+            s_entry["ladder_slot"] = slot_idx
+            s_entry["ladder_step_sec"] = step_sec
+            s_entry["locked_reset_ts"] = target_ts
+            s_entry["locked_reset_iso"] = target_iso
+            s_entry["locked_reset_ts_claude"] = target_ts_c
+            s_entry["locked_reset_iso_claude"] = target_iso_c
+            s_entry["next_warmup_ts"] = target_ts
+            s_entry["status"] = "in_ladder"
+
+            if em in hub_accs:
+                g_dict = hub_accs[em].setdefault("gemini", {})
+                g_dict["reset_time_5h"] = target_iso
+                # 若待机账号此前 5h 窗口已到期且周额度充足，自动恢复本地 5h 满额显示
+                if not item["has_valid_window"] and _safe_float(g_dict.get("quota_weekly", 1.0), 1.0) > 0.0001:
+                    if _safe_float(g_dict.get("quota_5h", 1.0), 1.0) < 1.0:
+                        g_dict["quota_5h"] = min(1.0, _safe_float(g_dict.get("quota_weekly", 1.0), 1.0))
+
+                c_dict = hub_accs[em].setdefault("claude", {})
+                c_dict["reset_time_5h"] = target_iso_c
+                if not item["has_valid_window_claude"] and _safe_float(c_dict.get("quota_weekly", 1.0), 1.0) > 0.0001:
+                    if _safe_float(c_dict.get("quota_5h", 1.0), 1.0) < 1.0:
+                        c_dict["quota_5h"] = min(1.0, _safe_float(c_dict.get("quota_weekly", 1.0), 1.0))
+
+        if hd:
+            atomic_write_json(ACCOUNTS_HUB_FILE, hd)
+        self.save_warmup_schedule(sched)
+        logger.info(f"✅ [摩天轮错峰梯次完成] 全池 {n} 账号已完美建立 {step_sec // 60} 分钟阶梯流水线，彻底消除 4h59m 与即将恢复死锁！")
+        return {"status": "ok", "count": n, "step_sec": step_sec}
 
     def check_and_trigger_due_staggered_warmup(self) -> int:
-        """安全保护：零风控保护机制，杜绝后台无控并发生成请求触发官方风控拦截"""
-        return 0
+        """
+        【零风控摩天轮到期自动接力轮转】
+        检查是否有账号的 5h 梯次倒计时已到期 (<= 60s)；
+        若有到期账号，纯本地将其平滑轮转至摩天轮队尾槽位，绝不向 Google 发起后台批量生成请求。
+        """
+        now_ts = int(time.time())
+        sched = self.load_warmup_schedule()
+        hd = self.load_hub_accounts()
+        accounts_map = hd.get("accounts", {})
+        if not accounts_map:
+            return 0
+
+        due_count = 0
+        for em, acc in accounts_map.items():
+            if acc.get("disabled") or acc.get("validation_blocked"):
+                continue
+            g_iso = acc.get("gemini", {}).get("reset_time_5h", "")
+            g_ts = self._parse_iso_to_ts(g_iso)
+            s_ts = int(sched.get(em, {}).get("locked_reset_ts", 0) or 0)
+            eff_ts = g_ts or s_ts
+            if eff_ts <= now_ts + 60:
+                due_count += 1
+
+        if due_count > 0:
+            acc_list = [dict(v, email=k) for k, v in accounts_map.items()]
+            self.rebalance_and_align_staggered_ladder(acc_list, force=False)
+        return due_count
 
 
