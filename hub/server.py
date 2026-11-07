@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.3"
-__canonical_version_tag__ = "20261107-v2.45.3-NEO_RAINBOW_HUB_LOGO_AND_MAC_UI"
-__last_updated__ = "2026-11-07 19:31:00"
-__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+专属优化Neo彩虹拱门HUB图标+本地LS直连读取Gemini4+零风控"
+__version__ = "2.45.4"
+__canonical_version_tag__ = "20261107-v2.45.4-FRAMELESS_NEO_BRUTALIST_ARCH_LOGO"
+__last_updated__ = "2026-11-07 19:37:00"
+__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派撞色Logo+本地LS直连读取Gemini4+零风控"
 
 
 # 配置常量
