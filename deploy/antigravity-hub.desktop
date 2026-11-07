@@ -6,7 +6,7 @@ Exec=brave --app=http://127.0.0.1:18088/
 StartupWMClass=brave-127.0.0.1__-Default
 Terminal=false
 Type=Application
-Icon=antigravity
+Icon=antigravity-hub
 StartupNotify=true
 Categories=Development;Utility;
 Keywords=antigravity;hub;quota;gemini;claude;

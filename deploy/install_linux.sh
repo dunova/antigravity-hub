@@ -14,14 +14,18 @@ mkdir -p "${HOME}/.antigravity_hub/browser_profiles"
 mkdir -p "${SERVICE_DIR}"
 mkdir -p "${APP_DIR}"
 
-# 2. 安装 systemd user service
+# 2. 生成并安装专属优化 Logo 图标套件
+python3 "${HUB_DIR}/scripts/generate_hub_logo.py" || true
+gtk-update-icon-cache -f -t "${HOME}/.local/share/icons/hicolor" 2>/dev/null || true
+
+# 3. 安装 systemd user service
 cp "${HUB_DIR}/deploy/antigravity-hub.service" "${SERVICE_DIR}/antigravity-hub.service"
 systemctl --user daemon-reload
 systemctl --user enable antigravity-hub.service
 systemctl --user restart antigravity-hub.service
 echo "✅ systemd user 守护服务已安装并启动: antigravity-hub.service"
 
-# 3. 安装桌面图标
+# 4. 安装桌面图标
 cp "${HUB_DIR}/deploy/antigravity-hub.desktop" "${APP_DIR}/antigravity-hub.desktop"
 update-desktop-database "${APP_DIR}" 2>/dev/null || true
 echo "✅ 桌面启动器已注册: ${APP_DIR}/antigravity-hub.desktop"

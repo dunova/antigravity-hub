@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.2"
-__canonical_version_tag__ = "20261107-v2.45.2-MAC_ORIGINAL_NEO_UI_RESPONSIVE_GEMINI4"
-__last_updated__ = "2026-11-07 19:22:00"
-__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+半屏平铺924px与独立窗口自适应零截断+本地LS直连读取Gemini4+零风控"
+__version__ = "2.45.3"
+__canonical_version_tag__ = "20261107-v2.45.3-NEO_RAINBOW_HUB_LOGO_AND_MAC_UI"
+__last_updated__ = "2026-11-07 19:31:00"
+__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+专属优化Neo彩虹拱门HUB图标+本地LS直连读取Gemini4+零风控"
 
 
 # 配置常量
@@ -56,6 +56,20 @@ try:
         HTMX_JS_BYTES = _f.read()
 except Exception:
     HTMX_JS_BYTES = b""
+
+FAVICON_PNG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "favicon.png")
+try:
+    with open(FAVICON_PNG_PATH, "rb") as _f:
+        FAVICON_PNG_BYTES = _f.read()
+except Exception:
+    FAVICON_PNG_BYTES = b""
+
+APP_ICON_512_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon_512.png")
+try:
+    with open(APP_ICON_512_PATH, "rb") as _f:
+        APP_ICON_512_BYTES = _f.read()
+except Exception:
+    APP_ICON_512_BYTES = b""
 
 OAUTH_CREDS_PATH = os.path.expanduser("~/.gemini/oauth_creds.json")
 GOOGLE_ACCOUNTS_PATH = os.path.expanduser("~/.gemini/google_accounts.json")
@@ -1809,6 +1823,9 @@ def render_dashboard_html() -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Antigravity Hub · Neo-Brutalism</title>
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/app_icon_512.png">
+    <link rel="apple-touch-icon" href="/app_icon_512.png">
     <script src="/static/htmx.min.js"></script>
     <style>
         :root {{
@@ -3556,7 +3573,7 @@ def render_dashboard_html() -> str:
         <div class="top-bar">
             <div class="top-left">
                 <span class="brand-title font-mono" title="Antigravity Hub v{__version__}">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <img src="/favicon.png" width="16" height="16" alt="" style="vertical-align:-3px; margin-right:3px; border-radius:3px;">
                     HUB
                 </span>
                 {active_pill_html}
@@ -5498,6 +5515,20 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
             self.end_headers()
             self.wfile.write(HTMX_JS_BYTES)
+            return
+        elif parsed.path in ("/favicon.ico", "/favicon.png"):
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(FAVICON_PNG_BYTES)
+            return
+        elif parsed.path == "/app_icon_512.png":
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(APP_ICON_512_BYTES)
             return
         elif parsed.path == "/" or parsed.path == "/index.html":
             try:
