@@ -198,8 +198,15 @@ def main():
 
     svg_dir = os.path.expanduser("~/.local/share/icons/hicolor/scalable/apps")
     os.makedirs(svg_dir, exist_ok=True)
+    buf_512 = BytesIO()
+    icon_512.save(buf_512, format="PNG")
+    b64_512 = base64.b64encode(buf_512.getvalue()).decode("ascii")
+    qt_compat_svg = f'''<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" width="512" height="512">
+  <image width="512" height="512" xlink:href="data:image/png;base64,{b64_512}" href="data:image/png;base64,{b64_512}"/>
+</svg>
+'''
     with open(os.path.join(svg_dir, "antigravity-hub.svg"), "w", encoding="utf-8") as f:
-        f.write(master_svg)
+        f.write(qt_compat_svg)
 
     hub_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "hub"))
     hi.resize((64, 64), Image.Resampling.LANCZOS).save(os.path.join(hub_dir, "favicon.png"), "PNG")
