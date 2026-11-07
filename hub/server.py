@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.44.7"
-__canonical_version_tag__ = "20261024-v2.44.2-PURGE_FAKE_17160_RESTORE_PHYSICAL_COUNTDOWN"
-__last_updated__ = "2026-10-25 13:10:02"
-__canonical_doctrine__ = "按一下打码再按一下明文+彻底消除多余空白+高密紧凑Magpie布局+顶级自解释"
+__version__ = "2.45.0"
+__canonical_version_tag__ = "20261107-v2.45.0-LINUX_OMARCHY_GEMINI4_THREE_TRACK"
+__last_updated__ = "2026-11-07 18:45:00"
+__canonical_doctrine__ = "Linux全量移植+Omarchy原生暗黑+Gemini4/3.8/Claude三轨独立+按需留空+零风控"
 
 
 # 配置常量
@@ -98,41 +98,47 @@ logger = logging.getLogger("HubServer")
 def get_installed_browser_candidates() -> List[Dict[str, Any]]:
     """
     返回当前系统可用浏览器候选列表（按优先级排序）：
-    1. ego lite（用户主力默认浏览器，/Applications/ego lite.app）
-    2. Google Chrome（若安装）
+    macOS: ego lite -> Google Chrome -> open
+    Linux: Brave -> Chromium -> Google Chrome -> xdg-open
     """
     candidates = []
-    # 1. 优先检查 ego lite
-    ego_paths = [
-        "/Applications/ego lite.app",
-        os.path.expanduser("~/Applications/ego lite.app"),
-    ]
-    for p in ego_paths:
-        if os.path.exists(p):
-            candidates.append({"name": "ego lite", "path": p})
-            break
+    if sys.platform == "darwin":
+        # 1. 优先检查 ego lite
+        ego_paths = [
+            "/Applications/ego lite.app",
+            os.path.expanduser("~/Applications/ego lite.app"),
+        ]
+        for p in ego_paths:
+            if os.path.exists(p):
+                candidates.append({"name": "ego lite", "path": p})
+                break
 
-    # 2. 检查 Google Chrome
-    chrome_paths = [
-        "/Applications/Google Chrome.app",
-        os.path.expanduser("~/Applications/Google Chrome.app"),
-    ]
-    for p in chrome_paths:
-        if os.path.exists(p):
-            candidates.append({"name": "Google Chrome", "path": p})
-            break
+        # 2. 检查 Google Chrome
+        chrome_paths = [
+            "/Applications/Google Chrome.app",
+            os.path.expanduser("~/Applications/Google Chrome.app"),
+        ]
+        for p in chrome_paths:
+            if os.path.exists(p):
+                candidates.append({"name": "Google Chrome", "path": p})
+                break
+    elif sys.platform.startswith("linux"):
+        import shutil
+        for bin_name, name in [("brave", "Brave"), ("chromium", "Chromium"), ("google-chrome", "Google Chrome")]:
+            p = shutil.which(bin_name)
+            if p:
+                candidates.append({"name": name, "path": p})
+        if shutil.which("xdg-open"):
+            candidates.append({"name": "Default", "path": "xdg-open"})
 
     return candidates
 
 
 def launch_browser_for_auth(url: str, isolated: bool = False, profile_name: str = "") -> bool:
     """
-    为解封或 OAuth 授权拉起浏览器：
-    - 优先绑定用户现役主力浏览器 ego lite；
-    - 支持带独立 profile 隔离容器（isolated=True）或在现役会话中秒级打开标签页（isolated=False）；
-    - 若指定独立容器失败，平滑回退到现役 ego lite 窗口；
-    - 若 ego lite 不存在，自动回退 Chrome，终极保底回退 open <url>；
-    - 彻底杜绝因写死 Google Chrome 导致应用未安装而静默失败的隐患。
+    为解封或 OAuth 授权拉起浏览器 (跨平台兼容 macOS / Linux)：
+    - macOS: 优先 ego lite / Chrome，支持 --user-data-dir 独立容器；
+    - Linux: 优先 Brave / Chromium / Chrome，支持 --user-data-dir 独立容器，兜底 xdg-open；
     """
     candidates = get_installed_browser_candidates()
     profile_dir = os.path.join(BASE_DATA_DIR, "browser_profiles", profile_name) if profile_name else None
@@ -141,32 +147,44 @@ def launch_browser_for_auth(url: str, isolated: bool = False, profile_name: str 
 
     for cand in candidates:
         app_name = cand["name"]
+        app_path = cand["path"]
         try:
-            if isolated and profile_dir:
-                cmd = ["open", "-na", app_name, "--args", f"--user-data-dir={profile_dir}", url]
-                p = subprocess.Popen(cmd)
-                p.wait(timeout=1)
-                if p.returncode == 0:
-                    logger.info(f"🚀 [浏览器调起] 已为授权/解封拉起独立容器 ({app_name}): {profile_dir}")
+            if sys.platform == "darwin":
+                if isolated and profile_dir:
+                    cmd = ["open", "-na", app_name, "--args", f"--user-data-dir={profile_dir}", url]
+                    p = subprocess.Popen(cmd)
+                    p.wait(timeout=1)
+                    if p.returncode == 0:
+                        logger.info(f"🚀 [浏览器调起] 已为授权/解封拉起独立容器 ({app_name}): {profile_dir}")
+                        return True
+                cmd = ["open", "-a", app_name, url]
+                subprocess.Popen(cmd)
+                logger.info(f"🚀 [浏览器调起] 已在现役 {app_name} 浏览器中打开目标 URL")
+                return True
+            elif sys.platform.startswith("linux"):
+                if app_path == "xdg-open":
+                    subprocess.Popen(["xdg-open", url])
                     return True
-                else:
-                    logger.warning(f"⚠️ [浏览器调起] 独立容器启动返回码非0 ({p.returncode})，尝试平滑切换至标准打开")
-
-            # 标准模式或独立容器回退：直接在现役窗口中新建标签页拉起并聚焦
-            cmd = ["open", "-a", app_name, url]
-            subprocess.Popen(cmd)
-            logger.info(f"🚀 [浏览器调起] 已在现役 {app_name} 浏览器中打开目标 URL")
-            return True
+                cmd = [app_path]
+                if isolated and profile_dir:
+                    cmd.extend([f"--user-data-dir={profile_dir}", "--no-first-run"])
+                cmd.append(url)
+                subprocess.Popen(cmd)
+                logger.info(f"🚀 [浏览器调起 Linux] 已拉起 {app_name}: {url}")
+                return True
         except Exception as e:
             logger.warning(f"⚠️ [浏览器调起] 拉起 {app_name} 异常: {e}，尝试下一个候选")
 
-    # 保底：使用 macOS 系统默认浏览器
+    # 保底：使用系统默认浏览器
     try:
-        subprocess.Popen(["open", url])
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", url])
+        else:
+            subprocess.Popen(["xdg-open", url])
         logger.info(f"🚀 [浏览器调起] 已使用系统默认浏览器打开目标 URL")
         return True
     except Exception as e:
-        logger.error(f"❌ [浏览器调起失败] 系统默认 open 打开异常: {e}")
+        logger.error(f"❌ [浏览器调起失败] 系统默认打开异常: {e}")
         return False
 
 
@@ -683,31 +701,45 @@ class HubEngine:
         返回: (email, is_new) 或 None
         """
         try:
-            cmd = ["security", "find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
-            if res.returncode != 0 or not res.stdout.strip():
+            kd = None
+            if sys.platform == "darwin":
+                cmd = ["security", "find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+                if res.returncode == 0 and res.stdout.strip():
+                    raw = res.stdout.strip()
+                    if raw.startswith("go-keyring-base64:"):
+                        raw = raw.replace("go-keyring-base64:", "")
+                    dec = base64.b64decode(raw).decode("utf-8")
+                    kd = json.loads(dec)
+            elif sys.platform.startswith("linux"):
+                cmd = ["secret-tool", "lookup", "service", "gemini", "username", "antigravity"]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+                if res.returncode == 0 and res.stdout.strip():
+                    raw = res.stdout.strip()
+                    if raw.startswith("go-keyring-base64:"):
+                        raw = base64.b64decode(raw[len("go-keyring-base64:"): ]).decode("utf-8")
+                    kd = json.loads(raw)
+
+            if not kd:
                 return None
-            raw = res.stdout.strip()
-            if raw.startswith("go-keyring-base64:"):
-                raw = raw.replace("go-keyring-base64:", "")
-            dec = base64.b64decode(raw).decode("utf-8")
-            kd = json.loads(dec)
+
             at = kd.get("token", {}).get("access_token") or kd.get("access_token")
             rt = kd.get("token", {}).get("refresh_token") or kd.get("refresh_token")
             if not at or not rt:
                 return None
 
-            # 探测当前 Token 所属邮箱 (优先 TokenInfo，兜底 google_accounts.json)
-            detected_email = ""
-            try:
-                t_url = f"https://oauth2.googleapis.com/tokeninfo?access_token={at}"
-                req = urllib.request.Request(t_url, headers={"User-Agent": "AntigravityHub/2.1"})
-                ctx = ssl.create_default_context()
-                with urllib.request.urlopen(req, timeout=3, context=ctx) as r:
-                    t_info = json.loads(r.read().decode("utf-8"))
-                    detected_email = t_info.get("email", "").strip()
-            except Exception:
-                pass
+            # 探测当前 Token 所属邮箱 (优先 kd 中的 id_token_email，其次 TokenInfo，兜底 google_accounts.json)
+            detected_email = kd.get("id_token_email", "").strip().lower()
+            if not detected_email:
+                try:
+                    t_url = f"https://oauth2.googleapis.com/tokeninfo?access_token={at}"
+                    req = urllib.request.Request(t_url, headers={"User-Agent": "AntigravityHub/2.1"})
+                    ctx = ssl.create_default_context()
+                    with urllib.request.urlopen(req, timeout=3, context=ctx) as r:
+                        t_info = json.loads(r.read().decode("utf-8"))
+                        detected_email = t_info.get("email", "").strip().lower()
+                except Exception:
+                    pass
 
             if not detected_email and os.path.exists(GOOGLE_ACCOUNTS_PATH):
                 try:
@@ -863,14 +895,20 @@ class HubEngine:
                 body_str = _safe_decode_resp(resp.read())
                 data = json.loads(body_str)
             for group in data.get("groups", []):
+                grp_name = group.get("displayName", "")
+                is_g4_grp = "gemini 4" in grp_name.lower() or "gemini-4" in grp_name.lower()
                 for bucket in group.get("buckets", []):
-                    b_id = bucket.get("bucketId")
+                    b_id = bucket.get("bucketId", "")
                     rem = bucket.get("remainingFraction")
                     reset = bucket.get("resetTime")
                     if b_id:
                         quotas[b_id] = float(rem) if rem is not None else 0.0
                         if reset:
                             resets[b_id] = str(reset)
+                        if is_g4_grp or "gemini-4" in b_id.lower() or "gemini4" in b_id.lower():
+                            quotas["gemini4-weekly"] = float(rem) if rem is not None else 0.0
+                            if reset:
+                                resets["gemini4-weekly"] = str(reset)
             return quotas, resets, None
         except urllib.error.HTTPError as he:
             body = _safe_decode_resp(he.read())
@@ -1084,6 +1122,15 @@ class HubEngine:
             elif resets.get("3p-5h"):
                 acc["claude"]["reset_time"] = resets["3p-5h"]
 
+            # Gemini 4 周配额专属提取 (若开通则记录，无开通则留空)
+            g4_weekly_quota = quotas.get("gemini4-weekly")
+            if g4_weekly_quota is not None:
+                if "gemini4" not in acc or not isinstance(acc.get("gemini4"), dict):
+                    acc["gemini4"] = {}
+                acc["gemini4"]["quota_weekly"] = g4_weekly_quota
+                if resets.get("gemini4-weekly"):
+                    acc["gemini4"]["reset_time_weekly"] = resets["gemini4-weekly"]
+
         acc["last_refreshed_ts"] = int(time.time())
         return True
 
@@ -1122,7 +1169,7 @@ class HubEngine:
         【Hub 预热单账号直通入口 · 对齐物理中枢 AntigravityPhysicalManager】
         """
         try:
-            from antigravity_physical_switcher import AntigravityPhysicalManager
+            from core.switcher import AntigravityPhysicalManager
             mgr = AntigravityPhysicalManager()
             acc_entry = dict(acc)
             acc_entry["email"] = email
@@ -1152,7 +1199,7 @@ class HubEngine:
         3. 梯次接力：高并发高难度任务打满一轮后，各账号已在不同倒计时阶段，接二连三快速满血恢复，告别全员死等 5 小时。
         """
         try:
-            from antigravity_physical_switcher import AntigravityPhysicalManager
+            from core.switcher import AntigravityPhysicalManager
             mgr = AntigravityPhysicalManager()
             data = self.load_accounts()
             accounts = list(data.get("accounts", {}).values())
@@ -1173,7 +1220,7 @@ class HubEngine:
         # 物理中枢无缝接入：与额度用尽自动轮换 100% 共享完全一致的底层物理切换与脱壳接力唤醒
         # 注意：不设置人工锁定，看门狗依旧正常监控额度，额度用完后自动切换不受阻碍
         try:
-            from antigravity_physical_switcher import AntigravityPhysicalManager, DEFAULT_RELAY_PROMPT
+            from core.switcher import AntigravityPhysicalManager, DEFAULT_RELAY_PROMPT
             mgr = AntigravityPhysicalManager()
             relay_prompt = (
                 "【系统级配额断点无缝续传指令】当前账号已通过物理钥匙串无缝切换至高配额账号，配额已完全满血！\n"
@@ -1279,6 +1326,37 @@ def format_countdown_sec(sec_diff: int) -> str:
     if mins > 0:
         return f"{mins}m"
     return f"{sec_diff}s"
+
+
+def render_gemini4_cell(weekly_pct: Optional[float], reset_weekly_info: str = "") -> str:
+    """
+    渲染 Gemini 4 周额度单元格：
+    - 若该账号具备 Gemini 4 额度 (weekly_pct is not None)，渲染周度进度条与重置倒计时；
+    - 若该账号未开通或无 Gemini 4 额度 (weekly_pct is None)，直接空着 (输出极简占位符或空白)。
+    """
+    if weekly_pct is None:
+        return '<div class="q-cell q-cell-g4 q-cell-empty font-mono" title="此账号暂未开放 Gemini 4 权限"><span class="q-empty-dash font-mono text-muted">—</span></div>'
+
+    val_w = round(weekly_pct * 100, 1)
+    c_w = "#16A34A" if val_w >= 50 else ("#EA580C" if val_w >= 15 else "#DC2626")
+
+    if reset_weekly_info and reset_weekly_info not in ("--", "已就绪", "就绪"):
+        reset_w_html = f'<span class="q-reset q-reset-w font-mono" title="Gemini 4 周度重置: {reset_weekly_info}">{reset_weekly_info}</span>'
+    elif val_w >= 99.9:
+        reset_w_html = '<span class="q-reset q-reset-ready font-mono" title="Gemini 4 周度满血">满额</span>'
+    else:
+        reset_w_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
+
+    return f"""
+    <div class="q-cell q-cell-g4" title="Gemini 4 周配额: {val_w}%">
+        <div class="q-row">
+            <span class="q-lbl tag-w-g4">周</span>
+            <div class="q-track"><div class="q-fill" style="width: {min(100, max(0, val_w))}%; background: {c_w};"></div></div>
+            <span class="q-val font-mono" style="color: {c_w};">{val_w}%</span>
+            <div class="q-slot">{reset_w_html}</div>
+        </div>
+    </div>
+    """
 
 
 def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "", reset_weekly_info: str = "", model_type: str = "gemini", claude_ver: str = "") -> str:
@@ -1394,7 +1472,7 @@ def render_table_rows(include_oob: bool = False) -> str:
     cur_time = time.strftime("%H:%M:%S")
 
     if not accounts:
-        empty_row = '<tr><td colspan="7" style="text-align:center; padding: 24px; font-size:13px; font-weight:900; background:#FFE4E6;">暂无账号，请执行单向导入</td></tr>'
+        empty_row = '<tr><td colspan="8" style="text-align:center; padding: 24px; font-size:13px; font-weight:900; background:#FFE4E6;">暂无账号，请执行单向导入</td></tr>'
         if include_oob:
             return empty_row + "\n" + render_top_bar_stats_html(0, 0, 0.0, 0.0, cur_time, oob=True) + "\n" + render_active_pill_html("", oob=True) + "\n" + render_rotation_button_html(oob=True) + "\n" + render_version_marker_html(oob=True)
         return empty_row
@@ -1460,7 +1538,18 @@ def render_table_rows(include_oob: bool = False) -> str:
         warmup_iso = acc_warmup.get("locked_reset_iso", "")
         warmup_model = acc_warmup.get("model_warmed", "")
 
-        # Gemini 配额 (极光天蓝)
+        # Gemini 4 配额 (周额度，无则留空)
+        g4_info = acc.get("gemini4") or acc.get("gemini_4")
+        if g4_info and isinstance(g4_info, dict) and "quota_weekly" in g4_info and g4_info.get("quota_weekly") is not None:
+            g4_w = _safe_float(g4_info.get("quota_weekly"))
+            g4_reset_raw = g4_info.get("reset_time_weekly", "")
+            g4_reset_w = format_reset_time(g4_reset_raw)
+            g4_cell = render_gemini4_cell(g4_w, g4_reset_w)
+        else:
+            g4_w = None
+            g4_cell = render_gemini4_cell(None)
+
+        # Gemini 3.8 配额 (极光天蓝)
         g_w = acc.get("gemini", {}).get("quota_weekly", 1.0)
         # 短板约束：若周配额已耗尽 (<=0.0)，5H 配额物理上必然归零，杜绝虚假满血
         g_5h = 0.0 if g_w <= 0.0001 else acc.get("gemini", {}).get("quota_5h", 1.0)
@@ -1520,6 +1609,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             data-gemini-w="{g_w}"
             data-claude-5h="{c_5h}"
             data-claude-w="{c_w}"
+            data-gemini4-w="{g4_w if g4_w is not None else ''}"
             data-is-active="{'1' if is_active else '0'}">
             <td class="col-center col-check" style="background-color: {row_bg};"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
             <td class="col-center font-mono num-col" style="background-color: {row_bg};">{num_html}</td>
@@ -1530,8 +1620,9 @@ def render_table_rows(include_oob: bool = False) -> str:
                     {pro_tag_html}
                 </div>
             </td>
-            <td class="col-quota" style="background-color: {row_bg};">{g_cell}</td>
-            <td class="col-quota" style="background-color: {row_bg};">{c_cell}</td>
+            <td class="col-quota col-quota-g4" style="background-color: {row_bg};">{g4_cell}</td>
+            <td class="col-quota col-quota-g38" style="background-color: {row_bg};">{g_cell}</td>
+            <td class="col-quota col-quota-claude" style="background-color: {row_bg};">{c_cell}</td>
             <td class="col-actions" style="background-color: {row_bg};">
                 <div class="actions-wrap">
                     {action_switch_html}
@@ -1645,7 +1736,7 @@ def render_dashboard_html() -> str:
             width: 100%;
             font-size: 12px;
             line-height: 1.2;
-            min-width: 834px !important;
+            min-width: 864px !important;
             -webkit-font-smoothing: antialiased;
             display: flex;
             flex-direction: column;
@@ -1667,11 +1758,11 @@ def render_dashboard_html() -> str:
             font-variant-numeric: tabular-nums;
         }}
 
-        /* 🚀 官方高密显瘦黄金版心：严格锁定 834px，配额线瘦身50%，零按键挤压与截断 */
+        /* 🚀 官方高密显瘦黄金版心：严格锁定 854px，三轨配额并列无截断 */
         .app-container {{
-            width: 784px !important;
-            max-width: 784px !important;
-            min-width: 784px !important;
+            width: 854px !important;
+            max-width: 854px !important;
+            min-width: 854px !important;
             margin: 0 auto;
             box-sizing: border-box;
             padding: 0 4px;
@@ -2306,16 +2397,47 @@ def render_dashboard_html() -> str:
             box-shadow: 1.5px 1.5px 0px #000000 !important;
         }}
 
-        /* 配额单元格：双轨绝对等长 + 50px 绝对对称槽位 */
+        /* 配额单元格：三轨绝对对齐 */
         .col-quota {{
-            width: 212px !important;
-            min-width: 212px !important;
-            max-width: 212px !important;
             padding: 2px 4px !important;
             box-sizing: border-box;
             overflow: hidden;
             text-align: center;
             vertical-align: middle;
+        }}
+        .col-quota-g4 {{
+            width: 140px !important;
+            min-width: 140px !important;
+            max-width: 140px !important;
+        }}
+        .col-quota-g38 {{
+            width: 190px !important;
+            min-width: 190px !important;
+            max-width: 190px !important;
+        }}
+        .col-quota-claude {{
+            width: 190px !important;
+            min-width: 190px !important;
+            max-width: 190px !important;
+        }}
+        .tag-w-g4 {{ background: #A855F7; color: #FFFFFF; }}
+        .q-cell-g4 .q-track {{
+            width: 68px !important;
+            min-width: 68px !important;
+            max-width: 68px !important;
+        }}
+        .q-cell-empty {{
+            min-height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .q-empty-dash {{
+            font-size: 13px;
+            font-weight: 900;
+            color: #94A3B8;
+            opacity: 0.75;
+            user-select: none;
         }}
         .q-cell {{
             display: flex;
@@ -3324,6 +3446,111 @@ def render_dashboard_html() -> str:
             border: 1px solid #D1D5DB;
             color: #9CA3AF;
         }}
+        /* 🐧 Omarchy 风格原生暗黑主题 (Tokyo Night / Omarchy deep slate) */
+        body.theme-omarchy {{
+            --bg-color: #0f1117;
+            --text-color: #c0caf5;
+            background-color: #0f1117 !important;
+            color: #c0caf5 !important;
+        }}
+        body.theme-omarchy .top-bar {{
+            background: #1a1b26 !important;
+            border: 2px solid #2ac3de !important;
+            box-shadow: 4px 4px 0px #050608 !important;
+            color: #c0caf5 !important;
+        }}
+        body.theme-omarchy .top-bar-title {{
+            color: #7dcfff !important;
+        }}
+        body.theme-omarchy .control-bar {{
+            background: #1a1b26 !important;
+            border: 2px solid #24283b !important;
+            box-shadow: 3px 3px 0px #050608 !important;
+            color: #c0caf5 !important;
+        }}
+        body.theme-omarchy .table-wrap {{
+            border: 2px solid #24283b !important;
+            box-shadow: 4px 4px 0px #050608 !important;
+            background: #16161e !important;
+        }}
+        body.theme-omarchy thead th {{
+            background: #1f2335 !important;
+            color: #7aa2f7 !important;
+            border-bottom: 2px solid #24283b !important;
+            border-right: 2px solid #24283b !important;
+        }}
+        body.theme-omarchy tbody td {{
+            border-bottom: 1.5px solid #24283b !important;
+            border-right: 1.5px solid #24283b !important;
+            color: #c0caf5 !important;
+            background-color: #1a1b26 !important;
+        }}
+        body.theme-omarchy tbody tr:hover td {{
+            background-color: #24283b !important;
+        }}
+        body.theme-omarchy tbody tr.is-active-row td {{
+            background-color: #1e293b !important;
+            color: #38bdf8 !important;
+        }}
+        body.theme-omarchy .email-text {{
+            color: #e0af68 !important;
+        }}
+        body.theme-omarchy .num-col {{
+            color: #7aa2f7 !important;
+        }}
+        body.theme-omarchy .q-track {{
+            background: #1f2335 !important;
+            border-color: #3b4261 !important;
+        }}
+        body.theme-omarchy .q-reset {{
+            background: #24283b !important;
+            color: #a9b1d6 !important;
+            border-color: #414868 !important;
+        }}
+        body.theme-omarchy .btn {{
+            background: #24283b !important;
+            color: #c0caf5 !important;
+            border-color: #3b4261 !important;
+            box-shadow: 2px 2px 0px #050608 !important;
+        }}
+        body.theme-omarchy .btn:hover {{
+            background: #3b4261 !important;
+            color: #ffffff !important;
+        }}
+        body.theme-omarchy .btn-switch {{
+            background: #0284c7 !important;
+            color: #ffffff !important;
+        }}
+        body.theme-omarchy .btn-in-use {{
+            background: #059669 !important;
+            color: #ffffff !important;
+        }}
+        body.theme-omarchy .search-box {{
+            background: #1f2335 !important;
+            border-color: #3b4261 !important;
+        }}
+        body.theme-omarchy .search-input {{
+            color: #c0caf5 !important;
+        }}
+        body.theme-omarchy .stats-counter {{
+            background: #1f2335 !important;
+            border-color: #3b4261 !important;
+            color: #c0caf5 !important;
+        }}
+        body.theme-omarchy .filter-tab {{
+            background: #1f2335 !important;
+            color: #a9b1d6 !important;
+            border-color: #3b4261 !important;
+        }}
+        body.theme-omarchy .filter-tab.active {{
+            background: #7aa2f7 !important;
+            color: #0f1117 !important;
+        }}
+        body.theme-omarchy .pagination-bar {{
+            background: #1a1b26 !important;
+            border-color: #24283b !important;
+            color: #7aa2f7 !important;
+        }}
     </style>
 </head>
 <body data-hub-version="{__version__}">
@@ -3344,6 +3571,11 @@ def render_dashboard_html() -> str:
             </div>
             {stats_html}
             <div class="top-right">
+                <button class="btn btn-top btn-theme font-mono" id="btn-theme-toggle"
+                        onclick="toggleOmarchyTheme(); event.preventDefault(); event.stopPropagation();"
+                        title="切换主题风格 (Omarchy 暗黑 / Neo-Brutalism)">
+                    <span id="btn-theme-icon">🐧</span> <span id="btn-theme-text">Omarchy</span>
+                </button>
                 <button class="btn btn-top btn-mask font-mono" id="btn-mask-toggle"
                         onclick="toggleAccountMask(); event.preventDefault(); event.stopPropagation();"
                         title="按一下打码，再按一下明文 (快捷键: M)">
@@ -3418,17 +3650,18 @@ def render_dashboard_html() -> str:
             </div>
         </div>
 
-        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 锁定最小宽度 840px 防截断) -->
+        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 锁定最小宽度 854px 防截断) -->
         <div class="table-wrap">
             <table>
                 <colgroup>
                     <col style="width: 28px;">   <!-- 批量勾选复选框 (28px 居中) -->
                     <col style="width: 28px;">   <!-- # 序号+拖拽手柄 (28px 居中) -->
-                    <col style="width: 70px;">   <!-- 状态 (70px 扩宽，彻底根除 STANDBY/ACTIVE 截断) -->
-                    <col style="width: 90px;">   <!-- 账号 (90px 紧凑 Mono) -->
-                    <col style="width: 212px;">  <!-- Gemini 配额 (212px 水平绝对居中) -->
-                    <col style="width: 212px;">  <!-- Claude 配额 (212px 水平绝对居中) -->
-                    <col style="width: 132px;">  <!-- 操作 (132px 宽裕无截断，▲▼完整展示) -->
+                    <col style="width: 68px;">   <!-- 状态 (68px) -->
+                    <col style="width: 88px;">   <!-- 账号 (88px 紧凑 Mono) -->
+                    <col style="width: 140px;">  <!-- Gemini 4 (周额度) (140px) -->
+                    <col style="width: 190px;">  <!-- Gemini 3.8 (190px) -->
+                    <col style="width: 190px;">  <!-- Claude (190px) -->
+                    <col style="width: 122px;">  <!-- 操作 (122px) -->
                 </colgroup>
                 <thead>
                     <tr>
@@ -3436,13 +3669,19 @@ def render_dashboard_html() -> str:
                         <th class="col-center th-num">#</th>
                         <th class="col-center th-status">状态</th>
                         <th class="th-email">账号</th>
-                        <th class="th-gemini th-sortable" onclick="cycleGeminiSort()">
+                        <th class="th-gemini4 th-sortable" onclick="cycleGemini4Sort()" title="点击排序 Gemini 4 周额度">
                             <div class="th-sort-inner">
-                                <span>Gemini</span>
+                                <span>Gemini 4 (周)</span>
+                                <span id="sort-gemini4-badge" class="sort-badge font-mono" style="display:none;"></span>
+                            </div>
+                        </th>
+                        <th class="th-gemini th-sortable" onclick="cycleGeminiSort()" title="点击排序 Gemini 3.8 额度">
+                            <div class="th-sort-inner">
+                                <span>Gemini 3.8</span>
                                 <span id="sort-gemini-badge" class="sort-badge font-mono" style="display:none;"></span>
                             </div>
                         </th>
-                        <th class="th-claude th-sortable" onclick="cycleClaudeSort()">
+                        <th class="th-claude th-sortable" onclick="cycleClaudeSort()" title="点击排序 Claude 额度">
                             <div class="th-sort-inner">
                                 <span>Claude</span>
                                 <span id="sort-claude-badge" class="sort-badge font-mono" style="display:none;"></span>
@@ -4516,15 +4755,37 @@ def render_dashboard_html() -> str:
         }}
         window.toggleAutoRotation = cycleAutoRotation;
 
+        // 🐧 Omarchy 主题切换与持久化
+        function toggleOmarchyTheme() {{
+            const isOmarchy = document.body.classList.toggle('theme-omarchy');
+            localStorage.setItem('hub_theme', isOmarchy ? 'omarchy' : 'neo');
+            const btn = document.getElementById('btn-theme-toggle');
+            if (btn) {{
+                btn.innerHTML = isOmarchy ? '<span>☀️ Neo</span>' : '<span>🐧 Omarchy</span>';
+            }}
+            showToast(isOmarchy ? "🐧 已切换至 Omarchy 暗黑风格" : "☀️ 已切换至 Neo-Brutalism 原版风格", "info");
+        }}
+
         let currentPage = 1;
         const PAGE_SIZE = 15;
         let __cachedTbodyHTML = '';
-        let currentSortMode = 'default'; // 'default' | 'gemini_w_asc' | 'gemini_5h_asc' | 'claude_w_asc' | 'claude_5h_asc'
+        let currentSortMode = 'default'; // 'default' | 'gemini4_w_desc' | 'gemini_w_asc' | 'gemini_5h_asc' | 'claude_w_asc' | 'claude_5h_asc'
 
-        // 🔀 更新 Gemini / Claude 表头排序角标指示器
+        // 🔀 更新 Gemini 4 / Gemini 3.8 / Claude 表头排序角标指示器
         function updateSortBadges() {{
+            const g4Badge = document.getElementById('sort-gemini4-badge');
             const gBadge = document.getElementById('sort-gemini-badge');
             const cBadge = document.getElementById('sort-claude-badge');
+
+            if (g4Badge) {{
+                if (currentSortMode === 'gemini4_w_desc') {{
+                    g4Badge.textContent = '周多→少';
+                    g4Badge.style.display = 'inline-flex';
+                }} else {{
+                    g4Badge.textContent = '';
+                    g4Badge.style.display = 'none';
+                }}
+            }}
 
             if (gBadge) {{
                 if (currentSortMode === 'gemini_5h_desc') {{
@@ -4557,6 +4818,20 @@ def render_dashboard_html() -> str:
                     cBadge.style.display = 'none';
                 }}
             }}
+        }}
+
+        // 🎯 Gemini 4 表头循环点击排序：周额度 (多→少) → 恢复默认
+        function cycleGemini4Sort() {{
+            if (currentSortMode !== 'gemini4_w_desc') {{
+                currentSortMode = 'gemini4_w_desc';
+                showToast("📊 已按 Gemini 4 周额度 (从多到少) 降序排列", "info");
+            }} else {{
+                currentSortMode = 'default';
+                showToast("🔄 已恢复账号列表默认排序", "info");
+            }}
+            currentPage = 1;
+            updateSortBadges();
+            filterTable();
         }}
 
         // 🎯 Gemini 表头三态循环点击排序：周额度(少→多) → 5h额度(少→多) → 恢复默认
@@ -4593,8 +4868,16 @@ def render_dashboard_html() -> str:
             filterTable();
         }}
 
-        // 页面初始加载时备份原始行数据
+        // 页面初始加载时初始化主题与原始行数据
         window.addEventListener('DOMContentLoaded', function() {{
+            const savedTheme = localStorage.getItem('hub_theme');
+            const isDark = (savedTheme === 'omarchy' || !savedTheme);
+            if (isDark) {{
+                document.body.classList.add('theme-omarchy');
+                const btn = document.getElementById('btn-theme-toggle');
+                if (btn) btn.innerHTML = '<span>☀️ Neo</span>';
+            }}
+
             const tbody = document.getElementById('account-tbody');
             if (tbody && tbody.children.length > 0) {{
                 __cachedTbodyHTML = tbody.innerHTML;
@@ -4654,7 +4937,13 @@ def render_dashboard_html() -> str:
                 if (currentSortMode !== 'default') {{
                     let valA = 0;
                     let valB = 0;
-                    if (currentSortMode === 'gemini_5h_desc') {{
+                    if (currentSortMode === 'gemini4_w_desc') {{
+                        const rawA = a.getAttribute('data-gemini4-w');
+                        const rawB = b.getAttribute('data-gemini4-w');
+                        valA = (rawA !== '' && rawA !== null) ? parseFloat(rawA) : -1.0;
+                        valB = (rawB !== '' && rawB !== null) ? parseFloat(rawB) : -1.0;
+                        if (valA !== valB) return valB - valA;
+                    }} else if (currentSortMode === 'gemini_5h_desc') {{
                         valA = parseFloat(a.getAttribute('data-gemini-5h') || '0');
                         valB = parseFloat(b.getAttribute('data-gemini-5h') || '0');
                         if (valA !== valB) return valB - valA;
@@ -5800,7 +6089,7 @@ def start_background_workers():
         logger.info("后台每小时智能错峰预热守卫已启动 (5h错峰梯次流水线与接力轮转)")
         time.sleep(5)  # 启动后稍等 5 秒让服务就绪
         last_global_round = 0
-        from antigravity_physical_switcher import AntigravityPhysicalManager
+        from core.switcher import AntigravityPhysicalManager
         mgr = AntigravityPhysicalManager()
         while True:
             try:

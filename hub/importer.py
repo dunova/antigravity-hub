@@ -423,18 +423,31 @@ def ingest_system_keychain_or_creds(accounts_file: str = HUB_ACCOUNTS_FILE) -> T
     rt = ""
     detected_email = ""
 
-    # 1. 尝试从 macOS Keychain 抓取
+    # 1. 尝试从 macOS Keychain 或 Linux Secret Service 抓取
     try:
-        cmd = ["security", "find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"]
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
-        if res.returncode == 0 and res.stdout.strip():
-            raw = res.stdout.strip()
-            if raw.startswith("go-keyring-base64:"):
-                raw = raw.replace("go-keyring-base64:", "")
-            dec = base64.b64decode(raw).decode("utf-8")
-            kd = json.loads(dec)
-            at = kd.get("token", {}).get("access_token") or kd.get("access_token") or ""
-            rt = kd.get("token", {}).get("refresh_token") or kd.get("refresh_token") or ""
+        if sys.platform == "darwin":
+            cmd = ["security", "find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+            if res.returncode == 0 and res.stdout.strip():
+                raw = res.stdout.strip()
+                if raw.startswith("go-keyring-base64:"):
+                    raw = raw.replace("go-keyring-base64:", "")
+                dec = base64.b64decode(raw).decode("utf-8")
+                kd = json.loads(dec)
+                at = kd.get("token", {}).get("access_token") or kd.get("access_token") or ""
+                rt = kd.get("token", {}).get("refresh_token") or kd.get("refresh_token") or ""
+        elif sys.platform.startswith("linux"):
+            cmd = ["secret-tool", "lookup", "service", "gemini", "username", "antigravity"]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+            if res.returncode == 0 and res.stdout.strip():
+                raw = res.stdout.strip()
+                if raw.startswith("go-keyring-base64:"):
+                    raw = base64.b64decode(raw[len("go-keyring-base64:"): ]).decode("utf-8")
+                kd = json.loads(raw)
+                at = kd.get("token", {}).get("access_token") or kd.get("access_token") or ""
+                rt = kd.get("token", {}).get("refresh_token") or kd.get("refresh_token") or ""
+                if kd.get("id_token_email"):
+                    detected_email = kd.get("id_token_email", "").strip().lower()
     except Exception:
         pass
 

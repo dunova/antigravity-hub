@@ -1,0 +1,17 @@
+[Unit]
+Description=Antigravity Hub (多账号轮换与配额守护中枢)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/dunova/Projects/antigravity-hub
+ExecStart=/usr/bin/python3 /home/dunova/Projects/antigravity-hub/start_hub.py --port 18088
+Restart=always
+RestartSec=5
+Nice=10
+MemoryMax=256M
+Environment=PYTHONUNBUFFERED=1
+Environment=ANTIGRAVITY_HUB_DIR=/home/dunova/.antigravity_hub
+
+[Install]
+WantedBy=default.target

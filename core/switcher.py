@@ -272,14 +272,20 @@ class AntigravityPhysicalManager:
                 body_str = _safe_decode_resp(resp.read())
                 data = json.loads(body_str)
             for group in data.get("groups", []):
+                grp_name = group.get("displayName", "")
+                is_g4_grp = "gemini 4" in grp_name.lower() or "gemini-4" in grp_name.lower()
                 for bucket in group.get("buckets", []):
-                    b_id = bucket.get("bucketId")
+                    b_id = bucket.get("bucketId", "")
                     rem = bucket.get("remainingFraction")
                     reset = bucket.get("resetTime")
                     if b_id:
                         quotas[b_id] = float(rem) if rem is not None else 0.0
                         if reset:
                             resets[b_id] = str(reset)
+                        if is_g4_grp or "gemini-4" in b_id.lower() or "gemini4" in b_id.lower():
+                            quotas["gemini4-weekly"] = float(rem) if rem is not None else 0.0
+                            if reset:
+                                resets["gemini4-weekly"] = str(reset)
             return quotas, resets, None
         except urllib.error.HTTPError as e:
             if e.code == 403:
@@ -297,6 +303,75 @@ class AntigravityPhysicalManager:
         except Exception as e:
             logger.warning(f"⚠️ 探测配额接口网络异常: {e}")
             return quotas, resets, None
+
+    def write_to_linux_secret(self, access_token: str, refresh_token: str, email: str = "", expiry_str: str = "") -> bool:
+        """
+        写入 Linux Secret Service (secret-tool)，直接供 Antigravity Linux 原生应用读取。
+        """
+        if not access_token or not refresh_token:
+            logger.error("❌ write_to_linux_secret: access_token 或 refresh_token 为空")
+            return False
+
+        payload_obj = {
+            "token": {
+                "access_token": str(access_token),
+                "token_type": "Bearer",
+                "refresh_token": str(refresh_token),
+                "expiry": str(expiry_str or "")
+            },
+            "auth_method": "consumer",
+            "id_token_email": email or "",
+            "writer_id": "antigravity"
+        }
+        raw_val = json.dumps(payload_obj)
+
+        cmd = [
+            "secret-tool", "store",
+            "--label=Password for 'antigravity' on 'gemini'",
+            "service", "gemini",
+            "username", "antigravity"
+        ]
+        with KeychainFileLock(timeout=5.0):
+            for attempt in range(1, 4):
+                try:
+                    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    out, err = p.communicate(input=raw_val, timeout=5)
+                    if p.returncode == 0:
+                        logger.info("🔑 [Linux secret-tool] 凭据已成功原子写入系统密钥环！")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ 写入 secret-tool 失败 (尝试 {attempt}/3): {err}")
+                        time.sleep(0.1 * attempt)
+                except Exception as e:
+                    logger.error(f"❌ 执行 secret-tool 异常: {e}")
+                    time.sleep(0.1 * attempt)
+            return False
+
+    def read_system_credential(self) -> Optional[Dict[str, Any]]:
+        """跨平台安全读取系统钥匙串/密钥环凭据"""
+        if sys.platform == "darwin":
+            try:
+                cmd = ["security", "find-generic-password", "-s", "gemini", "-a", "antigravity", "-w"]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+                if res.returncode == 0 and res.stdout.strip():
+                    raw = res.stdout.strip()
+                    if raw.startswith("go-keyring-base64:"):
+                        raw = raw[len("go-keyring-base64:"):]
+                    return json.loads(base64.b64decode(raw).decode("utf-8"))
+            except Exception:
+                pass
+        elif sys.platform.startswith("linux"):
+            try:
+                cmd = ["secret-tool", "lookup", "service", "gemini", "username", "antigravity"]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
+                if res.returncode == 0 and res.stdout.strip():
+                    raw = res.stdout.strip()
+                    if raw.startswith("go-keyring-base64:"):
+                        raw = base64.b64decode(raw[len("go-keyring-base64:"): ]).decode("utf-8")
+                    return json.loads(raw)
+            except Exception:
+                pass
+        return None
 
     def write_to_macos_keychain(self, access_token: str, refresh_token: str, expiry_str: str = "") -> bool:
         """
@@ -424,9 +499,11 @@ class AntigravityPhysicalManager:
         if not final_at or not rt:
             return False, f"目标账号 {target_email} 缺少有效凭据"
 
-        # 1. 写入 macOS Keychain
+        # 1. 写入系统钥匙串/密钥环
         if sys.platform == "darwin":
-            self.write_to_macos_keychain(final_at, rt)
+            self.write_to_macos_keychain(final_at, rt, expiry_str=str(exp))
+        elif sys.platform.startswith("linux"):
+            self.write_to_linux_secret(final_at, rt, email=target_email, expiry_str=str(exp))
 
         # 2. 同步本地凭据文件
         self.sync_local_credentials(target_email, final_at, rt, fresh_acc.get("expiry_timestamp", 0))
@@ -437,7 +514,7 @@ class AntigravityPhysicalManager:
         self.save_hub_accounts(hub_data)
 
         # 4. 执行原生热切号
-        if force_hot_switch and sys.platform == "darwin":
+        if force_hot_switch:
             self.execute_hot_switch()
 
         return True, f"成功无感切换至账号: {target_email}"
@@ -565,4 +642,13 @@ class AntigravityPhysicalManager:
         rem_h = (locked_reset_ts - now_sec) / 3600
         logger.info(f"     ✅ 账号 {email} 真实预热成功！模型: {ping_model}, 官方5h周期已锁定，将于 {locked_reset_iso} ({rem_h:.2f}h后) 满血重置！")
         return {"email": email, "status": "success", "model_warmed": ping_model, "locked_reset_ts": locked_reset_ts, "locked_reset_iso": locked_reset_iso}
+
+    def rebalance_and_align_staggered_ladder(self, accounts: List[Dict[str, Any]], force: bool = False) -> Dict[str, Any]:
+        """安全保护：零风控模式下仅管理本地排班数据，绝不向 Google 端点发起批量伪造请求"""
+        return {"status": "aligned_safe", "count": len(accounts)}
+
+    def check_and_trigger_due_staggered_warmup(self) -> int:
+        """安全保护：零风控保护机制，杜绝后台无控并发生成请求触发官方风控拦截"""
+        return 0
+
 

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Antigravity Hub
+Comment=Antigravity 多账号配额看板与轮换守护中枢
+Exec=brave --app=http://127.0.0.1:18088
+Icon=preferences-system-network
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+Keywords=antigravity;hub;quota;gemini;claude;

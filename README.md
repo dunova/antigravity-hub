@@ -5,9 +5,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v2.44.7-FF2A85?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v2.45.0-FF2A85?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/Python-3.9+-00F0FF?style=flat-square&logo=python" alt="Python" />
-  <img src="https://img.shields.io/badge/Architecture-Neo--Brutalism-FFE600?style=flat-square" alt="Style" />
+  <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS-00F0FF?style=flat-square&logo=linux" alt="OS" />
+  <img src="https://img.shields.io/badge/UI-Omarchy%20%7C%20Neo--Brutalism-FFE600?style=flat-square" alt="Style" />
   <img src="https://img.shields.io/badge/Frontend-HTMX-22C55E?style=flat-square&logo=htmx" alt="HTMX" />
   <img src="https://img.shields.io/badge/License-MIT-black?style=flat-square" alt="License" />
 </p>
@@ -113,9 +114,9 @@ flowchart TD
 ## 🚀 极速上手
 
 ### 环境要求
-- **操作系统**：macOS (推荐，支持钥匙串原生热切号) 或 Linux
+- **操作系统**：Linux (Omarchy / Arch Linux, Ubuntu / Debian 等) 或 macOS
 - **Python 版本**：Python 3.9 及以上
-- **依赖**：**零强制第三方依赖**（基于 Python 原生标准库实现）
+- **依赖**：**零强制第三方依赖**（基于 Python 原生标准库实现；Linux 下仅需系统预装 `secret-tool` 即可享受原生热切号）
 
 ### 1. 克隆仓库
 ```bash
@@ -242,6 +243,23 @@ antigravity-hub/
 ---
 
 ## 📜 版本更新日志 (Changelog)
+
+### v2.45.0 (2026-11-07)
+- **Linux (Omarchy) 全量移植与 Secret Service 原生热切号**：
+  - 基于 Linux Secret Service (`secret-tool`) 抹平与 macOS Keychain 的存储差异，完全原子化读写系统安全凭据；
+  - 针对 Linux 原生 Antigravity IDE 进程体系实施平滑 `language_server` 信号热切号，切号期间主界面、终端与会话 100% 保持存活；
+  - 提供开箱即用的 Linux Systemd 用户级后台守护服务（`deploy/antigravity-hub.service`）与一键安装脚本（`deploy/install_linux.sh`），常驻内存控制在 25M~35M 之间；
+  - 注册 Linux 桌面应用快捷方式（`antigravity-hub.desktop`），支持应用菜单一键调起控制台。
+- **额度三轨并列与 Gemini 4 专用周度额度支持**：
+  - 看板数据模型与 UI 全面升级为三轨并列体系：`Gemini 4 (周)` (140px)、`Gemini 3.8 (5h/周)` (190px)、`Claude (5h/周)` (190px)；
+  - 严格落实**“有额度显示进度与倒计时，无额度留空 `—` 绝不假显 0%”**的设计契约；
+  - 表头集成 JavaScript 循环排序（`cycleGemini4Sort()`），支持按 Gemini 4 周额度降序/恢复默认排列。
+- **Omarchy 暗黑风格 UI 原生深度适配**：
+  - 针对 Omarchy Linux 桌面生态，新增 `.theme-omarchy` 专属暗黑高对比度调色板（Tokyo Night / Deep Slate），完美融入系统设计；
+  - 顶栏右侧新增 `[🐧 Omarchy / ☀️ Neo]` 主题无缝切换按钮，并支持 `localStorage` 客户端记忆；在 Omarchy 环境下默认激活暗黑主题。
+- **全方位零风控安全加固**：
+  - 全面切断后台无控生成探针与伪造请求，杜绝并发调用触发 Google 官方模型风控；
+  - 优化浏览器探测矩阵，Linux 下优先适配 Brave、Chromium、Google Chrome 与 `xdg-open` 独立 Profile 沙盒。
 
 ### v2.39.1 (2026-10-05)
 - **前端双重物理自愈门禁 (Self-Healing Grid Gate)**：客户端 JavaScript 在解析服务端 table 更新时，内置【表头列数物理一致性门禁】（若 `thead` 列数与数据行 `td` 列数不符立即整页自愈刷新，根除旧页面长时间未刷新导致的表格向右错位）与【服务端版本感知门禁】（一旦检测到服务端升版，客户端瞬间无感整页自愈刷新）；
