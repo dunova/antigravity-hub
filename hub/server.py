@@ -33,10 +33,15 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.8"
-__canonical_version_tag__ = "20261108-v2.45.8-PRO_55_GEMINI4_ENTITLEMENT_SYNC"
-__last_updated__ = "2026-11-08 18:35:00"
-__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派Logo+5.5账号必然全量激活Gemini4+额度耗尽原生IPC断点接力"
+__version__ = "2.45.9"
+__canonical_version_tag__ = "20261108-v2.45.9-ISOLATED_CONTAINER_OAUTH_AND_IMPORTER_REPAIR"
+__last_updated__ = "2026-11-08 18:50:00"
+__canonical_doctrine__ = "彻底修复原生OAuth与导入模块+Linux独立隔离容器授权+5.5全量联动Gemini4+断点无损接力"
+
+# 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
+from hub import importer as import_accounts_hub
+sys.modules["import_accounts_hub"] = import_accounts_hub
+
 
 
 # 配置常量
@@ -181,10 +186,22 @@ def launch_browser_for_auth(url: str, isolated: bool = False, profile_name: str 
                     return True
                 cmd = [app_path]
                 if isolated and profile_dir:
-                    cmd.extend([f"--user-data-dir={profile_dir}", "--no-first-run"])
+                    cmd.extend(["--new-window", f"--user-data-dir={profile_dir}", "--no-first-run", "--no-default-browser-check"])
                 cmd.append(url)
-                subprocess.Popen(cmd)
-                logger.info(f"🚀 [浏览器调起 Linux] 已拉起 {app_name}: {url}")
+                # 注入当前桌面显示环境变量，确保独立容器窗口在 Hyprland/Wayland/X11 正常弹出
+                env = os.environ.copy()
+                if "DISPLAY" not in env:
+                    env["DISPLAY"] = ":0"
+                uid = os.getuid()
+                if "WAYLAND_DISPLAY" not in env:
+                    for w in ["wayland-1", "wayland-0"]:
+                        if os.path.exists(f"/run/user/{uid}/{w}"):
+                            env["WAYLAND_DISPLAY"] = w
+                            break
+                if "XDG_RUNTIME_DIR" not in env:
+                    env["XDG_RUNTIME_DIR"] = f"/run/user/{uid}"
+                subprocess.Popen(cmd, env=env)
+                logger.info(f"🚀 [浏览器调起 Linux] 已拉起 {app_name} (isolated={isolated}): {url}")
                 return True
         except Exception as e:
             logger.warning(f"⚠️ [浏览器调起] 拉起 {app_name} 异常: {e}，尝试下一个候选")
@@ -496,13 +513,12 @@ class HubEngine:
             except Exception as e:
                 logger.warning(f"从 ~/.antigravity_tools/accounts 恢复失败: {e}")
 
-        # 尝试通过 import_accounts_hub
+        # 尝试通过 hub.importer 初始化吸纳
         try:
-            import import_accounts_hub
-            if hasattr(import_accounts_hub, "import_accounts_read_only"):
-                if import_accounts_hub.import_accounts_read_only(ACCOUNTS_HUB_FILE):
-                    with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as f:
-                        return json.load(f)
+            from hub.importer import import_accounts_read_only
+            if import_accounts_read_only(ACCOUNTS_HUB_FILE):
+                with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
         except Exception as e:
             logger.warning(f"执行 import_accounts_read_only 失败: {e}")
 
@@ -4060,12 +4076,15 @@ def render_dashboard_html() -> str:
             <div class="import-body-content">
                 <!-- TAB 1: Google OAuth 2.0 浏览器一键授权 (默认首屏) -->
                 <div id="import-pane-oauth" class="import-pane">
+                    <div style="font-size:12px; font-weight:700; color:#374151; margin-bottom:10px; line-height:1.5;">
+                        💡 <b>推荐方式</b>：点击下方【🛡️ 独立容器授权】，将在干净隔离的独立沙盒窗口中打开 Google 登录页。不读取任何旧 Cookie，杜绝串号，支持连续添加多个新账号（如 aicake88、cakeai99 等）。
+                    </div>
                     <div style="display:flex; flex-direction:column; gap:10px;">
-                        <button class="btn-sync-action font-mono" id="btn-oauth-browser" onclick="doStartGoogleOAuth(false, this)">
-                            🌐 登录 Google 账号授权
+                        <button class="btn-submit-action font-mono" id="btn-oauth-isolated" onclick="doStartGoogleOAuth(true, this)" style="background:#FFE600; font-weight:900; font-size:13px; height:42px; border:2.5px solid #000000; box-shadow:3px 3px 0px #000000;">
+                            🛡️ 独立容器授权 (推荐·全新干净沙盒防串号)
                         </button>
-                        <button class="btn-submit-action font-mono" id="btn-oauth-isolated" onclick="doStartGoogleOAuth(true, this)">
-                            🛡️ 独立容器授权 (防串号)
+                        <button class="btn-sync-action font-mono" id="btn-oauth-browser" onclick="doStartGoogleOAuth(false, this)" style="background:#FFFFFF; font-size:12px; height:34px;">
+                            🌐 默认浏览器授权 (读取当前浏览器会话)
                         </button>
                     </div>
                     <div id="oauth-status-box" style="display:none; margin-top:12px; padding:10px 12px; background:#FEF9C3; border:2px solid #000000; border-radius:6px; box-shadow:2px 2px 0px #000000;">
@@ -4075,8 +4094,9 @@ def render_dashboard_html() -> str:
                         </div>
                     </div>
                     <div style="margin-top:14px; padding-top:12px; border-top:1.5px dashed #9CA3AF;">
+                        <div style="font-size:11.5px; font-weight:700; color:#4B5563; margin-bottom:6px;">手动回调兑换（若网络拦截或需异地粘贴）：</div>
                         <div style="display:flex; gap:8px;">
-                            <input type="text" id="oauth-manual-code" class="form-input font-mono" style="margin-bottom:0; flex:1;" placeholder="粘贴回调 URL 或 Code">
+                            <input type="text" id="oauth-manual-code" class="form-input font-mono" style="margin-bottom:0; flex:1;" placeholder="粘贴回调完整 URL 或 Code">
                             <button class="btn-submit-action font-mono" style="width:90px; height:35px; flex-shrink:0;" onclick="doSubmitManualOAuthCode(this)">解析入库</button>
                         </div>
                     </div>
@@ -4444,8 +4464,8 @@ def render_dashboard_html() -> str:
                 const statusText = document.getElementById('oauth-status-text');
                 if (statusBox) statusBox.style.display = 'block';
                 if (statusText) statusText.innerText = isolated
-                    ? "⏳ 已拉起独立 ego 隔离容器，请在弹出窗口登录 Google 并点击允许..."
-                    : "⏳ 已在 ego 浏览器弹出 Google 授权页，请完成登录授权（完成后自动入库）...";
+                    ? "⏳ 已拉起独立沙盒容器窗口（全新隔离/防串号），请在新窗口完成登录并授权..."
+                    : "⏳ 已在浏览器打开 Google 授权页，请完成登录授权（完成后自动入库）...";
 
                 showToast("🚀 已拉起 Google 授权页面，请在浏览器中登录确认", "info");
 
@@ -5726,7 +5746,7 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(cfg).encode("utf-8"))
             return
         elif parsed.path == "/api/export":
-            from import_accounts_hub import export_accounts_backup
+            from hub.importer import export_accounts_backup
             backup_data = export_accounts_backup(ACCOUNTS_HUB_FILE)
             resp_bytes = json.dumps(backup_data, indent=2, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
@@ -5746,7 +5766,7 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(info, ensure_ascii=False).encode("utf-8"))
             return
         elif parsed.path == "/oauth-callback":
-            from import_accounts_hub import exchange_oauth_code_and_ingest
+            from hub.importer import exchange_oauth_code_and_ingest
             qs = urllib.parse.parse_qs(parsed.query)
             code = qs.get("code", [""])[0]
             state = qs.get("state", [""])[0]
@@ -6013,7 +6033,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             self.wfile.write(html.encode("utf-8"))
 
         elif parsed.path == "/api/oauth/start":
-            from import_accounts_hub import build_google_oauth_url
+            from hub.importer import build_google_oauth_url
             isolated = False
             open_browser = True
             try:
@@ -6053,7 +6073,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             return
 
         elif parsed.path == "/api/oauth/manual_code":
-            from import_accounts_hub import exchange_oauth_code_and_ingest
+            from hub.importer import exchange_oauth_code_and_ingest
             code_or_url = ""
             try:
                 if post_data.strip().startswith("{"):
@@ -6075,7 +6095,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             return
 
         elif parsed.path == "/api/ingest_active":
-            from import_accounts_hub import ingest_system_keychain_or_creds
+            from hub.importer import ingest_system_keychain_or_creds
             ok, email, msg = ingest_system_keychain_or_creds(ACCOUNTS_HUB_FILE)
             if ok:
                 threading.Thread(target=ENGINE.refresh_all_quotas, daemon=True).start()
@@ -6086,7 +6106,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             return
 
         elif parsed.path == "/api/import":
-            from import_accounts_hub import import_accounts_payload
+            from hub.importer import import_accounts_payload
             payload_str = ""
             try:
                 if post_data.strip().startswith("{") or post_data.strip().startswith("["):
