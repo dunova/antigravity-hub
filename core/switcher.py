@@ -26,6 +26,7 @@ import urllib.error
 import ssl
 import fcntl
 import math
+import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger("AntigravitySwitcher")
@@ -126,6 +127,26 @@ def atomic_write_json(file_path: str, data: Any, indent: int = 2) -> bool:
     except Exception as e:
         logger.error(f"原子写入 {file_path} 失败: {e}")
         return False
+
+
+def format_rfc3339(ts: Any) -> str:
+    """严格生成对齐 Go 官方 oauth2 库反序列化规范的 RFC3339 纳秒/微秒时区时间戳"""
+    if not ts:
+        ts = time.time() + 3600
+    if isinstance(ts, str):
+        if "T" in ts and (":" in ts):
+            return ts
+        try:
+            ts = float(ts)
+        except Exception:
+            ts = time.time() + 3600
+    tz_local = datetime.timezone(datetime.timedelta(hours=8))
+    dt = datetime.datetime.fromtimestamp(float(ts), tz_local)
+    return dt.isoformat()
+
+
+_GLOBAL_LAST_SWITCH_TS: float = 0.0
+_HOT_SWITCH_SAFE_INTERVAL: float = 35.0  # 安全冷却窗口 (35s)，保护 Electron MAX_RESTARTS = 3 熔断保护线
 
 
 class KeychainFileLock:
@@ -310,22 +331,41 @@ class AntigravityPhysicalManager:
 
     def write_to_linux_secret(self, access_token: str, refresh_token: str, email: str = "", expiry_str: str = "") -> bool:
         """
-        写入 Linux Secret Service (secret-tool)，直接供 Antigravity Linux 原生应用读取。
+        写入 Linux Secret Service (secret-tool)，100% 对齐官方 Go 语言服务器反序列化标准：
+        1. expiry: 必须为 RFC3339 标准纳秒/微秒时间戳 (如 2026-11-08T21:14:29.420585+08:00)；
+        2. writer_id: 优先继承已有密钥的原始 writer_id，无则生成合法随机字符，杜绝反序列化拒绝；
+        3. expires_in: 3599 (整数)；
+        4. auth_method: "consumer"；
+        5. id_token_email: 当前账号。
         """
         if not access_token or not refresh_token:
             logger.error("❌ write_to_linux_secret: access_token 或 refresh_token 为空")
             return False
+
+        # 提取现有凭据中的 writer_id 与 expires_in
+        existing_writer_id = ""
+        try:
+            curr_cred = self.read_system_credential()
+            if curr_cred and isinstance(curr_cred, dict):
+                existing_writer_id = str(curr_cred.get("writer_id") or "")
+        except Exception:
+            pass
+
+        import secrets
+        final_writer_id = existing_writer_id if existing_writer_id else secrets.token_urlsafe(16)
+        clean_expiry = format_rfc3339(expiry_str)
 
         payload_obj = {
             "token": {
                 "access_token": str(access_token),
                 "token_type": "Bearer",
                 "refresh_token": str(refresh_token),
-                "expiry": str(expiry_str or "")
+                "expiry": clean_expiry,
+                "expires_in": 3599
             },
             "auth_method": "consumer",
             "id_token_email": email or "",
-            "writer_id": "antigravity"
+            "writer_id": final_writer_id
         }
         raw_val = json.dumps(payload_obj)
 
@@ -341,7 +381,7 @@ class AntigravityPhysicalManager:
                     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     out, err = p.communicate(input=raw_val, timeout=5)
                     if p.returncode == 0:
-                        logger.info("🔑 [Linux secret-tool] 凭据已成功原子写入系统密钥环！")
+                        logger.info(f"🔑 [Linux secret-tool] 凭据已成功原子写入系统密钥环: {email} (expiry={clean_expiry})")
                         return True
                     else:
                         logger.warning(f"⚠️ 写入 secret-tool 失败 (尝试 {attempt}/3): {err}")
@@ -505,11 +545,23 @@ class AntigravityPhysicalManager:
             logger.debug(f"探测模型矩阵异常: {e}")
             return "4.6", [], None
 
-    def execute_hot_switch(self, timeout_sec: float = 8.0) -> bool:
+    def execute_hot_switch(self, timeout_sec: float = 8.0, force: bool = False) -> bool:
         """
         【原生热切号】平滑重启 language_server 子进程，并等待新进程拉起就绪。
         IDE 主窗口、编辑器标签页与前端会话保持存活，language_server 重启后自动读取新钥匙串。
+        自带全局安全频控门禁，防止短时间内频繁重启击穿 Electron MAX_RESTARTS = 3。
         """
+        global _GLOBAL_LAST_SWITCH_TS
+        now = time.time()
+        elapsed = now - _GLOBAL_LAST_SWITCH_TS
+        if not force and elapsed < _HOT_SWITCH_SAFE_INTERVAL:
+            logger.warning(
+                f"🛡️ [安全频控门禁] 距离上次热切号仅经过 {elapsed:.1f}s (< {_HOT_SWITCH_SAFE_INTERVAL}s)！"
+                f"凭据已原子注入 Secret Service，暂缓重复发送 kill 信号以保护 Electron 进程守护安全。"
+            )
+            return True
+
+        _GLOBAL_LAST_SWITCH_TS = now
         try:
             res = subprocess.run(["pgrep", "-f", "language_server.*antigravity"], capture_output=True, text=True)
             old_pids = set(res.stdout.strip().split())
@@ -584,11 +636,13 @@ class AntigravityPhysicalManager:
         if not final_at or not rt:
             return False, f"目标账号 {target_email} 缺少有效凭据"
 
-        # 1. 写入系统钥匙串/密钥环
+        exp_rfc = format_rfc3339(fresh_acc.get("expiry_timestamp", 0) or exp)
+
+        # 1. 写入系统钥匙串/密钥环 (100% 对齐 RFC3339 纳秒时间戳)
         if sys.platform == "darwin":
-            self.write_to_macos_keychain(final_at, rt, expiry_str=str(exp))
+            self.write_to_macos_keychain(final_at, rt, expiry_str=exp_rfc)
         elif sys.platform.startswith("linux"):
-            self.write_to_linux_secret(final_at, rt, email=target_email, expiry_str=str(exp))
+            self.write_to_linux_secret(final_at, rt, email=target_email, expiry_str=exp_rfc)
 
         # 2. 同步本地凭据文件
         self.sync_local_credentials(target_email, final_at, rt, fresh_acc.get("expiry_timestamp", 0))

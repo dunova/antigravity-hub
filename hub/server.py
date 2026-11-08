@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.10"
-__canonical_version_tag__ = "20261108-v2.45.10-LOGO_NEOBRUTALISM_CLEAN_HEADER_AND_TAGS"
-__last_updated__ = "2026-11-08 19:05:00"
-__canonical_doctrine__ = "无外框原厂彩虹A新野兽派Logo+彻底去除周与5.5冗余标注+Gemini4单轨极简纯净呈现"
+__version__ = "2.45.11"
+__canonical_version_tag__ = "20261108-v2.45.11-HOT_SWITCH_RFC3339_AND_ELECTRON_RESTART_GUARD"
+__last_updated__ = "2026-11-08 20:35:00"
+__canonical_doctrine__ = "RFC3339纳米级凭据规范+35s重启冷却门禁+消除auto_ingest自激回弹+无缝断点接力"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -1032,10 +1032,9 @@ class HubEngine:
                         locked_acc = lock_info.get("manual_account")
                         if locked_acc != detected_email:
                             logger.warning(
-                                f"🛡️ [人工锁抗回弹防御] Keychain 检测为 {detected_email}，但当前处于用户指定保护期 ({locked_acc})！"
-                                f"立即自动原子恢复用户锁定的活跃账号..."
+                                f"🛡️ [人工锁抗回弹防御] 系统凭据检测为 {detected_email}，但当前处于用户指定保护期 ({locked_acc})！"
+                                f"保持锁定状态，跳过自动覆盖（严禁后台反向自激 kill 进程）。"
                             )
-                            self.switch_account(locked_acc)
                             return locked_acc, False
                     old_active = data.get("active_email", "")
                     data["active_email"] = detected_email
