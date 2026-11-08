@@ -498,6 +498,8 @@ class AntigravityPhysicalManager:
                         }
 
             ver = "5.5" if has_55 else "4.6"
+            if ver == "5.5" and not g4_info:
+                g4_info = {"quota_weekly": 1.0, "reset_time_weekly": ""}
             return ver, c_models, g4_info
         except Exception as e:
             logger.debug(f"探测模型矩阵异常: {e}")

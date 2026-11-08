@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.7"
-__canonical_version_tag__ = "20261108-v2.45.7-AUTO_ROTATE_NATIVE_RELAY_PRO_SYNC"
-__last_updated__ = "2026-11-08 18:15:00"
-__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派Logo+全池Claude5.5免登录点亮+额度耗尽原生IPC断点接力+不杀轮换看门狗"
+__version__ = "2.45.8"
+__canonical_version_tag__ = "20261108-v2.45.8-PRO_55_GEMINI4_ENTITLEMENT_SYNC"
+__last_updated__ = "2026-11-08 18:35:00"
+__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派Logo+5.5账号必然全量激活Gemini4+额度耗尽原生IPC断点接力"
 
 
 # 配置常量
@@ -588,6 +588,13 @@ class HubEngine:
                         acc_obj["claude_models"] = ["claude-sonnet-4-6", "claude-opus-4-6-thinking"]
                 else:
                     acc_obj["claude_version"] = "5.5"
+                    # 5.5 账号必然开通并可使用 Gemini 4
+                    if not acc_obj.get("gemini4") or not isinstance(acc_obj.get("gemini4"), dict) or acc_obj["gemini4"].get("quota_weekly") is None:
+                        g_base_w = _safe_float(acc_obj.get("gemini", {}).get("quota_weekly", 1.0), 1.0)
+                        acc_obj["gemini4"] = {
+                            "quota_weekly": g_base_w,
+                            "reset_time_weekly": acc_obj.get("gemini", {}).get("reset_time_weekly", "")
+                        }
 
             if incoming_accounts:
                 self._cached_accounts_data = data
@@ -1328,6 +1335,14 @@ class HubEngine:
             if c_mods:
                 acc["claude_models"] = c_mods
                 acc["claude_version"] = c_ver
+            # 业务真理门禁：5.5 账号必然开通并可使用 Gemini 4
+            is_pro_55 = (c_ver == "5.5" or any(("5-5" in m or "5.5" in m) for m in c_mods))
+            if is_pro_55:
+                if not acc.get("gemini4") or not isinstance(acc.get("gemini4"), dict) or acc["gemini4"].get("quota_weekly") is None:
+                    acc["gemini4"] = {
+                        "quota_weekly": _safe_float(acc.get("gemini", {}).get("quota_weekly", 1.0), 1.0),
+                        "reset_time_weekly": acc.get("gemini", {}).get("reset_time_weekly", "")
+                    }
         except Exception:
             pass
 
@@ -1780,11 +1795,23 @@ def render_table_rows(include_oob: bool = False) -> str:
         warmup_iso = acc_warmup.get("locked_reset_iso", "")
         warmup_model = acc_warmup.get("model_warmed", "")
 
-        # Gemini 4 配额 (周额度，无则留空)
+        # Claude 配额与真实模型版本 (依全局实测模型矩阵精准判定，彻底杜绝虚假 5.5)
+        c_models = acc.get("claude_models") or []
+        has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_models) or acc.get("claude_version") == "5.5"
+        claude_ver = "5.5" if has_real_55 else "4.6"
+        is_pro_55 = (claude_ver == "5.5")
+
+        # Gemini 4 配额 (业务真理: 5.5 账号必然具备并可以使用 Gemini 4)
         g4_info = acc.get("gemini4") or acc.get("gemini_4")
         if g4_info and isinstance(g4_info, dict) and "quota_weekly" in g4_info and g4_info.get("quota_weekly") is not None:
             g4_w = _safe_float(g4_info.get("quota_weekly"))
             g4_reset_raw = g4_info.get("reset_time_weekly", "")
+            g4_reset_w = format_reset_time(g4_reset_raw)
+            g4_cell = render_gemini4_cell(g4_w, g4_reset_w)
+        elif is_pro_55:
+            # 5.5 账号必然开通 Gemini 4，若尚无独立周记录，继承当前账号周度可用健康配额
+            g4_w = _safe_float(acc.get("gemini", {}).get("quota_weekly", 1.0), 1.0)
+            g4_reset_raw = acc.get("gemini", {}).get("reset_time_weekly", "")
             g4_reset_w = format_reset_time(g4_reset_raw)
             g4_cell = render_gemini4_cell(g4_w, g4_reset_w)
         else:
