@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.9"
-__canonical_version_tag__ = "20261108-v2.45.9-ISOLATED_CONTAINER_OAUTH_AND_IMPORTER_REPAIR"
-__last_updated__ = "2026-11-08 18:50:00"
-__canonical_doctrine__ = "彻底修复原生OAuth与导入模块+Linux独立隔离容器授权+5.5全量联动Gemini4+断点无损接力"
+__version__ = "2.45.10"
+__canonical_version_tag__ = "20261108-v2.45.10-LOGO_NEOBRUTALISM_CLEAN_HEADER_AND_TAGS"
+__last_updated__ = "2026-11-08 19:05:00"
+__canonical_doctrine__ = "无外框原厂彩虹A新野兽派Logo+彻底去除周与5.5冗余标注+Gemini4单轨极简纯净呈现"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -69,12 +69,19 @@ try:
 except Exception:
     FAVICON_PNG_BYTES = b""
 
+LOGO_PNG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
+try:
+    with open(LOGO_PNG_PATH, "rb") as _f:
+        LOGO_PNG_BYTES = _f.read()
+except Exception:
+    LOGO_PNG_BYTES = b""
+
 APP_ICON_512_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_icon_512.png")
 try:
     with open(APP_ICON_512_PATH, "rb") as _f:
         APP_ICON_512_BYTES = _f.read()
 except Exception:
-    APP_ICON_512_BYTES = b""
+    APP_ICON_512_BYTES = LOGO_PNG_BYTES
 
 OAUTH_CREDS_PATH = os.path.expanduser("~/.gemini/oauth_creds.json")
 GOOGLE_ACCOUNTS_PATH = os.path.expanduser("~/.gemini/google_accounts.json")
@@ -1579,7 +1586,7 @@ def format_countdown_sec(sec_diff: int) -> str:
 def render_gemini4_cell(weekly_pct: Optional[float], reset_weekly_info: str = "") -> str:
     """
     渲染 Gemini 4 周额度单元格：
-    - 若该账号具备 Gemini 4 额度 (weekly_pct is not None)，渲染周度进度条与重置倒计时；
+    - 若该账号具备 Gemini 4 额度 (weekly_pct is not None)，渲染单轨极简进度条与重置倒计时（零冗余标签）；
     - 若该账号未开通或无 Gemini 4 额度 (weekly_pct is None)，直接空着 (输出极简占位符或空白)。
     """
     if weekly_pct is None:
@@ -1589,16 +1596,15 @@ def render_gemini4_cell(weekly_pct: Optional[float], reset_weekly_info: str = ""
     c_w = "#16A34A" if val_w >= 50 else ("#EA580C" if val_w >= 15 else "#DC2626")
 
     if reset_weekly_info and reset_weekly_info not in ("--", "已就绪", "就绪"):
-        reset_w_html = f'<span class="q-reset q-reset-w font-mono" title="Gemini 4 周度重置: {reset_weekly_info}">{reset_weekly_info}</span>'
+        reset_w_html = f'<span class="q-reset q-reset-w font-mono" title="Gemini 4 重置倒计时: {reset_weekly_info}">{reset_weekly_info}</span>'
     elif val_w >= 99.9:
-        reset_w_html = '<span class="q-reset q-reset-ready font-mono" title="Gemini 4 周度满血">满额</span>'
+        reset_w_html = '<span class="q-reset q-reset-ready font-mono" title="Gemini 4 满血可用">满额</span>'
     else:
         reset_w_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
 
     return f"""
-    <div class="q-cell q-cell-g4" title="Gemini 4 周配额: {val_w}%">
+    <div class="q-cell q-cell-g4" title="Gemini 4 配额: {val_w}%">
         <div class="q-row">
-            <span class="q-lbl tag-w-g4">周</span>
             <div class="q-track"><div class="q-fill" style="width: {min(100, max(0, val_w))}%; background: {c_w};"></div></div>
             <span class="q-val font-mono" style="color: {c_w};">{val_w}%</span>
             <div class="q-slot">{reset_w_html}</div>
@@ -1878,10 +1884,8 @@ def render_table_rows(include_oob: bool = False) -> str:
         # 彻底去除邮箱域名后缀，只保留账号英文字符，告别 ... 截断
         short_name = email.split("@")[0] if "@" in email else email
 
-        if claude_ver == "5.5":
-            pro_tag_html = '<span class="pro-tag pro-tag-55 font-mono" title="Claude 5.5">5.5</span>'
-        else:
-            pro_tag_html = "" 
+        # 用户明确指示：只要有 gemini4 必然是 5.5，无需额外贴 5.5 标签增加视觉干扰
+        pro_tag_html = "" 
 
         row = f"""
         <tr class="account-row {active_class}" 
@@ -1985,9 +1989,9 @@ def render_dashboard_html() -> str:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Antigravity Hub · Neo-Brutalism</title>
-    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/app_icon_512.png">
-    <link rel="apple-touch-icon" href="/app_icon_512.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v={__version__}">
+    <link rel="icon" type="image/png" sizes="512x512" href="/logo.png?v={__version__}">
+    <link rel="apple-touch-icon" href="/logo.png?v={__version__}">
     <script src="/static/htmx.min.js"></script>
     <style>
         :root {{
@@ -2115,6 +2119,26 @@ def render_dashboard_html() -> str:
             gap: 4px;
         }}
 
+        .brand-logo-wrap {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 32px;
+            text-decoration: none;
+            cursor: pointer;
+            flex-shrink: 0;
+            padding: 0 4px;
+            transition: transform 0.1s ease;
+        }}
+        .brand-logo-wrap:hover {{
+            transform: scale(1.06);
+        }}
+        .brand-logo-img {{
+            height: 30px;
+            width: auto;
+            display: block;
+            object-fit: contain;
+        }}
         .brand-title {{
             background: #00F0FF;
             color: #000000;
@@ -3734,10 +3758,9 @@ def render_dashboard_html() -> str:
         <!-- 新野兽派顶栏控制条 (纯净自解释 + 按钮零截断) -->
         <div class="top-bar">
             <div class="top-left">
-                <span class="brand-title font-mono" title="Antigravity Hub v{__version__}">
-                    <img src="/favicon.png" width="16" height="16" alt="" style="vertical-align:-3px; margin-right:3px; border-radius:3px;">
-                    HUB
-                </span>
+                <a href="/" class="brand-logo-wrap" title="Antigravity Hub v{__version__}">
+                    <img src="/logo.png?v={__version__}" class="brand-logo-img" alt="Antigravity Hub">
+                </a>
                 {active_pill_html}
                 <span class="version-badge font-mono" title="Antigravity Hub v{__version__}">v{__version__}</span>
             </div>
@@ -3836,9 +3859,9 @@ def render_dashboard_html() -> str:
                         <th class="col-center th-num">#</th>
                         <th class="col-center th-status">状态</th>
                         <th class="th-email">账号</th>
-                        <th class="th-gemini4 th-sortable" onclick="cycleGemini4Sort()" title="点击排序 Gemini 4 周额度">
+                        <th class="th-gemini4 th-sortable" onclick="cycleGemini4Sort()" title="点击排序 Gemini 4 额度">
                             <div class="th-sort-inner">
-                                <span>Gemini 4 (周)</span>
+                                <span>Gemini 4</span>
                                 <span id="sort-gemini4-badge" class="sort-badge font-mono" style="display:none;"></span>
                             </div>
                         </th>
@@ -5682,17 +5705,24 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(HTMX_JS_BYTES)
             return
+        elif parsed.path == "/logo.png":
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
+            self.end_headers()
+            self.wfile.write(LOGO_PNG_BYTES)
+            return
         elif parsed.path in ("/favicon.ico", "/favicon.png"):
             self.send_response(200)
             self.send_header("Content-Type", "image/png")
-            self.send_header("Cache-Control", "public, max-age=86400")
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
             self.end_headers()
             self.wfile.write(FAVICON_PNG_BYTES)
             return
         elif parsed.path == "/app_icon_512.png":
             self.send_response(200)
             self.send_header("Content-Type", "image/png")
-            self.send_header("Cache-Control", "public, max-age=86400")
+            self.send_header("Cache-Control", "no-cache, must-revalidate")
             self.end_headers()
             self.wfile.write(APP_ICON_512_BYTES)
             return
