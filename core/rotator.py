@@ -98,7 +98,14 @@ class AntigravityQuotaRotator:
 
     def check_and_rotate_once(self) -> bool:
         """执行单次配额检查与必要时的自动轮换"""
-        hub_data = self.switcher.load_hub_accounts()
+        try:
+            from hub.server import ENGINE, get_auto_rotation_config
+            hub_data = ENGINE.load_accounts()
+        except Exception:
+            hub_data = self.switcher.load_hub_accounts()
+            ENGINE = None
+            get_auto_rotation_config = None
+
         accounts = hub_data.get("accounts", {})
         active_email = hub_data.get("active_email", "")
 
@@ -106,45 +113,65 @@ class AntigravityQuotaRotator:
             logger.info("ℹ️ 当前未指定活跃账号或账号池为空")
             return False
 
-        # 1. 检查人工干预保护锁
+        # 1. 刷新当前活跃账号真实配额 (必须先 ensure_fresh_token，且使用连字符 bucketId)
+        active_acc = accounts[active_email]
+        if ENGINE is not None:
+            ok_ref = ENGINE.refresh_single_account_quota(active_email, active_acc)
+            ENGINE.sync_from_local_language_server(hub_data)
+            if ok_ref:
+                ENGINE.save_accounts(hub_data)
+        else:
+            at, _ = self.switcher.ensure_fresh_token(active_acc)
+            if not at:
+                logger.warning(f"⚠️ 当前活跃账号 {active_email} 缺少有效 Token")
+                return False
+            quotas, resets, val_url = self.switcher.fetch_live_quota(at)
+            if val_url:
+                active_acc["validation_blocked"] = True
+                active_acc["validation_url"] = val_url
+                self.switcher.save_hub_accounts(hub_data)
+            elif quotas:
+                g_5h = quotas.get("gemini-5h", active_acc.get("gemini", {}).get("quota_5h", 1.0))
+                g_wk = quotas.get("gemini-weekly", active_acc.get("gemini", {}).get("quota_weekly", 1.0))
+                active_acc.setdefault("gemini", {})["quota_5h"] = g_5h
+                active_acc["gemini"]["quota_weekly"] = g_wk
+                if "3p-5h" in quotas:
+                    active_acc.setdefault("claude", {})["quota_5h"] = quotas["3p-5h"]
+                if "3p-weekly" in quotas:
+                    active_acc.setdefault("claude", {})["quota_weekly"] = quotas["3p-weekly"]
+                if "gemini4-weekly" in quotas:
+                    active_acc.setdefault("gemini4", {})["quota_weekly"] = quotas["gemini4-weekly"]
+                self.switcher.save_hub_accounts(hub_data)
+
+        g_5h = _safe_float(active_acc.get("gemini", {}).get("quota_5h", 1.0), 1.0)
+        g_wk = _safe_float(active_acc.get("gemini", {}).get("quota_weekly", 1.0), 1.0)
+        c_5h = _safe_float(active_acc.get("claude", {}).get("quota_5h", 1.0), 1.0)
+        c_wk = _safe_float(active_acc.get("claude", {}).get("quota_weekly", 1.0), 1.0)
+
+        # 2. 检查人工干预保护锁与自动轮换开关
         lock = self.get_manual_lock()
         if lock:
-            locked_email = lock.get("locked_email")
+            locked_email = lock.get("locked_email") or lock.get("manual_account")
             remaining_sec = int(lock.get("locked_until", 0) - time.time())
-            logger.info(f"🔒 [人工保护锁生效中] 锁定账号: {locked_email}，剩余时长: {remaining_sec}s，守护进程暂停自动切号")
+            logger.info(f"🔒 [人工保护锁生效中] 锁定账号: {locked_email}，剩余时长: {remaining_sec}s，守护进程仅刷新额度不切号")
             return False
 
-        # 2. 检查当前活跃账号配额
-        active_acc = accounts[active_email]
-        tok = active_acc.get("token", {})
-        at = tok.get("access_token") or active_acc.get("access_token")
-
-        if not at:
-            logger.warning(f"⚠️ 当前活跃账号 {active_email} 缺少 Token")
-            return False
-
-        quotas, resets, val_url = self.switcher.fetch_live_quota(at)
-
-        # 检查是否触发风控
-        if val_url:
-            logger.error(f"🚨 当前账号 {active_email} 触发 Google 403 风控验证！必须立即轮换！")
-            active_acc["validation_blocked"] = True
-            active_acc["validation_url"] = val_url
-            self.switcher.save_hub_accounts(hub_data)
-        else:
-            # 更新配额数据
-            g_5h = quotas.get("gemini_5h", active_acc.get("gemini", {}).get("quota_5h", 1.0))
-            g_wk = quotas.get("gemini_weekly", active_acc.get("gemini", {}).get("quota_weekly", 1.0))
-            active_acc.setdefault("gemini", {})["quota_5h"] = g_5h
-            active_acc["gemini"]["quota_weekly"] = g_wk
-            self.switcher.save_hub_accounts(hub_data)
-
-            # 配额充沛无需轮换
-            if g_5h >= self.depletion_threshold and g_wk >= 0.005:
-                logger.info(f"🟢 [配额健康] 账号: {active_email} · 5h 配额: {round(g_5h * 100, 1)}% · 周配额: {round(g_wk * 100, 1)}%")
+        rot_mode = "gemini"
+        if get_auto_rotation_config is not None:
+            rot_cfg = get_auto_rotation_config()
+            rot_mode = rot_cfg.get("mode", "gemini")
+            if not rot_cfg.get("enabled", True) or rot_mode == "off":
+                logger.info(f"🟢 [配额实时同步] 账号: {active_email} · Gemini 5h: {round(g_5h * 100, 1)}% (周: {round(g_wk * 100, 1)}%) · Claude 5h: {round(c_5h * 100, 1)}% (自动轮换已关闭)")
                 return False
 
-            logger.warning(f"⚠️ [配额耗尽预警] 账号: {active_email} · 5h={round(g_5h * 100, 1)}%, 周={round(g_wk * 100, 1)}%，准备轮换！")
+        if not active_acc.get("validation_blocked"):
+            check_5h = c_5h if rot_mode == "claude" else g_5h
+            check_wk = c_wk if rot_mode == "claude" else g_wk
+            if check_5h >= self.depletion_threshold and check_wk >= 0.005:
+                logger.info(f"🟢 [配额健康] 账号: {active_email} · Gemini 5h: {round(g_5h * 100, 1)}% (周: {round(g_wk * 100, 1)}%) · Claude 5h: {round(c_5h * 100, 1)}%")
+                return False
+
+            logger.warning(f"⚠️ [配额耗尽预警] 账号: {active_email} ({rot_mode}) · 5h={round(check_5h * 100, 1)}%, 周={round(check_wk * 100, 1)}%，准备轮换！")
 
         # 记录 30 分钟防乒乓冷却锁
         self.exhausted_cooldown_map[active_email] = time.time() + 1800.0

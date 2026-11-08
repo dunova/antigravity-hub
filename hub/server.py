@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.5"
-__canonical_version_tag__ = "20261107-v2.45.5-STAGGERED_5H_LADDER_RESTORE"
-__last_updated__ = "2026-11-07 19:55:00"
-__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派Logo+本地摩天轮5h阶梯错峰排班+零风控"
+__version__ = "2.45.6"
+__canonical_version_tag__ = "20261108-v2.45.6-LIVE_QUOTA_SYNC_THREE_TRACKS"
+__last_updated__ = "2026-11-08 16:17:00"
+__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派Logo+三轨额度全自动实时刷新+本地摩天轮5h阶梯排班"
 
 
 # 配置常量
@@ -735,7 +735,12 @@ class HubEngine:
             return False
 
         updated_any = False
-        for jf in glob.glob(os.path.join(daemon_dir, "*.json")):
+        daemon_files = sorted(
+            glob.glob(os.path.join(daemon_dir, "*.json")),
+            key=lambda p: os.path.getmtime(p) if os.path.exists(p) else 0,
+            reverse=True
+        )
+        for jf in daemon_files:
             try:
                 with open(jf, "r", encoding="utf-8") as f:
                     d_info = json.load(f)
@@ -767,27 +772,57 @@ class HubEngine:
                 if not email or email not in accounts:
                     continue
 
+                old_active = data.get("active_email", "")
+                if old_active != email:
+                    data["active_email"] = email
+                    updated_any = True
+                    if old_active and old_active in accounts:
+                        try:
+                            self.refresh_single_account_quota(old_active, accounts[old_active])
+                        except Exception:
+                            pass
+                    try:
+                        self.refresh_single_account_quota(email, accounts[email])
+                    except Exception:
+                        pass
+
                 acc = accounts[email]
                 configs = u_status.get("cascadeModelConfigData", {}).get("clientModelConfigs", [])
                 if not configs:
                     continue
 
                 g4_found = None
+                g38_found = None
+                claude_found = None
                 c_models = []
                 for m in configs:
                     m_id = str(m.get("modelId") or "")
                     m_lbl = str(m.get("label") or "")
                     q_info = m.get("quotaInfo") or {}
-                    if "gemini-4" in m_id.lower() or "argon" in m_id.lower() or "gemini 4" in m_lbl.lower():
-                        rem = q_info.get("remainingFraction")
-                        reset = q_info.get("resetTime", "")
+                    rem = q_info.get("remainingFraction")
+                    reset = str(q_info.get("resetTime") or "")
+                    m_id_low = m_id.lower()
+                    m_lbl_low = m_lbl.lower()
+
+                    if "gemini-4" in m_id_low or "argon" in m_id_low or "gemini 4" in m_lbl_low:
                         if rem is not None and g4_found is None:
                             g4_found = {
                                 "quota_weekly": float(rem),
-                                "reset_time_weekly": str(reset or "")
+                                "reset_time_weekly": reset
                             }
-                    if "claude" in m_id.lower():
+                    elif "gemini-3.8" in m_id_low or "gemini-2.5" in m_id_low or "gemini 3.8" in m_lbl_low:
+                        if rem is not None and g38_found is None:
+                            g38_found = {
+                                "quota_5h": float(rem),
+                                "reset_time_5h": reset
+                            }
+                    elif "claude" in m_id_low:
                         c_models.append(m_id)
+                        if rem is not None and claude_found is None:
+                            claude_found = {
+                                "quota_5h": float(rem),
+                                "reset_time_5h": reset
+                            }
 
                 if g4_found is not None:
                     prev_g4 = acc.get("gemini4")
@@ -797,6 +832,33 @@ class HubEngine:
                 else:
                     if acc.get("gemini4") is not None:
                         acc["gemini4"] = None
+                        updated_any = True
+
+                if g38_found is not None:
+                    g_dict = acc.setdefault("gemini", {})
+                    new_g5h = g38_found["quota_5h"]
+                    cur_g5h = _safe_float(g_dict.get("quota_5h", 1.0), 1.0)
+                    new_g_rst = g38_found["reset_time_5h"]
+                    cur_g_rst = str(g_dict.get("reset_time_5h") or "")
+                    # 同一 5h 周期内仅向更低剩余额度单向收敛，防止本地 LS 缓存回滚实时接口的新鲜低值
+                    if new_g5h < cur_g5h - 0.0005 or (new_g_rst and new_g_rst != cur_g_rst and new_g5h < 0.999):
+                        g_dict["quota_5h"] = new_g5h
+                        updated_any = True
+                    if new_g_rst and new_g5h < 0.999 and cur_g_rst != new_g_rst:
+                        g_dict["reset_time_5h"] = new_g_rst
+                        updated_any = True
+
+                if claude_found is not None:
+                    c_dict = acc.setdefault("claude", {})
+                    new_c5h = claude_found["quota_5h"]
+                    cur_c5h = _safe_float(c_dict.get("quota_5h", 1.0), 1.0)
+                    new_c_rst = claude_found["reset_time_5h"]
+                    cur_c_rst = str(c_dict.get("reset_time_5h") or "")
+                    if new_c5h < cur_c5h - 0.0005 or (new_c_rst and new_c_rst != cur_c_rst and new_c5h < 0.999):
+                        c_dict["quota_5h"] = new_c5h
+                        updated_any = True
+                    if new_c_rst and new_c5h < 0.999 and cur_c_rst != new_c_rst:
+                        c_dict["reset_time_5h"] = new_c_rst
                         updated_any = True
 
                 if c_models:
@@ -949,7 +1011,18 @@ class HubEngine:
                             )
                             self.switch_account(locked_acc)
                             return locked_acc, False
+                    old_active = data.get("active_email", "")
                     data["active_email"] = detected_email
+                    # 发生活跃账号切换时，立即刷新原账号与新账号的真实配额，防止刚用完的账号滞留显示 100%
+                    if old_active and old_active in accounts and old_active != detected_email:
+                        try:
+                            self.refresh_single_account_quota(old_active, accounts[old_active])
+                        except Exception as ex:
+                            logger.warning(f"切换后刷新原账号 {old_active} 配额异常: {ex}")
+                    try:
+                        self.refresh_single_account_quota(detected_email, existing)
+                    except Exception as ex:
+                        logger.warning(f"切换后刷新新账号 {detected_email} 配额异常: {ex}")
                     updated = True
                 if self.sync_from_local_language_server(data):
                     updated = True
@@ -1358,8 +1431,20 @@ class HubEngine:
             )
             success = mgr.perform_real_switch(target_email, restart_app=True, relay_prompt=relay_prompt, force=True, inject_recovery=False)
             if success:
-                # 同步更新 Hub 本地数据库活跃指针
+                # 同步更新 Hub 本地数据库活跃指针，并刷新原账号与目标账号的真实配额
                 data = self.load_accounts()
+                old_active = data.get("active_email", "")
+                accounts = data.get("accounts", {})
+                if old_active and old_active in accounts and old_active != target_email:
+                    try:
+                        self.refresh_single_account_quota(old_active, accounts[old_active])
+                    except Exception:
+                        pass
+                if target_email in accounts:
+                    try:
+                        self.refresh_single_account_quota(target_email, accounts[target_email])
+                    except Exception:
+                        pass
                 data["active_email"] = target_email
                 data["last_updated"] = int(time.time())
                 self.save_accounts(data)
@@ -6109,15 +6194,20 @@ def start_background_workers():
                 logger.error(f"后台新账号热维护异常: {e}")
 
     def quota_worker():
-        logger.info("后台本地状态同步已启动 (15s 本地 language_server 零风控同步)")
+        logger.info("后台状态同步已启动 (15s 本地 language_server 实时同步 + 3m 全池配额校准)")
         try:
-            ENGINE.sync_from_local_language_server()
-        except Exception:
-            pass
+            ENGINE.refresh_all_quotas()
+        except Exception as e:
+            logger.warning(f"启动初始配额同步异常: {e}")
+        last_full_refresh = time.time()
         while True:
             try:
                 time.sleep(15)
                 ENGINE.sync_from_local_language_server()
+                now_t = time.time()
+                if now_t - last_full_refresh >= 180:
+                    last_full_refresh = now_t
+                    ENGINE.refresh_all_quotas()
             except Exception as e:
                 logger.error(f"后台本地配额同步异常: {e}")
 
