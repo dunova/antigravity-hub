@@ -331,7 +331,7 @@ class AntigravitySessionRecoveryManager:
                     continue
 
                 # 防重复接力拦截
-                if "断点接力指令" in last_major_content or "系统配额轮换完成" in last_major_content:
+                if any(k in last_major_content for k in ["恢复一切中断的任务和子代理", "配额已就绪", "断点接力指令", "系统配额轮换完成"]):
                     continue
 
                 active_sessions.append({
@@ -363,46 +363,26 @@ class AntigravitySessionRecoveryManager:
         return sessions
 
     def build_teamwork_resume_prompt(self, session_info: Optional[Dict[str, Any]] = None, base_prompt: str = "") -> str:
-        """构建包含 Teamwork 恢复保证的系统接力提示词"""
+        """构建精简有力的系统接力提示词：恢复一切中断的任务和子代理"""
         if base_prompt:
             return base_prompt
 
-        last_req = (session_info.get("last_user_prompt", "") if session_info else "")
+        last_req = (session_info.get("last_user_prompt", "").strip() if session_info else "")
         subagents = (session_info.get("subagents", []) if session_info else [])
-        has_active_subs = (session_info.get("has_active_subagents", False) if session_info else False)
+        subs_hint = f"（重点协同子代理: {'、'.join(subagents)}）" if subagents else ""
 
-        is_teamwork = (
-            has_active_subs
-            or len(subagents) > 0
-            or any(k in last_req.lower() for k in ["teamwork", "子代理", "多智能体", "subagent", "协同"])
-        )
-
-        if is_teamwork:
-            sub_roles_str = "、".join(subagents) if subagents else "团队在途子代理"
+        if last_req:
+            clean_req = last_req if len(last_req) <= 120 else f"{last_req[:117]}..."
             return (
                 f"<USER_REQUEST>\n"
-                f"【配额轮换完成 · Teamwork 多智能体断点恢复接力指令】\n"
-                f"系统配额与网络已全面重载就绪，充足算力已就位！\n"
-                f"检测到本会话正在执行【Teamwork 多智能体工程协作】任务，上一条用户指令在协同推进途中遭遇意外中断:\n"
-                f"「{last_req}」\n\n"
-                f"🎯 请立即无缝恢复 Teamwork 协同管线并推进以下动作:\n"
-                f"1. 【恢复 Teamwork 团队协作】：立即检查分配给各子代理（Subagents: {sub_roles_str}）的任务进度与存活状态；\n"
-                f"2. 【驱动唤醒未完工子任务】：若子代理执行被中断或尚未交付，重新拉起或发送消息驱动其继续推进，严禁丢弃未完工的协同分支；\n"
-                f"3. 【全速推进主线工程】：耐心地完成刚才被中断的代码编写、界面修复、终端命令或联调任务，确保每一处业务逻辑真实落地；\n"
-                f"4. 【闭环汇总与交付】：等待或汇总各子代理产出成果，严格按照工程规范落盘交底文档与更新总账，完成最终交付。\n"
+                f"【配额已就绪】请恢复一切中断的任务和子代理{subs_hint}，继续推进断点工作:\n"
+                f"「{clean_req}」\n"
                 f"</USER_REQUEST>"
             )
         else:
             return (
                 f"<USER_REQUEST>\n"
-                f"【配额轮换完成 · 断点全速续跑指令】\n"
-                f"系统配额与网络已重载就绪，充足算力已就位！\n"
-                f"检测到本会话上一条用户指令在执行中途遭遇意外中断:\n"
-                f"「{last_req}」\n\n"
-                f"🎯 请从刚才中断的断点继续全速推进:\n"
-                f"1. 【全速推进实体工程】：耐心地继续完成刚才被中断的代码编写、终端命令或联调任务，确保业务逻辑与功能真实落地；\n"
-                f"2. 【恢复协作分支（若涉及）】：若任务涉及子代理（Subagents），检查并唤醒所有未完工子代理继续推进；\n"
-                f"3. 【严谨闭环交付】：在所有核心功能彻底完成并通过验证后，按交付门禁落盘技术交底与更新总账，保持无人值守直到任务彻底高质量闭环。\n"
+                f"【配额已就绪】请恢复一切中断的任务和子代理{subs_hint}，继续全速推进直至完成。\n"
                 f"</USER_REQUEST>"
             )
 
@@ -410,7 +390,7 @@ class AntigravitySessionRecoveryManager:
         self,
         session_id: str,
         prompt: str,
-        title: str = "系统额度轮换完成·无感知自动接力"
+        title: str = "恢复一切中断的任务和子代理"
     ) -> bool:
         """
         【官方原生 IPC 消息投递与唤醒】

@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.11"
-__canonical_version_tag__ = "20261108-v2.45.11-HOT_SWITCH_RFC3339_AND_ELECTRON_RESTART_GUARD"
-__last_updated__ = "2026-11-08 20:35:00"
-__canonical_doctrine__ = "RFC3339纳米级凭据规范+35s重启冷却门禁+消除auto_ingest自激回弹+无缝断点接力"
+__version__ = "2.45.12"
+__canonical_version_tag__ = "20261108-v2.45.12-STREAMLINED_RELAY_PROMPT_AND_AUTO_RESUME_RECOVERY"
+__last_updated__ = "2026-11-08 20:48:00"
+__canonical_doctrine__ = "精简拉起提示词(恢复一切中断的任务和子代理)+全自动接力注入真正打通+多智能体协同护航"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -1464,14 +1464,7 @@ class HubEngine:
         try:
             from core.switcher import AntigravityPhysicalManager, DEFAULT_RELAY_PROMPT
             mgr = AntigravityPhysicalManager()
-            relay_prompt = (
-                "【系统级配额断点无缝续传指令】当前账号已通过物理钥匙串无缝切换至高配额账号，配额已完全满血！\n"
-                "请从刚才中断的位置继续推进任务，保持无人值守与严谨交付：\n"
-                "1. 【恢复核心主线】：检查并恢复刚才被中断的代码编写、终端命令或交付文档；\n"
-                "2. 【无缝衔接 Teamwork 协作】：若本任务涉及 Teamwork / 多智能体协作（Subagents），必须无缝恢复团队协同管线；主动检查未完结子代理的状态与产出，平滑唤醒并驱动其继续推进各自专属子任务，直至整体协作目标达成；（仅排除早已完工结案或用户显式取消的子代理，严禁丢弃未完工的 Teamwork 链路）；\n"
-                "3. 【终态闭环交付】：全程保持无人值守全速推进，直至完整交付符合验收标准的最终成果！"
-            )
-            success = mgr.perform_real_switch(target_email, restart_app=True, relay_prompt=relay_prompt, force=True, inject_recovery=False)
+            success = mgr.perform_real_switch(target_email, restart_app=True, relay_prompt=DEFAULT_RELAY_PROMPT, force=True, inject_recovery=True)
             if success:
                 # 同步更新 Hub 本地数据库活跃指针，并刷新原账号与目标账号的真实配额
                 data = self.load_accounts()
