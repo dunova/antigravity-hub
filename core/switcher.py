@@ -454,20 +454,90 @@ class AntigravityPhysicalManager:
         except Exception as e:
             logger.error(f"❌ 同步 google_accounts.json 失败: {e}")
 
-    def execute_hot_switch(self) -> bool:
+    def fetch_available_models(self, access_token: str) -> Tuple[str, List[str], Optional[Dict[str, Any]]]:
         """
-        【原生热切号】仅平滑重启 language_server 子进程。
+        探测账号支持的模型矩阵，精准区分 Claude 5.5 (付费Pro) 与 Claude 4.6 (普通Pro)，并提取 Gemini 4 状态。
+        返回: (claude_version: "5.5" | "4.6", claude_models: List[str], gemini4_info: Optional[Dict])
+        """
+        MODELS_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
+        req = urllib.request.Request(
+            MODELS_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "User-Agent": NATIVE_OAUTH_USER_AGENT
+            },
+            method="POST",
+            data=b"{}"
+        )
+        ctx = ssl.create_default_context()
+        try:
+            with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+                body_str = _safe_decode_resp(resp.read())
+                data = json.loads(body_str)
+            models = data.get("models", {})
+            c_models = []
+            has_55 = False
+            has_46 = False
+            g4_info = None
+
+            for m_id, m_obj in models.items():
+                m_id_low = m_id.lower()
+                if "claude" in m_id_low:
+                    c_models.append(m_id)
+                    if "5-5" in m_id_low or "5.5" in m_id_low:
+                        has_55 = True
+                    elif "4-6" in m_id_low or "4.6" in m_id_low:
+                        has_46 = True
+                if "gemini-4" in m_id_low or "argon" in m_id_low:
+                    qi = m_obj.get("quotaInfo", {})
+                    if qi and qi.get("remainingFraction") is not None:
+                        g4_info = {
+                            "quota_weekly": float(qi["remainingFraction"]),
+                            "reset_time_weekly": str(qi.get("resetTime", ""))
+                        }
+
+            ver = "5.5" if has_55 else "4.6"
+            return ver, c_models, g4_info
+        except Exception as e:
+            logger.debug(f"探测模型矩阵异常: {e}")
+            return "4.6", [], None
+
+    def execute_hot_switch(self, timeout_sec: float = 8.0) -> bool:
+        """
+        【原生热切号】平滑重启 language_server 子进程，并等待新进程拉起就绪。
         IDE 主窗口、编辑器标签页与前端会话保持存活，language_server 重启后自动读取新钥匙串。
         """
         try:
             res = subprocess.run(["pgrep", "-f", "language_server.*antigravity"], capture_output=True, text=True)
-            pids = res.stdout.strip().split()
-            if pids:
-                for pid in pids:
-                    logger.info(f"⚡ [Hot Switch] 发现 language_server (PID {pid})，发送平滑重启信号...")
+            old_pids = set(res.stdout.strip().split())
+            if old_pids:
+                for pid in old_pids:
+                    logger.info(f"⚡ [Hot Switch] 发现旧 language_server (PID {pid})，发送平滑退出信号...")
                     subprocess.run(["kill", "-TERM", pid], capture_output=True)
-                time.sleep(1.0)
-                logger.info("✨ [Hot Switch] language_server 重启信号已发送完成！")
+
+                # 等待旧进程彻底退出，并轮询等待新 language_server 进程生成
+                start_t = time.time()
+                new_pid_found = None
+                while time.time() - start_t < timeout_sec:
+                    time.sleep(0.5)
+                    chk = subprocess.run(["pgrep", "-f", "language_server.*antigravity"], capture_output=True, text=True)
+                    cur_pids = set(chk.stdout.strip().split())
+                    diff = cur_pids - old_pids
+                    if diff:
+                        new_pid_found = list(diff)[0]
+                        break
+                    elif cur_pids and not (cur_pids & old_pids):
+                        new_pid_found = list(cur_pids)[0]
+                        break
+
+                if new_pid_found:
+                    logger.info(f"✨ [Hot Switch] 新 language_server 进程已成功拉起 (PID {new_pid_found})！")
+                else:
+                    logger.info("✨ [Hot Switch] language_server 重启信号已发送完成！")
+
+                # 沉淀等待内部 gRPC/HTTP 端口完全开启并加载系统凭据
+                time.sleep(2.0)
                 return True
             else:
                 logger.warning("⚠️ 未发现正在运行的 language_server 进程，可能 IDE 处于关闭状态")
@@ -476,8 +546,17 @@ class AntigravityPhysicalManager:
             logger.error(f"❌ 执行 Hot Switch 异常: {e}")
             return False
 
-    def switch_account(self, target_email: str, force_hot_switch: bool = True) -> Tuple[bool, str]:
-        """完整账号切换流：刷新 Token -> 写入 Keychain -> 同步文件 -> 原生热切号"""
+    def switch_account(self, target_email: str, force_hot_switch: bool = True, relay_prompt: str = DEFAULT_RELAY_PROMPT, inject_recovery: bool = True) -> Tuple[bool, str]:
+        """完整账号切换流：快照 -> 刷新 Token -> 写入 Keychain -> 同步文件 -> 原生热切号 -> 原生接力"""
+        # 0. 切号前瞬间锁定活跃主会话快照 (避免杀进程后无法区分活跃主会话)
+        if inject_recovery:
+            try:
+                from .recovery import AntigravitySessionRecoveryManager
+                rec_mgr = AntigravitySessionRecoveryManager()
+                rec_mgr.pre_switch_snapshot()
+            except Exception as ex:
+                logger.warning(f"切号前快照捕获异常: {ex}")
+
         hub_data = self.load_hub_accounts()
         accounts = hub_data.get("accounts", {})
 
@@ -521,11 +600,20 @@ class AntigravityPhysicalManager:
         if force_hot_switch:
             self.execute_hot_switch()
 
+        # 5. 原生断点接力投递
+        if inject_recovery:
+            try:
+                from .recovery import AntigravitySessionRecoveryManager
+                rec_mgr = AntigravitySessionRecoveryManager()
+                rec_mgr.batch_recover_all_working_sessions(prompt=relay_prompt)
+            except Exception as ex:
+                logger.error(f"❌ 批量断点接力投递异常: {ex}")
+
         return True, f"成功无感切换至账号: {target_email}"
 
     def perform_real_switch(self, target_email: str, restart_app: bool = True, relay_prompt: str = DEFAULT_RELAY_PROMPT, force: bool = False, inject_recovery: bool = True) -> bool:
         """执行完整账号切换（兼容旧接口）"""
-        ok, msg = self.switch_account(target_email, force_hot_switch=restart_app)
+        ok, msg = self.switch_account(target_email, force_hot_switch=restart_app, relay_prompt=relay_prompt, inject_recovery=inject_recovery)
         return ok
 
     def load_warmup_schedule(self) -> Dict[str, Any]:

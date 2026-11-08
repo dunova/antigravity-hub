@@ -87,7 +87,7 @@ def main():
     # 1. 启动后台配额看门狗 (可选)
     if not args.no_rotator:
         def rotator_worker():
-            rotator = AntigravityQuotaRotator(check_interval=60, data_dir=os.environ["ANTIGRAVITY_HUB_DIR"])
+            rotator = AntigravityQuotaRotator(check_interval=10, data_dir=os.environ["ANTIGRAVITY_HUB_DIR"])
             rotator.run_daemon()
 
         t_rot = threading.Thread(target=rotator_worker, daemon=True)

@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.6"
-__canonical_version_tag__ = "20261108-v2.45.6-LIVE_QUOTA_SYNC_THREE_TRACKS"
-__last_updated__ = "2026-11-08 16:17:00"
-__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派Logo+三轨额度全自动实时刷新+本地摩天轮5h阶梯排班"
+__version__ = "2.45.7"
+__canonical_version_tag__ = "20261108-v2.45.7-AUTO_ROTATE_NATIVE_RELAY_PRO_SYNC"
+__last_updated__ = "2026-11-08 18:15:00"
+__canonical_doctrine__ = "100%原版Mac浅色Neo-Brutalism+无外框原厂轮廓新野兽派Logo+全池Claude5.5免登录点亮+额度耗尽原生IPC断点接力+不杀轮换看门狗"
 
 
 # 配置常量
@@ -829,10 +829,6 @@ class HubEngine:
                     if prev_g4 != g4_found:
                         acc["gemini4"] = g4_found
                         updated_any = True
-                else:
-                    if acc.get("gemini4") is not None:
-                        acc["gemini4"] = None
-                        updated_any = True
 
                 if g38_found is not None:
                     g_dict = acc.setdefault("gemini", {})
@@ -1317,7 +1313,7 @@ class HubEngine:
             elif resets.get("3p-5h"):
                 acc["claude"]["reset_time"] = resets["3p-5h"]
 
-            # Gemini 4 周配额专属提取 (若开通则记录，无开通则留空)
+            # Gemini 4 周配额专属提取 (若开通则记录，无开通则保留既有状态)
             g4_weekly_quota = quotas.get("gemini4-weekly")
             if g4_weekly_quota is not None:
                 if "gemini4" not in acc or not isinstance(acc.get("gemini4"), dict):
@@ -1325,6 +1321,15 @@ class HubEngine:
                 acc["gemini4"]["quota_weekly"] = g4_weekly_quota
                 if resets.get("gemini4-weekly"):
                     acc["gemini4"]["reset_time_weekly"] = resets["gemini4-weekly"]
+
+        # 3. 探测模型矩阵 (确定 Claude 5.5 付费Pro 徽章与可用模型)
+        try:
+            c_ver, c_mods = self.fetch_available_models(at)
+            if c_mods:
+                acc["claude_models"] = c_mods
+                acc["claude_version"] = c_ver
+        except Exception:
+            pass
 
         acc["last_refreshed_ts"] = int(time.time())
         return True
@@ -1448,10 +1453,10 @@ class HubEngine:
                 data["active_email"] = target_email
                 data["last_updated"] = int(time.time())
                 self.save_accounts(data)
-                # 用户手动点击切换账号，必须自动将全局自动轮换置为关闭，保护人工选号不被看门狗切走！
-                set_auto_rotation_config(mode="off")
-                logger.info(f"🛡️ [人工切换保护] 已将自动轮换模式置为【关闭】，确保用户手动指定的账号 {target_email} 绝对不被后台轮换切走！")
-                logger.info(f"🚀 [物理切换成功] 目标账号 {target_email} 凭据已注入，Antigravity 正在平滑重载（人工切换不注入接力词）！")
+                # 用户手动点击切换账号：建立 15 分钟人工保护锁，绝不永久关闭全局自动轮换模式！
+                set_manual_override_lock(target_email, duration_sec=900, reason="用户手动切换")
+                logger.info(f"🛡️ [人工切换保护] 已建立 15 分钟临时保护锁，保持自动轮换监控 (账号 {target_email} 额度用尽时将自动瀑布切走)！")
+                logger.info(f"🚀 [物理切换成功] 目标账号 {target_email} 凭据已注入，Antigravity 正在平滑重载！")
                 return True, f"物理切换至 {target_email} 成功，Antigravity 正在平滑重载！"
             else:
                 logger.error(f"❌ 物理切换执行失败: {target_email}")
