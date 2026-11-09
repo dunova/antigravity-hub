@@ -1,0 +1,60 @@
+# Maintainer: Dunova <dunova@omarchy.org>
+pkgname=antigravity-hub
+pkgver=2.46.0
+pkgrel=1
+pkgdesc='Omarchy native account manager and quota hub for Antigravity'
+arch=('x86_64' 'aarch64')
+url='https://github.com/omacom/antigravity-hub'
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'hicolor-icon-theme')
+makedepends=('qt6-base' 'qt6-declarative' 'qt6-svg')
+options=('!debug')
+source=()
+sha256sums=()
+
+build() {
+  if [ -f "$startdir/antigravity-hub.pro" ]; then
+    _projroot="$startdir"
+  elif [ -f "$startdir/../antigravity-hub.pro" ]; then
+    _projroot="$startdir/.."
+  else
+    _projroot="$PWD"
+  fi
+
+  cd "$_projroot"
+  if [ -x "./bin/build" ]; then
+    ./bin/build
+  else
+    mkdir -p build && cd build
+    qmake6 "$_projroot/antigravity-hub.pro"
+    make -j"$(nproc)"
+  fi
+}
+
+package() {
+  if [ -f "$startdir/antigravity-hub.pro" ]; then
+    _projroot="$startdir"
+  elif [ -f "$startdir/../antigravity-hub.pro" ]; then
+    _projroot="$startdir/.."
+  else
+    _projroot="$PWD"
+  fi
+
+  if [ -d "$_projroot/pkgbuild" ]; then
+    _pkgfiles="$_projroot/pkgbuild"
+  else
+    _pkgfiles="$_projroot"
+  fi
+
+  # Install binary executable (mode 755)
+  install -Dm755 "$_projroot/build/antigravity-hub" "$pkgdir/usr/bin/antigravity-hub"
+
+  # Install XDG desktop file (mode 644)
+  install -Dm644 "$_pkgfiles/antigravity-hub.desktop" "$pkgdir/usr/share/applications/antigravity-hub.desktop"
+
+  # Install Hicolor scalable SVG icon (mode 644)
+  install -Dm644 "$_pkgfiles/antigravity-hub.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/antigravity-hub.svg"
+
+  # Install MIT license (mode 644)
+  install -Dm644 "$_projroot/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -1,0 +1,18 @@
+<RCC>
+    <qresource prefix="/">
+        <!-- QML User Interface Components -->
+        <file alias="Main.qml">Main.qml</file>
+        <file alias="HeaderBar.qml">HeaderBar.qml</file>
+        <file alias="FilterBar.qml">FilterBar.qml</file>
+        <file alias="AccountListView.qml">AccountListView.qml</file>
+        <file alias="SettingsDialog.qml">SettingsDialog.qml</file>
+        <file alias="HelpOverlay.qml">HelpOverlay.qml</file>
+
+        <!-- Vector Graphic Assets -->
+        <file alias="assets/logo.svg">assets/logo.svg</file>
+
+        <!-- Internationalization Catalogs -->
+        <file alias="i18n/en.json">i18n/en.json</file>
+        <file alias="i18n/zh-CN.json">i18n/zh-CN.json</file>
+    </qresource>
+</RCC>

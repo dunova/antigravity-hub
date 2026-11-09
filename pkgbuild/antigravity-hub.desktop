@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Antigravity Hub
+GenericName=Account & Quota Manager
+GenericName[zh_CN]=配额与多账号管理器
+Comment=Omarchy Native Account & Quota Manager
+Comment[zh_CN]=Omarchy 原生账号与配额管理中心
+Exec=antigravity-hub
+Icon=antigravity-hub
+Terminal=false
+Categories=Utility;Development;
+Keywords=antigravity;quota;gemini;claude;omarchy;account;
+Keywords[zh_CN]=反重力;配额;账号;切换;轮换;
+StartupWMClass=antigravity-hub
+StartupNotify=true

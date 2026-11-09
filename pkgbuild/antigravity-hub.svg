@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Antigravity Hub</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#242428"/>
+      <stop offset="100%" stop-color="#1c1c1e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Omarchy dark squircle container (#1c1c1e rounded surface with subtle border) -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)" stroke="#323238" stroke-width="4"/>
+
+  <!-- Antigravity Hub vector emblem centered and scaled in canonical Omarchy accent (#FFD60A) -->
+  <g transform="translate(112, 112) scale(12)" fill="#FFD60A">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.2L3 19h5.2l3.8-7.8 3.8 7.8H21L12 2.2zm0 6.6L9.6 14.2h4.8L12 8.8z M12 18.2a1.6 1.6 0 100 3.2 1.6 1.6 0 000-3.2z"/>
+  </g>
+</svg>

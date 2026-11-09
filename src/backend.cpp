@@ -1,0 +1,517 @@
+#include "backend.h"
+#include <QDir>
+#include <QFile>
+#include <QDateTime>
+#include <QDebug>
+#include <QGuiApplication>
+#include <QClipboard>
+
+BackendController::BackendController(QObject *parent)
+    : QObject(parent)
+    , m_nam(new QNetworkAccessManager(this))
+    , m_lockWatcher(new QFileSystemWatcher(this))
+    , m_countdownTimer(new QTimer(this))
+    , m_livenessTimer(new QTimer(this))
+    , m_busyCount(0)
+    , m_isMasked(false)
+    , m_activeEmail(QString())
+    , m_rotationMode(QStringLiteral("gemini"))
+    , m_isDaemonActive(true)
+    , m_isManualLocked(false)
+    , m_manualLockRemaining(0)
+    , m_lockUntilTs(0)
+{
+    // 确定数据存储根目录 (优先尊重 ANTIGRAVITY_HUB_DIR)
+    QString envHub = qEnvironmentVariable("ANTIGRAVITY_HUB_DIR");
+    if (envHub.isEmpty()) {
+        m_hubDir = QDir::homePath() + QStringLiteral("/.antigravity_hub");
+    } else {
+        m_hubDir = envHub;
+    }
+    m_lockFilePath = m_hubDir + QStringLiteral("/manual_override_lock.json");
+
+    QString envBaseUrl = qEnvironmentVariable("ANTIGRAVITY_HUB_BASE_URL");
+    if (!envBaseUrl.isEmpty()) {
+        m_baseUrl = envBaseUrl;
+    } else {
+        m_baseUrl = QStringLiteral("http://127.0.0.1:18088");
+    }
+
+    // 配置锁定倒计时定时器 (每秒触发一次)
+    connect(m_countdownTimer, &QTimer::timeout, this, &BackendController::onCountdownTimerTick);
+
+    // 配置文件系统监听器 (监听目录以防原子删除/创建导致 Inode 丢失)
+    if (QDir(m_hubDir).exists()) {
+        m_lockWatcher->addPath(m_hubDir);
+    }
+    if (QFile::exists(m_lockFilePath)) {
+        m_lockWatcher->addPath(m_lockFilePath);
+    }
+    connect(m_lockWatcher, &QFileSystemWatcher::directoryChanged, this, &BackendController::onLockDirectoryChanged);
+    connect(m_lockWatcher, &QFileSystemWatcher::fileChanged, this, &BackendController::onLockFileChanged);
+
+    // 配置服务存活性心跳检查 (每 15 秒检查一次 systemd user 状态)
+    connect(m_livenessTimer, &QTimer::timeout, this, &BackendController::onLivenessTimerTick);
+    m_livenessTimer->start(15000);
+
+    // 初始化状态与数据
+    loadInitialState();
+    checkManualLockState();
+    checkDaemonLiveness();
+    fetchSettings();
+    fetchRotationStatus();
+}
+
+BackendController::~BackendController()
+{
+    if (m_livenessProc && m_livenessProc->state() != QProcess::NotRunning) {
+        m_livenessProc->kill();
+        m_livenessProc->waitForFinished(500);
+    }
+}
+
+void BackendController::setBusy(bool busy)
+{
+    int prev = m_busyCount;
+    if (busy) {
+        m_busyCount++;
+    } else {
+        m_busyCount = qMax(0, m_busyCount - 1);
+    }
+
+    if ((prev == 0 && m_busyCount > 0) || (prev > 0 && m_busyCount == 0)) {
+        emit busyChanged();
+    }
+}
+
+void BackendController::setMasked(bool masked)
+{
+    if (m_isMasked != masked) {
+        m_isMasked = masked;
+        emit maskedChanged();
+    }
+}
+
+QNetworkRequest BackendController::createRequest(const QString &path) const
+{
+    QUrl url(m_baseUrl + path);
+    QNetworkRequest request(url);
+    // Qt 6 原生支持设置传输超时 (10 秒)，防止后台无响应导致 UI 永久处于 busy
+    request.setTransferTimeout(10000);
+    return request;
+}
+
+void BackendController::executePost(const QString &path,
+                                    const QByteArray &data,
+                                    const QString &contentType,
+                                    const QString &opName,
+                                    std::function<void(const QByteArray &body, int statusCode)> onSuccess)
+{
+    setBusy(true);
+    QNetworkRequest request = createRequest(path);
+    if (!contentType.isEmpty()) {
+        request.setHeader(QNetworkRequest::ContentTypeHeader, contentType);
+    }
+
+    QNetworkReply *reply = m_nam->post(request, data);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, opName, onSuccess]() {
+        setBusy(false);
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        QByteArray respBody = reply->readAll();
+
+        if (reply->error() == QNetworkReply::NoError && statusCode >= 200 && statusCode < 300) {
+            if (onSuccess) {
+                onSuccess(respBody, statusCode);
+            }
+            emit operationCompleted(opName, true, QStringLiteral("Success"));
+        } else {
+            QString errStr = reply->errorString();
+            if (reply->error() == QNetworkReply::ConnectionRefusedError) {
+                if (m_isDaemonActive) {
+                    m_isDaemonActive = false;
+                    emit daemonActiveChanged();
+                }
+                errStr = tr("Cannot connect to hub daemon (127.0.0.1:18088). Is antigravity-hub.service running?");
+            }
+            emit notificationRequested(tr("%1 Failed").arg(opName), errStr, true);
+            emit operationCompleted(opName, false, errStr);
+        }
+        reply->deleteLater();
+    });
+}
+
+void BackendController::executeGet(const QString &path,
+                                   const QString &opName,
+                                   std::function<void(const QByteArray &body, int statusCode)> onSuccess)
+{
+    Q_UNUSED(opName);
+    QNetworkRequest request = createRequest(path);
+    QNetworkReply *reply = m_nam->get(request);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply, onSuccess]() {
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        QByteArray respBody = reply->readAll();
+
+        if (reply->error() == QNetworkReply::NoError && statusCode >= 200 && statusCode < 300) {
+            if (onSuccess) {
+                onSuccess(respBody, statusCode);
+            }
+        } else {
+            if (reply->error() == QNetworkReply::ConnectionRefusedError && m_isDaemonActive) {
+                m_isDaemonActive = false;
+                emit daemonActiveChanged();
+            }
+        }
+        reply->deleteLater();
+    });
+}
+
+void BackendController::switchAccount(const QString &email)
+{
+    QString trimmed = email.trimmed();
+    if (trimmed.isEmpty()) return;
+
+    // 契约格式: application/x-www-form-urlencoded, 参数名 email
+    QByteArray body = "email=" + QUrl::toPercentEncoding(trimmed);
+    executePost(QStringLiteral("/api/switch"), body, QStringLiteral("application/x-www-form-urlencoded"),
+                tr("Switch Account"), [this, trimmed](const QByteArray &, int) {
+        m_activeEmail = trimmed;
+        emit activeEmailChanged();
+        emit notificationRequested(tr("Account Switched"),
+                                  tr("Switched to %1").arg(trimmed), false);
+        checkManualLockState();
+    });
+}
+
+void BackendController::switchTopGemini()
+{
+    // 契约: POST /api/switch_top_gemini
+    executePost(QStringLiteral("/api/switch_top_gemini"), QByteArray(), QString(),
+                tr("TopG Switch"), [this](const QByteArray &body, int) {
+        QJsonParseError parseErr;
+        QJsonDocument doc = QJsonDocument::fromJson(body, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            QJsonObject obj = doc.object();
+            bool ok = obj.value(QStringLiteral("success")).toBool();
+            QString msg = obj.value(QStringLiteral("msg")).toString();
+            QString targetEmail = obj.value(QStringLiteral("target_email")).toString();
+
+            if (ok) {
+                if (!targetEmail.isEmpty()) {
+                    m_activeEmail = targetEmail;
+                    emit activeEmailChanged();
+                }
+                emit notificationRequested(tr("TopG Switch"), msg, false);
+            } else {
+                emit notificationRequested(tr("TopG Switch Failed"), msg, true);
+            }
+        } else {
+            emit notificationRequested(tr("TopG Switch"),
+                                      tr("Best Gemini account switched successfully"), false);
+        }
+        checkManualLockState();
+    });
+}
+
+void BackendController::toggleRotation()
+{
+    // 契约: POST /api/toggle-rotation
+    executePost(QStringLiteral("/api/toggle-rotation"), QByteArray(), QString(),
+                tr("Toggle Rotation"), [this](const QByteArray &body, int) {
+        QJsonParseError parseErr;
+        QJsonDocument doc = QJsonDocument::fromJson(body, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            QJsonObject obj = doc.object();
+            m_rotationMode = obj.value(QStringLiteral("mode")).toString(QStringLiteral("gemini"));
+            emit rotationModeChanged();
+            emit notificationRequested(tr("Rotation Mode"),
+                                      tr("Mode changed to: %1").arg(m_rotationMode), false);
+        }
+    });
+}
+
+void BackendController::refreshQuota(bool force)
+{
+    Q_UNUSED(force);
+    // 契约: POST /api/refresh
+    executePost(QStringLiteral("/api/refresh"), QByteArray(), QString(),
+                tr("Refresh Quotas"), [this](const QByteArray &, int) {
+        emit notificationRequested(tr("Refresh Quotas"),
+                                  tr("All accounts quota refreshed from Google"), false);
+    });
+}
+
+void BackendController::triggerPrewarm()
+{
+    // ★ 关键映射: 实机服务端端点为 /api/warmup-all
+    executePost(QStringLiteral("/api/warmup-all"), QByteArray(), QString(),
+                tr("Fleet Prewarm"), [this](const QByteArray &, int) {
+        emit notificationRequested(tr("Fleet Prewarm"),
+                                  tr("Hourly staggered fleet prewarm pipeline triggered"), false);
+    });
+}
+
+void BackendController::unblockAccount(const QString &email)
+{
+    QString trimmed = email.trimmed();
+    if (trimmed.isEmpty()) return;
+
+    // 契约: POST /api/unblock, 表单参数 email
+    QByteArray body = "email=" + QUrl::toPercentEncoding(trimmed);
+    executePost(QStringLiteral("/api/unblock"), body, QStringLiteral("application/x-www-form-urlencoded"),
+                tr("Unblock Account"), [this, trimmed](const QByteArray &, int) {
+        emit notificationRequested(tr("Unblock Wizard"),
+                                  tr("Unblock initiated for %1. Browser opened if puzzle required.").arg(trimmed), false);
+    });
+}
+
+void BackendController::saveSettings(const QJsonObject &settings)
+{
+    // 契约: POST /api/settings, JSON 载荷
+    QByteArray body = QJsonDocument(settings).toJson(QJsonDocument::Compact);
+    executePost(QStringLiteral("/api/settings"), body, QStringLiteral("application/json; charset=utf-8"),
+                tr("Save Settings"), [this, settings](const QByteArray &respBody, int) {
+        QJsonParseError parseErr;
+        QJsonDocument doc = QJsonDocument::fromJson(respBody, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            m_settings = doc.object();
+        } else {
+            m_settings = settings;
+        }
+
+        if (m_settings.contains(QStringLiteral("rotation_mode"))) {
+            m_rotationMode = m_settings.value(QStringLiteral("rotation_mode")).toString();
+            emit rotationModeChanged();
+        }
+        emit settingsChanged();
+        emit notificationRequested(tr("Settings Saved"),
+                                  tr("Hub preferences updated successfully"), false);
+    });
+}
+
+void BackendController::unlockManualOverride()
+{
+    // 契约: POST /api/unlock
+    executePost(QStringLiteral("/api/unlock"), QByteArray(), QString(),
+                tr("Unlock Override"), [this](const QByteArray &, int) {
+        m_isManualLocked = false;
+        m_manualLockRemaining = 0;
+        m_countdownTimer->stop();
+        emit manualLockedChanged();
+        emit manualLockRemainingChanged();
+        emit notificationRequested(tr("Manual Lock Cleared"),
+                                  tr("Automatic watchdog rotation resumed"), false);
+    });
+}
+
+void BackendController::copyToClipboard(const QString &text)
+{
+    if (QClipboard *clipboard = QGuiApplication::clipboard()) {
+        clipboard->setText(text);
+        emit notificationRequested(tr("Antigravity Hub"), tr("Copied to clipboard"), false);
+    }
+}
+
+void BackendController::checkDaemonLiveness()
+{
+    if (!m_livenessProc) {
+        m_livenessProc = new QProcess(this);
+        connect(m_livenessProc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, [this](int exitCode, QProcess::ExitStatus) {
+            QString stdoutStr = QString::fromUtf8(m_livenessProc->readAllStandardOutput()).trimmed();
+            bool active = (exitCode == 0 && stdoutStr == QStringLiteral("active"));
+
+            if (m_isDaemonActive != active) {
+                m_isDaemonActive = active;
+                emit daemonActiveChanged();
+                if (!active) {
+                    emit notificationRequested(tr("Daemon Inactive"),
+                                              tr("Antigravity Hub service is not running."), true);
+                }
+            }
+        });
+    }
+
+    if (m_livenessProc->state() == QProcess::NotRunning) {
+        m_livenessProc->start(QStringLiteral("systemctl"),
+                              QStringList() << QStringLiteral("--user")
+                                            << QStringLiteral("is-active")
+                                            << QStringLiteral("antigravity-hub.service"));
+    }
+}
+
+void BackendController::restartDaemon()
+{
+    setBusy(true);
+    QProcess *proc = new QProcess(this);
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this, proc](int exitCode, QProcess::ExitStatus) {
+        setBusy(false);
+        if (exitCode == 0) {
+            m_isDaemonActive = true;
+            emit daemonActiveChanged();
+            emit notificationRequested(tr("Daemon Revived"),
+                                      tr("Antigravity Hub service successfully restarted."), false);
+            fetchSettings();
+            fetchRotationStatus();
+        } else {
+            QString stderrStr = QString::fromUtf8(proc->readAllStandardError()).trimmed();
+            emit notificationRequested(tr("Revival Failed"),
+                                      stderrStr.isEmpty() ? tr("Failed to restart systemd service.") : stderrStr, true);
+        }
+        proc->deleteLater();
+    });
+
+    proc->start(QStringLiteral("systemctl"),
+                QStringList() << QStringLiteral("--user")
+                              << QStringLiteral("restart")
+                              << QStringLiteral("antigravity-hub.service"));
+}
+
+void BackendController::onLockDirectoryChanged(const QString &)
+{
+    if (QFile::exists(m_lockFilePath) && !m_lockWatcher->files().contains(m_lockFilePath)) {
+        m_lockWatcher->addPath(m_lockFilePath);
+    }
+    checkManualLockState();
+}
+
+void BackendController::onLockFileChanged(const QString &)
+{
+    if (QFile::exists(m_lockFilePath) && !m_lockWatcher->files().contains(m_lockFilePath)) {
+        m_lockWatcher->addPath(m_lockFilePath);
+    }
+    checkManualLockState();
+}
+
+void BackendController::onCountdownTimerTick()
+{
+    if (!m_isManualLocked) {
+        m_countdownTimer->stop();
+        return;
+    }
+
+    qint64 now = QDateTime::currentSecsSinceEpoch();
+    int remaining = static_cast<int>(qMax(qint64(0), m_lockUntilTs - now));
+
+    if (remaining != m_manualLockRemaining) {
+        m_manualLockRemaining = remaining;
+        emit manualLockRemainingChanged();
+    }
+
+    if (remaining <= 0) {
+        m_isManualLocked = false;
+        m_countdownTimer->stop();
+        emit manualLockedChanged();
+    }
+}
+
+void BackendController::onLivenessTimerTick()
+{
+    checkDaemonLiveness();
+}
+
+void BackendController::checkManualLockState()
+{
+    QFile file(m_lockFilePath);
+    if (!file.exists()) {
+        if (m_isManualLocked) {
+            m_isManualLocked = false;
+            m_manualLockRemaining = 0;
+            m_countdownTimer->stop();
+            emit manualLockedChanged();
+            emit manualLockRemainingChanged();
+        }
+        return;
+    }
+
+    if (file.open(QIODevice::ReadOnly)) {
+        QByteArray data = file.readAll();
+        file.close();
+        QJsonDocument doc = QJsonDocument::fromJson(data);
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            qint64 lockUntil = obj.value(QStringLiteral("locked_until")).toVariant().toLongLong();
+            qint64 now = QDateTime::currentSecsSinceEpoch();
+
+            if (lockUntil > now) {
+                m_lockUntilTs = lockUntil;
+                m_manualLockRemaining = static_cast<int>(lockUntil - now);
+                if (!m_isManualLocked) {
+                    m_isManualLocked = true;
+                    emit manualLockedChanged();
+                }
+                emit manualLockRemainingChanged();
+
+                if (!m_countdownTimer->isActive()) {
+                    m_countdownTimer->start(1000);
+                }
+                return;
+            }
+        }
+    }
+
+    if (m_isManualLocked) {
+        m_isManualLocked = false;
+        m_manualLockRemaining = 0;
+        m_countdownTimer->stop();
+        emit manualLockedChanged();
+        emit manualLockRemainingChanged();
+    }
+}
+
+void BackendController::loadInitialState()
+{
+    QString dataFile = m_hubDir + QStringLiteral("/data/accounts_hub.json");
+    if (!QFile::exists(dataFile)) {
+        dataFile = m_hubDir + QStringLiteral("/accounts_hub.json");
+    }
+
+    QFile file(dataFile);
+    if (file.open(QIODevice::ReadOnly)) {
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        file.close();
+        if (doc.isObject()) {
+            QJsonObject root = doc.object();
+            QString active = root.value(QStringLiteral("active_email")).toString();
+            if (!active.isEmpty()) {
+                m_activeEmail = active;
+                emit activeEmailChanged();
+            }
+        }
+    }
+}
+
+void BackendController::fetchSettings()
+{
+    executeGet(QStringLiteral("/api/settings"), tr("Fetch Settings"),
+               [this](const QByteArray &body, int) {
+        QJsonParseError parseErr;
+        QJsonDocument doc = QJsonDocument::fromJson(body, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            m_settings = doc.object();
+            if (m_settings.contains(QStringLiteral("account_mask"))) {
+                setMasked(m_settings.value(QStringLiteral("account_mask")).toBool());
+            }
+            if (m_settings.contains(QStringLiteral("rotation_mode"))) {
+                m_rotationMode = m_settings.value(QStringLiteral("rotation_mode")).toString();
+                emit rotationModeChanged();
+            }
+            emit settingsChanged();
+        }
+    });
+}
+
+void BackendController::fetchRotationStatus()
+{
+    executeGet(QStringLiteral("/api/rotation-status"), tr("Fetch Rotation"),
+               [this](const QByteArray &body, int) {
+        QJsonParseError parseErr;
+        QJsonDocument doc = QJsonDocument::fromJson(body, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            QJsonObject obj = doc.object();
+            m_rotationMode = obj.value(QStringLiteral("mode")).toString(QStringLiteral("gemini"));
+            emit rotationModeChanged();
+        }
+    });
+}

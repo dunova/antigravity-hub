@@ -1,0 +1,20 @@
+#!/bin/sh
+# ==============================================================================
+# Antigravity Hub — Offscreen Headless Test Runner
+# ==============================================================================
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+mkdir -p "$ROOT/build/tests"
+cd "$ROOT/build/tests"
+
+echo "==> Configuring test harness with qmake6..."
+qmake6 "$ROOT/tests/antigravity-hub_tests.pro"
+
+echo "==> Compiling test suite with make..."
+make -j"$(nproc)"
+
+echo "==> Running Qt Test suite offscreen..."
+QT_QPA_PLATFORM=offscreen ./antigravity-hub_tests "$@"
+
+echo "==> All automated tests passed successfully! (Exit 0)"

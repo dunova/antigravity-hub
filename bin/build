@@ -1,0 +1,17 @@
+#!/bin/sh
+# ==============================================================================
+# Antigravity Hub — Single Binary Build Script
+# ==============================================================================
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+mkdir -p "$ROOT/build"
+cd "$ROOT/build"
+
+echo "==> Generating Makefile with qmake6..."
+qmake6 "$ROOT/antigravity-hub.pro"
+
+echo "==> Building antigravity-hub binary with make..."
+make -j"$(nproc)"
+
+echo "==> Build successful: $ROOT/build/antigravity-hub"

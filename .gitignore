@@ -3,8 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# C extensions
+# C extensions & Qt build artifacts
 *.so
+*.o
+*.moc
+moc_*
+qrc_*
+.qmake.stash
+Makefile*
 
 # Distribution / packaging
 .Python
@@ -23,6 +29,13 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+/pkgbuild/pkg/
+/pkgbuild/src/
+/pkgbuild/*.pkg.tar.*
+/pkg/
+/src_pkg/
+*.pkg.tar.*
+
 
 # Virtual environments
 venv/
