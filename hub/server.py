@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.12"
-__canonical_version_tag__ = "20261108-v2.45.12-STREAMLINED_RELAY_PROMPT_AND_AUTO_RESUME_RECOVERY"
-__last_updated__ = "2026-11-08 20:48:00"
-__canonical_doctrine__ = "精简拉起提示词(恢复一切中断的任务和子代理)+全自动接力注入真正打通+多智能体协同护航"
+__version__ = "2.45.13"
+__canonical_version_tag__ = "20261109-v2.45.13-FIX_ACTIVE_SESSION_SUBAGENT_TREE_DETECTION"
+__last_updated__ = "2026-11-09 15:05:00"
+__canonical_doctrine__ = "修复多会话与子代理执行树活跃判定缺陷+根除等待型子代理误杀+全自动多端接力覆盖"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub

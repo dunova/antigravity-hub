@@ -182,63 +182,79 @@ class AntigravitySessionRecoveryManager:
 
         return True
 
+    def get_subagent_tree_mtime(self, sub_id: str, visited: Optional[set] = None) -> float:
+        """递归获取子代理及其所有后代子代理（Orchestrator、Worker 等）的最大最新活跃时间"""
+        if visited is None:
+            visited = set()
+        if sub_id in visited:
+            return 0.0
+        visited.add(sub_id)
+
+        sub_dir = os.path.join(self.brain_dir, sub_id)
+        if not os.path.isdir(sub_dir):
+            return 0.0
+
+        sub_tpath = os.path.join(sub_dir, ".system_generated", "logs", "transcript.jsonl")
+        if not os.path.isfile(sub_tpath):
+            sub_tpath = os.path.join(sub_dir, "transcript.jsonl")
+
+        max_m = os.path.getmtime(sub_tpath) if os.path.isfile(sub_tpath) else 0.0
+
+        child_sub_dir = os.path.join(sub_dir, ".system_generated", "subagents")
+        if os.path.isdir(child_sub_dir):
+            for fname in os.listdir(child_sub_dir):
+                if fname.endswith(".json"):
+                    cid = fname[:-5]
+                    cm = self.get_subagent_tree_mtime(cid, visited)
+                    if cm > max_m:
+                        max_m = cm
+
+        return max_m
+
     def get_effective_session_mtime(self, session_dir: str, root_mtime: float) -> float:
-        """向上穿透统计所有在途 Subagents 的最新活跃时间"""
+        """向上穿透统计主会话及其所有在途子代理树的最新活跃时间"""
         eff_mtime = root_mtime
         sub_dir = os.path.join(session_dir, ".system_generated", "subagents")
         if os.path.isdir(sub_dir):
             for fname in os.listdir(sub_dir):
                 if fname.endswith(".json"):
                     sub_id = fname[:-5]
-                    sub_tpath = os.path.join(self.brain_dir, sub_id, ".system_generated", "logs", "transcript.jsonl")
-                    if os.path.exists(sub_tpath):
-                        try:
-                            sm = os.path.getmtime(sub_tpath)
-                            if sm > eff_mtime:
-                                eff_mtime = sm
-                        except Exception:
-                            pass
+                    sm = self.get_subagent_tree_mtime(sub_id)
+                    if sm > eff_mtime:
+                        eff_mtime = sm
         return eff_mtime
 
-    def check_subagent_is_active(self, sub_session_id: str) -> bool:
-        """检查单个子代理会话是否仍处于活跃或未完成状态"""
-        sub_tpath = os.path.join(self.brain_dir, sub_session_id, ".system_generated", "logs", "transcript.jsonl")
-        if not os.path.isfile(sub_tpath):
+    def check_subagent_is_active(self, sub_session_id: str, max_idle: int = 2700, parent_session_dir: str = "") -> bool:
+        """
+        检查单个子代理会话（及其整个子代理执行树）是否仍处于活跃/运行状态。
+        彻底根绝将处于汇报状态、等待定时器或等待下属子代理的父子代理误判为终止的恶性缺陷。
+        """
+        sub_dir = os.path.join(self.brain_dir, sub_session_id)
+        if not os.path.isdir(sub_dir):
             return False
 
-        try:
-            mtime = os.path.getmtime(sub_tpath)
-            if time.time() - mtime > 1800:
-                return False
-
-            with open(sub_tpath, "r", encoding="utf-8") as f:
-                lines = [l.strip() for l in f if l.strip()]
-            if not lines:
-                return False
-
-            for l in reversed(lines[-25:]):
+        # 若在父会话登记中已被显式置为 KILLED，则直接判定已终止
+        if parent_session_dir:
+            meta_p = os.path.join(parent_session_dir, ".system_generated", "subagents", f"{sub_session_id}.json")
+            if os.path.isfile(meta_p):
                 try:
-                    d = json.loads(l)
-                    ttype = d.get("type", "")
-                    if ttype in ("USER_INPUT", "PLANNER_RESPONSE"):
-                        if ttype == "PLANNER_RESPONSE":
-                            tcalls = d.get("tool_calls", [])
-                            content = str(d.get("content", "")).strip()
-                            if len(tcalls) == 0 and bool(content):
-                                return False
-                            if len(tcalls) > 0:
-                                return True
-                        elif ttype == "USER_INPUT":
-                            return True
+                    with open(meta_p, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    if meta.get("state") == "SUBAGENT_STATE_KILLED":
+                        return False
                 except Exception:
-                    continue
-        except Exception as e:
-            logger.debug(f"检查子代理 {sub_session_id} 异常: {e}")
+                    pass
 
-        return False
+        tree_mtime = self.get_subagent_tree_mtime(sub_session_id)
+        if tree_mtime <= 0.0:
+            return False
 
-    def get_active_subagents_for_session(self, session_dir: str) -> List[str]:
-        """探测主会话下属正在运行的 Subagents ID 列表"""
+        now = time.time()
+        # 只要该子代理或其任一后代在 max_idle (默认45分钟) 内有活动，且未被 KILLED，即为活跃！
+        return (now - tree_mtime) <= max_idle
+
+    def get_active_subagents_for_session(self, session_dir: str, max_idle: int = 2700) -> List[str]:
+        """探测主会话下属正在运行的 Subagents ID 列表（包含树状递归与存活状态核验）"""
         active_subs = []
         sub_dir = os.path.join(session_dir, ".system_generated", "subagents")
         if not os.path.isdir(sub_dir):
@@ -247,10 +263,37 @@ class AntigravitySessionRecoveryManager:
         for fname in os.listdir(sub_dir):
             if fname.endswith(".json"):
                 sub_id = fname[:-5]
-                if self.check_subagent_is_active(sub_id):
+                if self.check_subagent_is_active(sub_id, max_idle=max_idle, parent_session_dir=session_dir):
                     active_subs.append(sub_id)
 
         return active_subs
+
+    def is_session_waiting_for_recovery(self, transcript_path: str) -> bool:
+        """
+        检查会话尾部是否已经堆叠了一条尚未得到模型响应的【配额已就绪】提示词。
+        仅当该提示词已在尾部等待且尚未触发 PLANNER_RESPONSE 时才跳过，杜绝重复堆积；
+        一旦模型对上一次接力生成了回复，若后续再次切号，必须允许下一次接力正常注入！
+        """
+        if not os.path.isfile(transcript_path):
+            return False
+        try:
+            with open(transcript_path, "r", encoding="utf-8") as f:
+                lines = [l.strip() for l in f if l.strip()]
+            for l in reversed(lines[-25:]):
+                d = json.loads(l)
+                ttype = d.get("type", "")
+                if ttype in ("EPHEMERAL_MESSAGE", "GENERIC", "ERROR_MESSAGE", "CHECKPOINT"):
+                    continue
+                if ttype in ("USER_INPUT", "SYSTEM_MESSAGE"):
+                    content = str(d.get("content", ""))
+                    if "【配额已就绪】" in content or "配额已就绪" in content:
+                        return True
+                    return False
+                elif ttype == "PLANNER_RESPONSE":
+                    return False
+        except Exception:
+            pass
+        return False
 
     def scan_active_sessions(self, max_idle_seconds: int = 2700) -> List[Dict[str, Any]]:
         """扫描 brain 目录，识别最近活跃且未完工的主会话"""
@@ -273,8 +316,8 @@ class AntigravitySessionRecoveryManager:
                 continue
 
             try:
-                mtime = os.path.getmtime(transcript_path)
-                eff_mtime = self.get_effective_session_mtime(sess_path, mtime)
+                root_mtime = os.path.getmtime(transcript_path)
+                eff_mtime = self.get_effective_session_mtime(sess_path, root_mtime)
                 if (now - eff_mtime) > max_idle_seconds:
                     continue
 
@@ -319,19 +362,20 @@ class AntigravitySessionRecoveryManager:
                     except Exception:
                         continue
 
-                active_subs = self.get_active_subagents_for_session(sess_path)
+                active_subs = self.get_active_subagents_for_session(sess_path, max_idle=max_idle_seconds)
                 has_active_subs = len(active_subs) > 0
 
                 # 必须是根主会话，坚决过滤子代理
                 if not self.is_root_user_session(session_id):
                     continue
 
-                # 已完工会话物理拦截跳过
-                if last_major_type == "PLANNER_RESPONSE" and len(last_major_tool_calls) == 0 and bool(last_major_content.strip()) and not has_active_subs:
+                # 真正已完工会话物理拦截跳过：
+                # 仅当：1. 无任何在途/活跃子代理；2. 最后一条记录为纯文本 PLANNER_RESPONSE 且无工具调用；3. 距离根会话最后活动已超 300 秒静默
+                if not has_active_subs and last_major_type == "PLANNER_RESPONSE" and len(last_major_tool_calls) == 0 and (now - root_mtime) > 300:
                     continue
 
-                # 防重复接力拦截
-                if any(k in last_major_content for k in ["恢复一切中断的任务和子代理", "配额已就绪", "断点接力指令", "系统配额轮换完成"]):
+                # 防重复接力拦截：仅拦截尾部正在等待响应的同款接力指令
+                if self.is_session_waiting_for_recovery(transcript_path):
                     continue
 
                 active_sessions.append({

@@ -41,6 +41,7 @@ ENV/
 # Antigravity & Hub local state / runtime / secrets (STRICTLY IGNORED)
 *.json
 !config.example.json
+!src/i18n/*.json
 *.log
 *.tmp
 *.bak*
