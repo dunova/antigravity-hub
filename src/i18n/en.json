@@ -82,6 +82,8 @@
   "Ready": "Ready",
   "Full": "Full",
   "Weekly Depleted": "Weekly Depleted",
+  "Depleted": "Depleted",
+  "周耗尽": "Depleted",
   "No Gemini 4 access": "No Gemini 4 access",
   "%1d %2h": "%1d %2h",
   "%1h %2m": "%1h %2m",

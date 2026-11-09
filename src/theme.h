@@ -1,8 +1,10 @@
 #pragma once
 
 #include <QFileSystemWatcher>
+#include <QHash>
 #include <QObject>
 #include <QProcess>
+#include <QStringList>
 #include <QTimer>
 
 class Theme : public QObject {
@@ -38,10 +40,19 @@ class Theme : public QObject {
     Q_PROPERTY(int panelRadius READ panelRadius NOTIFY changed)
     Q_PROPERTY(int controlRadius READ controlRadius NOTIFY changed)
     Q_PROPERTY(bool rounded READ rounded NOTIFY changed)
+    Q_PROPERTY(QString danger READ danger NOTIFY changed)
+    Q_PROPERTY(QString good READ good NOTIFY changed)
+    Q_PROPERTY(QString warning READ warning NOTIFY changed)
     Q_PROPERTY(QString dangerText READ dangerText NOTIFY changed)
     Q_PROPERTY(QString goodText READ goodText NOTIFY changed)
     Q_PROPERTY(QString warningText READ warningText NOTIFY changed)
     Q_PROPERTY(QString accentText READ accentText NOTIFY changed)
+
+    // Zebra Striping & Component Slots
+    Q_PROPERTY(QString rowEven READ rowEven NOTIFY changed)
+    Q_PROPERTY(QString rowOdd READ rowOdd NOTIFY changed)
+    Q_PROPERTY(QString trackBg READ trackBg NOTIFY changed)
+    Q_PROPERTY(QString pillBg READ pillBg NOTIFY changed)
 
 public:
     explicit Theme(const QString &currentDirectory = {}, QObject *parent = nullptr, const QString &hyprctl = {});
@@ -58,7 +69,7 @@ public:
     QString text3() const { return m_text3; }
     QString text4() const { return m_text4; }
     QString border() const { return m_border; }
-    int radius() const { return m_radius; }
+    int radius() const { return 0; }
 
     QString mode() const { return m_mode; }
     QString selection() const { return m_selection; }
@@ -69,18 +80,34 @@ public:
 
     // Omarchy Standard Getters
     QString uiFont() const { return m_uiFont; }
-    QString canvas() const { return m_background; }
+    QString canvas() const { return m_canvas.isEmpty() ? m_background : m_canvas; }
     QString surfaceTop() const { return m_surfaceTop; }
     QString surfaceBottom() const { return m_surfaceBottom; }
     QString hairline() const { return m_hairline; }
     QString controlBorder() const { return m_controlBorder; }
-    int panelRadius() const { return qMin(m_radius, 14); }
-    int controlRadius() const { return m_radius > 0 ? qBound(4, m_radius * 2 / 3, 8) : 4; }
-    bool rounded() const { return m_radius > 0; }
+    int panelRadius() const { return 0; }
+    int controlRadius() const { return 0; }
+    bool rounded() const { return false; }
+    QString danger() const { return m_danger; }
+    QString good() const { return m_good; }
+    QString warning() const { return m_warning; }
     QString dangerText() const { return m_dangerText; }
     QString goodText() const { return m_goodText; }
     QString warningText() const { return m_warningText; }
     QString accentText() const { return m_accentText; }
+
+    // Zebra Striping & Component Slots
+    QString rowEven() const { return m_rowEven; }
+    QString rowOdd() const { return m_rowOdd; }
+    QString trackBg() const { return m_trackBg; }
+    QString pillBg() const { return m_pillBg; }
+
+    // Canonical Omarchy Color Algorithms
+    Q_INVOKABLE static QHash<QString, QString> readColors(const QString &path);
+    Q_INVOKABLE static double contrast(const QString &a, const QString &b);
+    Q_INVOKABLE static QString mix(const QString &from, const QString &to, double amount);
+    Q_INVOKABLE static QString withAlpha(const QString &color, double alpha);
+    Q_INVOKABLE static QString readable(const QString &color, const QString &foreground, const QStringList &surfaces, double ratio = 4.5);
 
     // Static helper for isolated file parsing & testing
     static void parsePalette(const QString &path,
@@ -111,18 +138,27 @@ private:
     QString m_text2 = "#F3F4F6";
     QString m_text3 = "#CBD5E1";
     QString m_text4 = "#94A3B8";
-    QString m_border = "rgba(255, 255, 255, 0.08)";
+    QString m_border = "#14ffffff";
     int m_radius = 0;
 
     QString m_uiFont = "sans-serif";
+    QString m_canvas = "#0e0e14";
     QString m_surfaceTop = "#172c25";
     QString m_surfaceBottom = "#11201b";
-    QString m_hairline = "rgba(255, 255, 255, 0.12)";
-    QString m_controlBorder = "rgba(255, 255, 255, 0.24)";
-    QString m_dangerText = "#FF6B6B";
-    QString m_goodText = "#4ADE80";
-    QString m_warningText = "#FFD166";
+    QString m_hairline = "#1fffffff";
+    QString m_controlBorder = "#3dffffff";
+    QString m_danger = "#ff5f4a";
+    QString m_good = "#5fc97f";
+    QString m_warning = "#ffc27a";
+    QString m_dangerText = "#ff5f4a";
+    QString m_goodText = "#5fc97f";
+    QString m_warningText = "#ffc27a";
     QString m_accentText = "#8bcbb1";
+
+    QString m_rowEven = "#0a0a0f";
+    QString m_rowOdd = "#1a1b26";
+    QString m_trackBg = "#29ffffff";
+    QString m_pillBg = "#12ffffff";
 
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;
@@ -130,3 +166,4 @@ private:
     QProcess m_roundingProcess;
     QTimer m_roundingPoll, m_roundingTimeout;
 };
+

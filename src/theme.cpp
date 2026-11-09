@@ -7,22 +7,118 @@
 #include <QFontDatabase>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QMap>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <cmath>
 
-static QString mixColors(const QString &from, const QString &to, double amount) {
-    const QColor a(from), b(to);
-    return QColor::fromRgbF(a.redF() + (b.redF() - a.redF()) * amount,
-                            a.greenF() + (b.greenF() - a.greenF()) * amount,
-                            a.blueF() + (b.blueF() - a.blueF()) * amount).name();
+static double relativeLuminance(const QColor &c) {
+    if (!c.isValid())
+        return 0.0;
+    const auto linear = [](double v) {
+        return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * linear(c.redF()) +
+           0.7152 * linear(c.greenF()) +
+           0.0722 * linear(c.blueF());
 }
 
-static QString withAlphaColor(const QString &color, double alpha) {
+double Theme::contrast(const QString &a, const QString &b) {
+    const QColor ca(a), cb(b);
+    if (!ca.isValid() || !cb.isValid())
+        return 1.0;
+    const double first = relativeLuminance(ca), second = relativeLuminance(cb);
+    return (qMax(first, second) + 0.05) / (qMin(first, second) + 0.05);
+}
+
+QString Theme::mix(const QString &from, const QString &to, double amount) {
+    const QColor a(from), b(to);
+    if (!a.isValid()) return to;
+    if (!b.isValid()) return from;
+    const double t = qBound(0.0, amount, 1.0);
+    return QColor::fromRgbF(a.redF() + (b.redF() - a.redF()) * t,
+                            a.greenF() + (b.greenF() - a.greenF()) * t,
+                            a.blueF() + (b.blueF() - a.blueF()) * t).name();
+}
+
+QString Theme::withAlpha(const QString &color, double alpha) {
     QColor c(color);
-    c.setAlphaF(alpha);
+    if (!c.isValid()) return color;
+    c.setAlphaF(qBound(0.0, alpha, 1.0));
     return c.name(QColor::HexArgb);
+}
+
+QHash<QString, QString> Theme::readColors(const QString &path) {
+    QHash<QString, QString> colors;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return colors;
+    static const QRegularExpression expression(R"re(^\s*([A-Za-z0-9_-]+)\s*=\s*["']([^"'\r\n]+)["'])re",
+                                                QRegularExpression::MultilineOption);
+    auto matches = expression.globalMatch(QString::fromUtf8(file.readAll()));
+    while (matches.hasNext()) {
+        const auto match = matches.next();
+        colors.insert(match.captured(1), match.captured(2));
+    }
+    return colors;
+}
+
+QString Theme::readable(const QString &color, const QString &foreground, const QStringList &surfaces, double ratio) {
+    const QColor from(color), to(foreground);
+    if (!from.isValid() || !to.isValid())
+        return color;
+    const auto enoughOn = [&](const QString &candidate) {
+        for (const auto &surface : surfaces) {
+            if (surface.isEmpty())
+                continue;
+            if (contrast(candidate, surface) < ratio)
+                return false;
+        }
+        return true;
+    };
+    if (enoughOn(color))
+        return color;
+
+    // Phase 1: Lighten or darken in HSL space first, preserving original hue and saturation.
+    float hue, saturation, lightness;
+    from.getHslF(&hue, &saturation, &lightness);
+    if (hue < 0.0f)
+        hue = 0.0f;
+    const float target = to.lightnessF() < lightness ? 0.0f : 1.0f;
+    for (int step = 1; step <= 20; ++step) {
+        const float newL = qBound(0.0f, lightness + (target - lightness) * step / 20.0f, 1.0f);
+        const QString shifted = QColor::fromHslF(hue, saturation, newL).name();
+        if (enoughOn(shifted))
+            return shifted;
+    }
+
+    // Phase 1b: Try opposite direction in HSL space if primary direction had insufficient headroom
+    // (handles cases where background luminance is identical to target color, or mid-tone ceiling)
+    const float altTarget = 1.0f - target;
+    for (int step = 1; step <= 20; ++step) {
+        const float newL = qBound(0.0f, lightness + (altTarget - lightness) * step / 20.0f, 1.0f);
+        const QString shifted = QColor::fromHslF(hue, saturation, newL).name();
+        if (enoughOn(shifted))
+            return shifted;
+    }
+
+    // Phase 2: If HSL space has no headroom, interpolate linearly toward foreground in RGB space.
+    QString candidate = color;
+    for (int step = 0; step <= 20; ++step) {
+        const double t = step / 20.0;
+        candidate = QColor::fromRgbF(from.redF() + (to.redF() - from.redF()) * t,
+                                     from.greenF() + (to.greenF() - from.greenF()) * t,
+                                     from.blueF() + (to.blueF() - from.blueF()) * t).name();
+        if (enoughOn(candidate))
+            return candidate;
+    }
+
+    // Phase 3: Extreme fallback if reference foreground itself lacked contrast on surfaces
+    if (enoughOn(QStringLiteral("#ffffff")))
+        return QStringLiteral("#ffffff");
+    if (enoughOn(QStringLiteral("#000000")))
+        return QStringLiteral("#000000");
+
+    return candidate;
 }
 
 Theme::Theme(const QString &directory, QObject *parent, const QString &hyprctl)
@@ -41,87 +137,33 @@ Theme::Theme(const QString &directory, QObject *parent, const QString &hyprctl)
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, [this] { m_debounce.start(); });
     connect(&m_debounce, &QTimer::timeout, this, &Theme::reload);
 
-    // Hyprland rounding process setup
-    m_hyprctl = !hyprctl.isEmpty() ? hyprctl
-              : directory.isEmpty() && !qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE")
-                  ? QStandardPaths::findExecutable("hyprctl") : QString();
-
-    m_roundingTimeout.setSingleShot(true);
-    m_roundingTimeout.setInterval(500);
-    connect(&m_roundingTimeout, &QTimer::timeout, &m_roundingProcess, &QProcess::kill);
-    connect(&m_roundingProcess, &QProcess::errorOccurred, this, [this] { m_roundingTimeout.stop(); });
-    connect(&m_roundingProcess, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
-        m_roundingTimeout.stop();
-        if (code != 0 || status != QProcess::NormalExit)
-            return;
-        const auto doc = QJsonDocument::fromJson(m_roundingProcess.readAllStandardOutput());
-        const auto val = doc.object().value("int");
-        if (val.isDouble() && val.toInt(-1) >= 0) {
-            const int newRadius = val.toInt();
-            if (newRadius != m_radius) {
-                m_radius = newRadius;
-                emit changed();
-            }
-        }
-    });
-
-    m_roundingPoll.setInterval(1000);
-    connect(&m_roundingPoll, &QTimer::timeout, this, &Theme::refreshRounding);
-    if (!m_hyprctl.isEmpty())
-        m_roundingPoll.start();
+    Q_UNUSED(hyprctl);
+    // User Supreme Visual Iron Rule: All radii are permanently zero (controlRadius=0, panelRadius=0, radius=0, rounded=false).
+    // Hyprland rounding polling timer is intentionally purged to eliminate redundant process forks and enforce zero-radius geometry.
 
     reload();
 }
 
-Theme::~Theme() {
-    if (m_roundingProcess.state() != QProcess::NotRunning) {
-        m_roundingProcess.kill();
-        m_roundingProcess.waitForFinished(1000);
-    }
-}
+Theme::~Theme() = default;
 
 void Theme::refreshRounding() {
-    if (m_hyprctl.isEmpty() || m_roundingProcess.state() != QProcess::NotRunning)
-        return;
-    m_roundingProcess.start(m_hyprctl, {"-j", "getoption", "decoration:rounding"});
-    m_roundingTimeout.start();
+    // Purged / No-op: Zero-radius visual iron rule
 }
 
 QString Theme::accentForeground() const {
     const QColor c(m_accent);
     if (!c.isValid())
         return "black";
-
-    auto linear = [](double v) {
-        return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
-    };
-
-    const double luminance = 0.2126 * linear(c.redF()) +
-                             0.7152 * linear(c.greenF()) +
-                             0.0722 * linear(c.blueF());
-
-    return luminance > 0.179 ? "black" : "white";
+    return relativeLuminance(c) > 0.179 ? "black" : "white";
 }
 
 void Theme::parsePalette(const QString &path,
                          QString &mode, QString &accent, QString &selection, QString &muted,
                          QString &background, QString &surface1, QString &surface2, QString &surface3,
                          QString &text1, QString &text2, QString &text3, QString &text4, QString &border) {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    const auto raw = readColors(path);
+    if (raw.isEmpty())
         return;
-
-    QMap<QString, QString> raw;
-    const QRegularExpression re(R"(^\s*([a-zA-Z0-9_-]+)\s*=\s*["']([^"']+)["'])");
-    while (!file.atEnd()) {
-        const QString line = QString::fromUtf8(file.readLine()).trimmed();
-        if (line.isEmpty() || line.startsWith('#'))
-            continue;
-        const auto match = re.match(line);
-        if (match.hasMatch()) {
-            raw[match.captured(1)] = match.captured(2);
-        }
-    }
 
     if (raw.contains("mode")) mode = raw["mode"];
     if (raw.contains("accent")) accent = raw["accent"];
@@ -167,14 +209,15 @@ void Theme::parsePalette(const QString &path,
     else if (raw.contains("muted")) text4 = raw["muted"];
     else text4 = text3;
 
-    // Border: explicit 'border' or subtle rgba separator
+    // Border: explicit 'border' or subtle alpha separator
     if (raw.contains("border")) border = raw["border"];
-    else border = (mode == "light") ? "rgba(0, 0, 0, 0.08)" : "rgba(255, 255, 255, 0.08)";
+    else border = (mode == "light") ? "#14000000" : "#14ffffff";
 }
 
 void Theme::setThemeMode(const QString &mode) {
-    if (m_themeMode != mode) {
-        m_themeMode = mode;
+    const QString normalized = mode.trimmed().toLower();
+    if (m_themeMode != normalized) {
+        m_themeMode = normalized;
         emit themeModeChanged();
         reload();
     }
@@ -190,7 +233,7 @@ void Theme::reload() {
 
     // 2. Walk up to nearest existing ancestor directory
     QString ancestor = m_directory;
-    while (!QFileInfo::exists(ancestor) && ancestor != "/")
+    while (!QFileInfo::exists(ancestor) && ancestor != "/" && ancestor != ".")
         ancestor = QFileInfo(ancestor).absolutePath();
 
     // 3. Register watch candidates
@@ -209,105 +252,179 @@ void Theme::reload() {
             m_watcher.addPath(path);
     }
 
-    // 4. Parse colors.toml
+    // 4. Parse colors.toml using full canonical reader
     const QString colorsPath = m_directory + "/theme/colors.toml";
-    QString parsedMode = "dark", accent = m_accent, selection = m_selection, muted = m_muted;
-    QString background = m_background, surface1 = m_surface1, surface2 = m_surface2, surface3 = m_surface3;
-    QString text1 = m_text1, text2 = m_text2, text3 = m_text3, text4 = m_text4, border = m_border;
+    const auto rawColors = readColors(colorsPath);
 
-    parsePalette(colorsPath, parsedMode, accent, selection, muted,
-                 background, surface1, surface2, surface3,
-                 text1, text2, text3, text4, border);
-
-    m_detectedMode = parsedMode;
+    m_detectedMode = rawColors.value("mode", "dark");
     QString effectiveMode = m_themeMode;
     if (effectiveMode != "light" && effectiveMode != "dark") {
         effectiveMode = m_detectedMode;
     }
 
-    QString mode = effectiveMode;
-    QString surfaceTop, surfaceBottom, hairline, controlBorder;
-    QString dangerText, goodText, warningText, accentText;
+    const bool isDark = (effectiveMode != "light");
+    QString mode = isDark ? "dark" : "light";
 
-    if (effectiveMode == "light") {
-        // Pure White Theme (白色主题)
-        mode = "light";
-        background = "#FFFFFF";
-        surface1 = "#F8FAFC"; // Slate 50
-        surface2 = "#F1F5F9"; // Slate 100
-        surface3 = "#E2E8F0"; // Slate 200
-        text1 = "#0F172A";    // Slate 900 (Maximum Contrast Deep Ink)
-        text2 = "#1E293B";    // Slate 800 (Crisp Body)
-        text3 = "#475569";    // Slate 600 (Secondary Text / Countdowns)
-        text4 = "#64748B";    // Slate 500 (Muted Hints)
-        border = "rgba(0, 0, 0, 0.08)";
-        selection = "#E2E8F0";
-        if (accent.isEmpty() || accent == "#798186" || accent == "#cacccc") {
-            accent = "#0284C7"; // Vibrant Sky
+    QString window, sidebar, deep, raised, foreground;
+    QString selection, muted, accent;
+    QString text1, text2, text3, text4;
+    QString good, warning, danger;
+    bool forcedDark = false;
+
+    if (!isDark) {
+        // Light Mode
+        if (m_detectedMode == "light" && rawColors.contains("background")) {
+            // Authentic light theme from colors.toml (e.g. Catppuccin Latte)
+            window = rawColors.value("background", "#eff1f5");
+            sidebar = rawColors.value("dark_background", "#e3e4e8");
+            deep = rawColors.value("darker_background", "#d7d8dc");
+            raised = rawColors.value("lighter_background", "#dce0e8");
+            foreground = rawColors.value("foreground", "#4c4f69");
+            selection = rawColors.value("selection", "#ccd0da");
+            muted = rawColors.value("muted", "#acb0be");
+            accent = rawColors.value("accent", "#1e66f5");
+            text1 = rawColors.value("bright_foreground", foreground);
+            text2 = rawColors.value("foreground", "#1E293B");
+            text3 = rawColors.value("light_foreground", "#475569");
+            text4 = rawColors.value("dark_foreground", "#64748B");
+            good = rawColors.value("green", rawColors.value("bright_green", "#40a02b"));
+            warning = rawColors.value("yellow", rawColors.value("bright_yellow", rawColors.value("orange", "#df8e1d")));
+            danger = rawColors.value("red", rawColors.value("bright_red", "#d20f39"));
+        } else {
+            // Forced Pure White Theme
+            window = "#FFFFFF";
+            sidebar = "#F8FAFC";
+            deep = "#F1F5F9";
+            raised = "#E2E8F0";
+            foreground = "#0F172A";
+            text1 = "#0F172A";
+            text2 = "#1E293B";
+            text3 = "#475569";
+            text4 = "#64748B";
+            selection = "#E2E8F0";
+            muted = "#94A3B8";
+            accent = rawColors.value("accent", m_accent);
+            if (accent.isEmpty() || accent == "#798186" || accent == "#cacccc") {
+                accent = "#0284C7";
+            }
+            good = rawColors.value("green", rawColors.value("bright_green", "#16A34A"));
+            warning = rawColors.value("yellow", rawColors.value("bright_yellow", rawColors.value("orange", "#D97706")));
+            danger = rawColors.value("red", rawColors.value("bright_red", "#DC2626"));
         }
-        surfaceTop = "#F8FAFC";
-        surfaceBottom = "#F1F5F9";
-        hairline = "rgba(0, 0, 0, 0.08)";
-        controlBorder = "rgba(0, 0, 0, 0.16)";
-        dangerText = "#DC2626";
-        goodText = "#16A34A";
-        warningText = "#D97706";
-        accentText = accent;
     } else {
-        // Dark Mode: Aligned with Omarchy Control (Pure White text for crystal-clear readability)
-        mode = "dark";
-        if (background.isEmpty() || background == "#FFFFFF") background = "#142620";
-        if (surface1.isEmpty() || surface1 == "#F8FAFC") surface1 = "#0f1e19";
-        if (surface2.isEmpty() || surface2 == "#F1F5F9") surface2 = "#142620";
-        if (surface3.isEmpty() || surface3 == "#E2E8F0") surface3 = "#203b31";
+        // Dark Mode
+        const bool isUnderlyingLight = (m_detectedMode == "light") ||
+            (rawColors.contains("background") && relativeLuminance(QColor(rawColors.value("background"))) > 0.4);
 
-        // Pure white & high-contrast text invariants
-        text1 = "#FFFFFF";    // Pure White (Headings, titles, account names, badges)
-        text2 = "#F3F4F6";    // Crisp near-white
-        text3 = "#CBD5E1";    // Legible silver-gray (countdowns, column secondary)
-        text4 = "#94A3B8";    // Legible muted gray
-        border = "rgba(255, 255, 255, 0.08)";
-        if (accent.isEmpty()) accent = "#8bcbb1";
-
-        surfaceTop = mixColors(background, "#FFFFFF", 0.055);
-        surfaceBottom = mixColors(background, "#FFFFFF", 0.025);
-        hairline = withAlphaColor(text1, 0.12);
-        controlBorder = withAlphaColor(text1, 0.24);
-        dangerText = "#FF6B6B";
-        goodText = "#4ADE80";
-        warningText = "#FFD166";
-        accentText = accent;
+        if (!isUnderlyingLight && rawColors.contains("background")) {
+            // Authentic dark theme from colors.toml (e.g. Jade Horse, Tokyo Night, Gruvbox)
+            window = rawColors.value("background", "#142620");
+            sidebar = rawColors.value("dark_background", "#0f1e19");
+            deep = rawColors.value("darker_background", "#0a1713");
+            raised = rawColors.value("lighter_background", "#203b31");
+            foreground = rawColors.value("foreground", "#dfede5");
+            selection = rawColors.value("selection", "#2b5147");
+            muted = rawColors.value("muted", "#64887b");
+            accent = rawColors.value("accent", "#8bcbb1");
+            text1 = "#FFFFFF";
+            text2 = "#F3F4F6";
+            text3 = "#CBD5E1";
+            text4 = "#94A3B8";
+            good = rawColors.value("green", rawColors.value("bright_green", "#8bcbb1"));
+            warning = rawColors.value("yellow", rawColors.value("bright_yellow", rawColors.value("orange", "#c5cc91")));
+            danger = rawColors.value("red", rawColors.value("bright_red", "#d88d91"));
+        } else {
+            // Forced dark mode when system theme is light, or fallback
+            forcedDark = true;
+            window = "#0e0e14";
+            sidebar = "#101016";
+            deep = "#0a0a0f";
+            raised = "#24283b";
+            foreground = "#f5f5f7";
+            selection = rawColors.value("selection", "#292e42");
+            muted = rawColors.value("muted", "#64887b");
+            accent = rawColors.value("accent", "#FFD60A");
+            text1 = "#FFFFFF";
+            text2 = "#a9b1d6";
+            text3 = "#CBD5E1";
+            text4 = "#94A3B8";
+            good = rawColors.value("green", rawColors.value("bright_green", "#5fc97f"));
+            warning = rawColors.value("yellow", rawColors.value("bright_yellow", rawColors.value("orange", "#ffc27a")));
+            danger = rawColors.value("red", rawColors.value("bright_red", "#ff5f4a"));
+        }
     }
 
+    // Surfaces computation
+    QString canvas;
+    QString surfaceTop;
+    QString surfaceBottom;
+    if (forcedDark) {
+        canvas = QStringLiteral("#08080c");
+        surfaceTop = QStringLiteral("#13141c");
+        surfaceBottom = QStringLiteral("#1a1b26");
+    } else {
+        canvas = mix(isDark ? mix(window, deep, 0.55) : window, accent, 0.02);
+        surfaceTop = mix(canvas, isDark ? foreground : QStringLiteral("#ffffff"), isDark ? 0.055 : 0.55);
+        surfaceBottom = mix(canvas, isDark ? foreground : QStringLiteral("#ffffff"), isDark ? 0.025 : 0.4);
+    }
+    QString hairline = withAlpha(text1, isDark ? 0.12 : 0.16);
+    QString controlBorder = withAlpha(text1, isDark ? 0.24 : 0.32);
+    QString border = withAlpha(text1, 0.08);
+
+    // Dynamic WCAG 4.5:1 Contrast Adaptation for Semantic Status Colors
+    const QStringList surfaces = { canvas, surfaceTop, window, sidebar };
+    QString goodText = readable(good, text1, surfaces);
+    QString warningText = readable(warning, text1, surfaces);
+    QString dangerText = readable(danger, text1, surfaces);
+    QString accentText = readable(accent, text1, surfaces);
+
+    // Zebra Striping & Component Slots
+    QString rowEven = isDark ? mix(deep, window, 0.35) : window;
+    QString rowOdd = isDark ? mix(window, foreground, 0.085) : mix(sidebar, foreground, 0.075);
+    QString trackBg = withAlpha(foreground, 0.16);
+    QString pillBg = withAlpha(foreground, 0.07);
+
     bool hasChanged = (mode != m_mode || accent != m_accent || selection != m_selection || muted != m_muted ||
-                       background != m_background || surface1 != m_surface1 || surface2 != m_surface2 || surface3 != m_surface3 ||
+                       window != m_background || sidebar != m_surface1 || window != m_surface2 || raised != m_surface3 ||
                        text1 != m_text1 || text2 != m_text2 || text3 != m_text3 || text4 != m_text4 || border != m_border ||
-                       surfaceTop != m_surfaceTop || surfaceBottom != m_surfaceBottom || hairline != m_hairline ||
-                       controlBorder != m_controlBorder || dangerText != m_dangerText || goodText != m_goodText ||
-                       warningText != m_warningText || accentText != m_accentText);
+                       canvas != m_canvas || surfaceTop != m_surfaceTop || surfaceBottom != m_surfaceBottom ||
+                       hairline != m_hairline || controlBorder != m_controlBorder ||
+                       good != m_good || warning != m_warning || danger != m_danger ||
+                       dangerText != m_dangerText || goodText != m_goodText ||
+                       warningText != m_warningText || accentText != m_accentText ||
+                       rowEven != m_rowEven || rowOdd != m_rowOdd || trackBg != m_trackBg || pillBg != m_pillBg);
 
     if (hasChanged) {
         m_mode = mode;
         m_accent = accent;
         m_selection = selection;
         m_muted = muted;
-        m_background = background;
-        m_surface1 = surface1;
-        m_surface2 = surface2;
-        m_surface3 = surface3;
+        m_background = window;
+        m_surface1 = sidebar;
+        m_surface2 = window;
+        m_surface3 = raised;
         m_text1 = text1;
         m_text2 = text2;
         m_text3 = text3;
         m_text4 = text4;
         m_border = border;
+        m_canvas = canvas;
         m_surfaceTop = surfaceTop;
         m_surfaceBottom = surfaceBottom;
         m_hairline = hairline;
         m_controlBorder = controlBorder;
+        m_good = good;
+        m_warning = warning;
+        m_danger = danger;
         m_dangerText = dangerText;
         m_goodText = goodText;
         m_warningText = warningText;
         m_accentText = accentText;
+        m_rowEven = rowEven;
+        m_rowOdd = rowOdd;
+        m_trackBg = trackBg;
+        m_pillBg = pillBg;
         emit changed();
     }
 }
+

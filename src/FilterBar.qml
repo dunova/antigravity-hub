@@ -40,12 +40,12 @@ Item {
             id: searchBox
             Layout.preferredWidth: 230
             Layout.preferredHeight: 32
-            radius: theme ? theme.controlRadius : 6
+            radius: 0
             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
             border.width: searchInput.activeFocus ? 1.5 : 1
             border.color: searchInput.activeFocus ?
                           ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                          ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
+                          ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")
 
             Behavior on border.color { ColorAnimation { duration: 150 } }
 
@@ -101,7 +101,7 @@ Item {
                     visible: searchInput.text.length > 0
                     width: 16
                     height: 16
-                    radius: 8
+                    radius: 0
                     color: clearMouse.containsMouse ?
                            ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31") : "transparent"
 
@@ -129,9 +129,9 @@ Item {
                     visible: !searchInput.activeFocus && searchInput.text.length === 0
                     width: 16
                     height: 16
-                    radius: theme ? Math.max(theme.controlRadius - 2, 2) : 3
+                    radius: 0
                     color: (theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b"
-                    border.color: (theme && theme.hairline) ? theme.hairline : "rgba(255, 255, 255, 0.12)"
+                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                     border.width: 1
 
                     Text {
@@ -156,9 +156,9 @@ Item {
                 model: [
                     { key: "all", label: qsTr("All"), dot: "" },
                     { key: "usable", label: qsTr("Usable"), dot: (theme && theme.accent) ? theme.accent : "#8bcbb1" },
-                    { key: "plentiful", label: qsTr("Plentiful"), dot: (theme && theme.goodText) ? theme.goodText : "#4ADE80" },
-                    { key: "warning", label: qsTr("Warning"), dot: (theme && theme.warningText) ? theme.warningText : "#FFD166" },
-                    { key: "exhausted", label: qsTr("Exhausted"), dot: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B" }
+                    { key: "plentiful", label: qsTr("Plentiful"), dot: (theme && theme.goodText) ? theme.goodText : "#5fc97f" },
+                    { key: "warning", label: qsTr("Warning"), dot: (theme && theme.warningText) ? theme.warningText : "#ffc27a" },
+                    { key: "exhausted", label: qsTr("Exhausted"), dot: (theme && theme.dangerText) ? theme.dangerText : "#ff5f4a" }
                 ]
 
                 delegate: Rectangle {
@@ -166,9 +166,9 @@ Item {
                     required property var modelData
                     property bool isActive: proxyModel ? (proxyModel.statusTab === modelData.key) : (modelData.key === "all")
 
-                    implicitWidth: tabRow.implicitWidth + 16
-                    implicitHeight: 28
-                    radius: theme ? theme.controlRadius : 6
+                    implicitWidth: tabRow.implicitWidth + 24
+                    implicitHeight: 30
+                    radius: 0
 
                     color: isActive ?
                            ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") :
@@ -177,7 +177,7 @@ Item {
                     border.width: 1
                     border.color: isActive ?
                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                                  ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
+                                  ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")
 
                     Behavior on color { ColorAnimation { duration: 120 } }
                     Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -187,12 +187,12 @@ Item {
                         anchors.centerIn: parent
                         spacing: 5
 
-                        // 状态色标小圆点
+                        // 状态色标小方块
                         Rectangle {
                             visible: modelData.dot !== ""
                             width: 6
                             height: 6
-                            radius: 3
+                            radius: 0
                             color: modelData.dot !== "" ? modelData.dot : "transparent"
                         }
 
@@ -228,10 +228,9 @@ Item {
         // 3. 动态过滤数量徽章 (filteredCount / totalCount)
         // -------------------------------------------------------------
         Rectangle {
-            visible: filterBar.selectionCount === 0
             implicitWidth: counterText.implicitWidth + 14
-            implicitHeight: 26
-            radius: Math.max((theme ? theme.radius : 0) - 4, 4)
+            Layout.preferredHeight: 28
+            radius: 0
             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
             border.width: 1
             border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
@@ -246,92 +245,13 @@ Item {
                     font.family: "Monospace"
                     font.pixelSize: 11
                     font.bold: true
-                    color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                    color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                 }
                 Text {
                     text: " / " + (proxyModel ? proxyModel.totalCount : 0)
                     font.family: "Monospace"
                     font.pixelSize: 11
                     color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
-                }
-            }
-        }
-
-        // -------------------------------------------------------------
-        // 4. 渐进式批量操作栏 (勾选时滑出)
-        // -------------------------------------------------------------
-        RowLayout {
-            visible: filterBar.selectionCount > 0
-            spacing: 6
-
-            Text {
-                text: qsTr("%n account(s) selected", "", filterBar.selectionCount)
-                font.family: "Monospace"
-                font.pixelSize: 11
-                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
-            }
-
-            Rectangle {
-                implicitWidth: btnExportText.implicitWidth + 14
-                implicitHeight: 26
-                radius: 4
-                color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
-                border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
-
-                Text {
-                    id: btnExportText
-                    anchors.centerIn: parent
-                    text: qsTr("Export")
-                    font.pixelSize: 11
-                    color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#dfede5"
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: filterBar.batchExportRequested()
-                }
-            }
-
-            Rectangle {
-                implicitWidth: btnDeleteText.implicitWidth + 14
-                implicitHeight: 26
-                radius: 4
-                color: Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B", 0.15)
-                border.color: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"
-
-                Text {
-                    id: btnDeleteText
-                    anchors.centerIn: parent
-                    text: qsTr("Delete")
-                    font.pixelSize: 11
-                    font.bold: true
-                    color: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: filterBar.batchDeleteRequested()
-                }
-            }
-
-            Rectangle {
-                implicitWidth: btnCancelText.implicitWidth + 14
-                implicitHeight: 26
-                radius: 4
-                color: "transparent"
-                border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
-
-                Text {
-                    id: btnCancelText
-                    anchors.centerIn: parent
-                    text: qsTr("Cancel")
-                    font.pixelSize: 11
-                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: filterBar.clearSelectionRequested()
                 }
             }
         }

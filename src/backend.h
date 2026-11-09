@@ -5,6 +5,7 @@
 #include <QString>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
@@ -69,6 +70,15 @@ public:
     Q_INVOKABLE void unlockManualOverride();
     Q_INVOKABLE void copyToClipboard(const QString &text);
 
+    // 批量操作与账号纳管扩展 (Milestone 2)
+    Q_INVOKABLE void deleteAccounts(const QStringList &emails);
+    Q_INVOKABLE void ingestActiveAccount();
+    Q_INVOKABLE void startOAuthLogin();
+    Q_INVOKABLE void importAccounts(const QString &json);
+    Q_INVOKABLE void exportSelectedAccounts(const QStringList &emails);
+    Q_INVOKABLE void exportSelected(const QStringList &emails);
+    Q_INVOKABLE void batchWarmup(const QStringList &emails);
+
     // 服务运维与守护自愈
     Q_INVOKABLE void checkDaemonLiveness();
     Q_INVOKABLE void restartDaemon();
@@ -90,6 +100,10 @@ signals:
     // 统一 UI 反馈通知信号 (供 QML Toast 或 Banner 监听)
     void notificationRequested(const QString &title, const QString &message, bool isError);
     void operationCompleted(const QString &operation, bool success, const QString &message);
+
+    // 跨组件通信与数据同步信号
+    void accountsReloadRequested();
+    void accountsExported(const QString &json);
 
 private slots:
     void onLockDirectoryChanged(const QString &path);

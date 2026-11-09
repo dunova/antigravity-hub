@@ -22,13 +22,13 @@ Popup {
 
     background: Rectangle {
         color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c"
-        radius: theme ? Math.max(theme.radius, 10) : 10
+        radius: 0
         border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
         border.width: 1
 
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
+            radius: 0
             color: "transparent"
             border.color: "#0affffff"
             border.width: 1
@@ -55,13 +55,13 @@ Popup {
                     text: qsTr("Keyboard Shortcuts")
                     font.pixelSize: 16
                     font.weight: Font.DemiBold
-                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                 }
 
                 Text {
                     text: qsTr("Quick reference for keyboard navigation and actions")
                     font.pixelSize: 11
-                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#b4bee6"
+                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                 }
             }
 
@@ -71,12 +71,12 @@ Popup {
                 flat: true
                 background: Rectangle {
                     color: parent.hovered ? "#14ffffff" : "transparent"
-                    radius: 4
+                    radius: 0
                 }
                 contentItem: AppIcon {
                     name: "close"
                     size: 13
-                    tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
+                    tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                 }
                 onClicked: root.close()
             }
@@ -87,6 +87,7 @@ Popup {
             Layout.fillWidth: true
             height: 1
             color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+            radius: 0
         }
 
         // Two-Column Cheatsheet Body
@@ -105,7 +106,7 @@ Popup {
                     font.pixelSize: 11
                     font.weight: Font.Bold
                     font.capitalization: Font.AllUppercase
-                    color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                    color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                     Layout.bottomMargin: 2
                 }
 
@@ -128,9 +129,9 @@ Popup {
                                 delegate: Rectangle {
                                     width: Math.max(kTxt.implicitWidth + 12, 26)
                                     height: 24
-                                    radius: 4
-                                    color: "#0fffffff"
-                                    border.color: "#1fffffff"
+                                    radius: 0
+                                    color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
+                                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     border.width: 1
 
                                     Text {
@@ -138,9 +139,9 @@ Popup {
                                         anchors.centerIn: parent
                                         text: modelData
                                         font.pixelSize: 11
-                                        font.family: "JetBrains Mono, Fira Code, Monospace"
+                                        font.family: (theme && theme.uiFont) ? theme.uiFont : "Monospace"
                                         font.weight: Font.DemiBold
-                                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                                     }
                                 }
                             }
@@ -150,7 +151,7 @@ Popup {
                             Layout.fillWidth: true
                             text: modelData.desc
                             font.pixelSize: 12
-                            color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#a9b1d6"
+                            color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                             elide: Text.ElideRight
                         }
                     }
@@ -163,6 +164,7 @@ Popup {
                 Layout.preferredHeight: 180
                 width: 1
                 color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                radius: 0
             }
 
             // Right Column: Actions
@@ -176,7 +178,7 @@ Popup {
                     font.pixelSize: 11
                     font.weight: Font.Bold
                     font.capitalization: Font.AllUppercase
-                    color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                    color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                     Layout.bottomMargin: 2
                 }
 
@@ -200,9 +202,9 @@ Popup {
                                 delegate: Rectangle {
                                     width: Math.max(kTxt2.implicitWidth + 12, 26)
                                     height: 24
-                                    radius: 4
-                                    color: "#0fffffff"
-                                    border.color: "#1fffffff"
+                                    radius: 0
+                                    color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
+                                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     border.width: 1
 
                                     Text {
@@ -210,9 +212,9 @@ Popup {
                                         anchors.centerIn: parent
                                         text: modelData
                                         font.pixelSize: 11
-                                        font.family: "JetBrains Mono, Fira Code, Monospace"
+                                        font.family: (theme && theme.uiFont) ? theme.uiFont : "Monospace"
                                         font.weight: Font.DemiBold
-                                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                                     }
                                 }
                             }
@@ -222,7 +224,7 @@ Popup {
                             Layout.fillWidth: true
                             text: modelData.desc
                             font.pixelSize: 12
-                            color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#a9b1d6"
+                            color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                             elide: Text.ElideRight
                         }
                     }
@@ -235,6 +237,7 @@ Popup {
             Layout.fillWidth: true
             height: 1
             color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+            radius: 0
         }
 
         Text {

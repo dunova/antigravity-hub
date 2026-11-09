@@ -81,6 +81,8 @@
   "Ready": "已就绪",
   "Full": "满额",
   "Weekly Depleted": "周枯竭",
+  "Depleted": "已耗尽",
+  "周耗尽": "周耗尽",
   "No Gemini 4 access": "无 Gemini 4 权限",
   "%1d %2h": "%1天 %2小时",
   "%1h %2m": "%1小时 %2分钟",

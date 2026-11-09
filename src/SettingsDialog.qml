@@ -22,13 +22,13 @@ Dialog {
 
     background: Rectangle {
         color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c"
-        radius: theme ? Math.max(theme.radius, 8) : 8
+        radius: 0
         border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
         border.width: 1
 
         Rectangle {
             anchors.fill: parent
-            radius: parent.radius
+            radius: 0
             color: "transparent"
             border.color: "#0affffff"
             border.width: 1
@@ -98,21 +98,14 @@ Dialog {
 
         if (backend) {
             backend.saveSettings(payload);
-            backend.setMasked(maskSwitch.checked);
-            backend.setThemeMode(payload.theme_mode);
         }
-        if (theme) {
-            theme.setThemeMode(payload.theme_mode);
-        }
-        root.settingsSaved(payload);
+
+        settingsSaved(payload);
         root.accept();
     }
 
     contentItem: ColumnLayout {
         spacing: 0
-        focus: true
-        Keys.onReturnPressed: saveAndApply()
-        Keys.onEnterPressed: saveAndApply()
 
         // Dialog Header
         Item {
@@ -128,7 +121,7 @@ Dialog {
                     text: qsTr("Preferences")
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
-                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     Layout.fillWidth: true
                 }
 
@@ -138,12 +131,12 @@ Dialog {
                     flat: true
                     background: Rectangle {
                         color: parent.hovered ? "#14ffffff" : "transparent"
-                        radius: 4
+                        radius: 0
                     }
                     contentItem: AppIcon {
                         name: "close"
                         size: 13
-                        tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
+                        tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                     }
                     onClicked: root.reject()
                 }
@@ -154,6 +147,7 @@ Dialog {
                 width: parent.width
                 height: 1
                 color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                radius: 0
             }
         }
 
@@ -180,7 +174,7 @@ Dialog {
                         text: qsTr("Auto-Rotation Strategy")
                         font.pixelSize: 12
                         font.weight: Font.Medium
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
 
                     ComboBox {
@@ -198,9 +192,9 @@ Dialog {
 
                         background: Rectangle {
                             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
-                            radius: 6
+                            radius: 0
                             border.color: parent.activeFocus ?
-                                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
+                                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
                                           ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
                             border.width: 1
                         }
@@ -210,7 +204,7 @@ Dialog {
                             rightPadding: 24
                             text: strategyCombo.displayText
                             font.pixelSize: 12
-                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
                         }
@@ -228,22 +222,23 @@ Dialog {
                             text: qsTr("Gemini Depletion Threshold")
                             font.pixelSize: 12
                             font.weight: Font.Medium
-                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             Layout.fillWidth: true
                         }
                         Rectangle {
                             Layout.preferredWidth: 46
                             Layout.preferredHeight: 22
-                            radius: 4
+                            radius: 0
                             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
                             border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                            border.width: 1
                             Text {
                                 anchors.centerIn: parent
                                 text: Math.round(geminiSlider.value * 100) + "%"
                                 font.pixelSize: 11
                                 font.family: "Monospace"
                                 font.weight: Font.DemiBold
-                                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                             }
                         }
                     }
@@ -261,26 +256,26 @@ Dialog {
                             y: geminiSlider.topPadding + geminiSlider.availableHeight / 2 - height / 2
                             width: geminiSlider.availableWidth
                             height: 4
-                            radius: 2
+                            radius: 0
                             color: (theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b"
 
                             Rectangle {
                                 width: geminiSlider.visualPosition * parent.width
                                 height: parent.height
-                                radius: 2
-                                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                                radius: 0
+                                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                             }
                         }
 
                         handle: Rectangle {
                             x: geminiSlider.leftPadding + geminiSlider.visualPosition * (geminiSlider.availableWidth - width)
                             y: geminiSlider.topPadding + geminiSlider.availableHeight / 2 - height / 2
-                            width: 16
-                            height: 16
-                            radius: 8
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                            width: 14
+                            height: 14
+                            radius: 0
+                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                             border.color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c"
-                            border.width: 2
+                            border.width: 1
                         }
                     }
                 }
@@ -296,22 +291,23 @@ Dialog {
                             text: qsTr("Claude Depletion Threshold")
                             font.pixelSize: 12
                             font.weight: Font.Medium
-                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             Layout.fillWidth: true
                         }
                         Rectangle {
                             Layout.preferredWidth: 46
                             Layout.preferredHeight: 22
-                            radius: 4
+                            radius: 0
                             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
                             border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                            border.width: 1
                             Text {
                                 anchors.centerIn: parent
                                 text: Math.round(claudeSlider.value * 100) + "%"
                                 font.pixelSize: 11
                                 font.family: "Monospace"
                                 font.weight: Font.DemiBold
-                                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                             }
                         }
                     }
@@ -329,26 +325,26 @@ Dialog {
                             y: claudeSlider.topPadding + claudeSlider.availableHeight / 2 - height / 2
                             width: claudeSlider.availableWidth
                             height: 4
-                            radius: 2
+                            radius: 0
                             color: (theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b"
 
                             Rectangle {
                                 width: claudeSlider.visualPosition * parent.width
                                 height: parent.height
-                                radius: 2
-                                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                                radius: 0
+                                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                             }
                         }
 
                         handle: Rectangle {
                             x: claudeSlider.leftPadding + claudeSlider.visualPosition * (claudeSlider.availableWidth - width)
                             y: claudeSlider.topPadding + claudeSlider.availableHeight / 2 - height / 2
-                            width: 16
-                            height: 16
-                            radius: 8
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                            width: 14
+                            height: 14
+                            radius: 0
+                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                             border.color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c"
-                            border.width: 2
+                            border.width: 1
                         }
                     }
                 }
@@ -365,12 +361,12 @@ Dialog {
                             text: qsTr("Hourly Fleet Prewarm")
                             font.pixelSize: 12
                             font.weight: Font.Medium
-                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                         }
                         Text {
                             text: qsTr("Keep dual-machine 16-channel warmup pipeline running hourly")
                             font.pixelSize: 11
-                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#b4bee6"
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
@@ -383,21 +379,22 @@ Dialog {
                         indicator: Rectangle {
                             implicitWidth: 38
                             implicitHeight: 22
-                            radius: 11
+                            radius: 0
                             color: prewarmSwitch.checked ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
                                    ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b")
                             border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                            border.width: 1
 
                             Rectangle {
-                                x: prewarmSwitch.checked ? parent.width - width - 3 : 3
-                                y: 3
-                                width: 16
-                                height: 16
-                                radius: 8
+                                x: prewarmSwitch.checked ? parent.width - width - 4 : 4
+                                y: 4
+                                width: 14
+                                height: 14
+                                radius: 0
                                 color: prewarmSwitch.checked ?
                                        ((theme && theme.accentForeground && theme.accentForeground.charAt(0) === '#') ? theme.accentForeground : "#000000") :
-                                       ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#b4bee6")
+                                       ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
                         }
@@ -416,12 +413,12 @@ Dialog {
                             text: qsTr("Desktop Notifications")
                             font.pixelSize: 12
                             font.weight: Font.Medium
-                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                         }
                         Text {
                             text: qsTr("Show system toast on account switch and quota depletion")
                             font.pixelSize: 11
-                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#b4bee6"
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
@@ -434,21 +431,22 @@ Dialog {
                         indicator: Rectangle {
                             implicitWidth: 38
                             implicitHeight: 22
-                            radius: 11
+                            radius: 0
                             color: notificationSwitch.checked ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
                                    ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b")
                             border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                            border.width: 1
 
                             Rectangle {
-                                x: notificationSwitch.checked ? parent.width - width - 3 : 3
-                                y: 3
-                                width: 16
-                                height: 16
-                                radius: 8
+                                x: notificationSwitch.checked ? parent.width - width - 4 : 4
+                                y: 4
+                                width: 14
+                                height: 14
+                                radius: 0
                                 color: notificationSwitch.checked ?
                                        ((theme && theme.accentForeground && theme.accentForeground.charAt(0) === '#') ? theme.accentForeground : "#000000") :
-                                       ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#b4bee6")
+                                       ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
                         }
@@ -467,12 +465,12 @@ Dialog {
                             text: qsTr("Mask Account Identifiers")
                             font.pixelSize: 12
                             font.weight: Font.Medium
-                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4"
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                         }
                         Text {
                             text: qsTr("Mask account usernames into c***8 format in table view")
                             font.pixelSize: 11
-                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
@@ -488,21 +486,22 @@ Dialog {
                         indicator: Rectangle {
                             implicitWidth: 38
                             implicitHeight: 22
-                            radius: 11
+                            radius: 0
                             color: maskSwitch.checked ?
                                    ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
                                    ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31")
-                            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)"
+                            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                            border.width: 1
 
                             Rectangle {
-                                x: maskSwitch.checked ? parent.width - width - 3 : 3
-                                y: 3
-                                width: 16
-                                height: 16
-                                radius: 8
+                                x: maskSwitch.checked ? parent.width - width - 4 : 4
+                                y: 4
+                                width: 14
+                                height: 14
+                                radius: 0
                                 color: maskSwitch.checked ?
                                        ((theme && theme.accentForeground && theme.accentForeground.charAt(0) === '#') ? theme.accentForeground : "#000000") :
-                                       ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9")
+                                       ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
                         }
@@ -518,7 +517,7 @@ Dialog {
                         text: qsTr("Theme")
                         font.pixelSize: 12
                         font.weight: Font.Medium
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
 
                     ComboBox {
@@ -547,10 +546,10 @@ Dialog {
 
                         background: Rectangle {
                             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#142620"
-                            radius: 6
+                            radius: 0
                             border.color: parent.activeFocus ?
                                           ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)")
+                                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
                             border.width: 1
                         }
 
@@ -559,7 +558,7 @@ Dialog {
                             rightPadding: 24
                             text: themeModeCombo.displayText
                             font.pixelSize: 12
-                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
                         }
@@ -575,7 +574,7 @@ Dialog {
                         text: qsTr("Language")
                         font.pixelSize: 12
                         font.weight: Font.Medium
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
 
                     ComboBox {
@@ -592,9 +591,9 @@ Dialog {
 
                         background: Rectangle {
                             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
-                            radius: 6
+                            radius: 0
                             border.color: parent.activeFocus ?
-                                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
+                                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
                                           ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
                             border.width: 1
                         }
@@ -604,7 +603,7 @@ Dialog {
                             rightPadding: 24
                             text: languageCombo.displayText
                             font.pixelSize: 12
-                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
                         }
@@ -625,6 +624,7 @@ Dialog {
                 width: parent.width
                 height: 1
                 color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                radius: 0
             }
 
             RowLayout {
@@ -641,12 +641,13 @@ Dialog {
                     flat: true
                     background: Rectangle {
                         color: parent.hovered ? "#0fffffff" : "transparent"
-                        radius: 6
+                        radius: 0
                         border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                        border.width: 1
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#a9b1d6"
+                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                         font.pixelSize: 12
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -658,8 +659,8 @@ Dialog {
                     text: qsTr("Save & Apply")
                     Layout.preferredHeight: 32
                     background: Rectangle {
-                        color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
-                        radius: 6
+                        color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                        radius: 0
                         opacity: parent.pressed ? 0.85 : (parent.hovered ? 0.95 : 1.0)
                     }
                     contentItem: Text {

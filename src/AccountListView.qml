@@ -5,6 +5,18 @@ import QtQuick.Layouts 1.15
 Item {
     id: accountListView
 
+    // =========================================================================
+    // 0. 共享列几何常数 (Strict Header-Data Row Synchronization)
+    // =========================================================================
+    readonly property int colCheckWidth: 28
+    readonly property int colIndexWidth: 30
+    readonly property int colStatusWidth: 80
+    readonly property int colAccountWidth: 112
+    readonly property real colG4Weight: 1.05
+    readonly property real colG38Weight: 1.35
+    readonly property real colClaudeWeight: 1.35
+    readonly property int colActionWidth: 74
+
     // 选中的账号集合 (维护当前勾选账号列表)
     property var selectedEmails: ({})
     property int selectedCount: Object.keys(selectedEmails).length
@@ -72,11 +84,11 @@ Item {
 
     // 配额颜色判定阈值逻辑 (Omarchy High-Contrast WCAG 规范)
     function getQuotaColor(ratio) {
-        if (ratio === undefined || ratio === null || isNaN(ratio)) return (theme && theme.text3) ? theme.text3 : "#CBD5E1";
-        if (ratio <= 0.0001) return (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"; // 枯竭归零高对比红标告警
-        if (ratio >= 0.50) return (theme && theme.goodText) ? theme.goodText : "#4ADE80";       // 充足 (高对比亮绿)
-        if (ratio >= 0.15) return (theme && theme.warningText) ? theme.warningText : "#FFD166"; // 告急 (高对比金橙)
-        return (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B";                      // 危险 (高对比亮珊瑚红)
+        if (ratio === undefined || ratio === null || isNaN(ratio)) return (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1";
+        if (ratio <= 0.0001) return (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a";
+        if (ratio >= 0.50) return (theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f";
+        if (ratio >= 0.15) return (theme && theme.warningText && theme.warningText.charAt(0) === '#') ? theme.warningText : "#ffc27a";
+        return (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a";
     }
 
     ColumnLayout {
@@ -90,23 +102,23 @@ Item {
             id: headerRow
             Layout.fillWidth: true
             Layout.preferredHeight: 34
-            radius: theme ? theme.controlRadius : 6
+            radius: 0
             gradient: Gradient {
-                GradientStop { position: 0; color: (theme && theme.surfaceTop) ? theme.surfaceTop : "#172c25" }
-                GradientStop { position: 1; color: (theme && theme.surfaceBottom) ? theme.surfaceBottom : "#11201b" }
+                GradientStop { position: 0; color: (theme && theme.surfaceTop && theme.surfaceTop.charAt(0) === '#') ? theme.surfaceTop : "#172c25" }
+                GradientStop { position: 1; color: (theme && theme.surfaceBottom && theme.surfaceBottom.charAt(0) === '#') ? theme.surfaceBottom : "#11201b" }
             }
             border.width: 1
-            border.color: (theme && theme.hairline) ? theme.hairline : "rgba(255, 255, 255, 0.12)"
+            border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
 
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                spacing: 8
+                spacing: 6
 
                 // Col 1: 全选复选框
                 Item {
-                    Layout.preferredWidth: 34
+                    Layout.preferredWidth: colCheckWidth
                     Layout.fillHeight: true
                     CheckBox {
                         anchors.centerIn: parent
@@ -124,7 +136,7 @@ Item {
 
                 // Col 2: # 序号 (支持点击按序号排序)
                 Rectangle {
-                    Layout.preferredWidth: 36
+                    Layout.preferredWidth: colIndexWidth
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -168,7 +180,7 @@ Item {
 
                 // Col 3: 状态 (支持点击按状态排序)
                 Rectangle {
-                    Layout.preferredWidth: 88
+                    Layout.preferredWidth: colStatusWidth
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -211,7 +223,7 @@ Item {
 
                 // Col 4: 账号 (支持点击按账号字母序排序)
                 Rectangle {
-                    Layout.preferredWidth: 170
+                    Layout.preferredWidth: colAccountWidth
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -253,15 +265,26 @@ Item {
                     }
                 }
 
+                // Hairline between Col 4 and Col 5
+                Rectangle {
+                    width: 1
+                    Layout.preferredWidth: 1
+                    Layout.fillHeight: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                }
+
                 // Col 5: Gemini 4 (用户最高铁律门禁：严格命名为 Gemini 4，彻底切除周标签)
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 160
+                    Layout.preferredWidth: Math.round(100 * colG4Weight)
                     Layout.fillHeight: true
                     color: "transparent"
 
                     RowLayout {
                         anchors.fill: parent
+                        anchors.leftMargin: 10
                         spacing: 4
 
                         Text {
@@ -277,7 +300,7 @@ Item {
                             visible: proxyModel ? (proxyModel.sortField === "gemini4") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
                             font.pixelSize: 11
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                         }
                     }
 
@@ -297,15 +320,26 @@ Item {
                     }
                 }
 
+                // Hairline between Col 5 and Col 6
+                Rectangle {
+                    width: 1
+                    Layout.preferredWidth: 1
+                    Layout.fillHeight: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                }
+
                 // Col 6: Gemini 3.8 双维配额表头
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 175
+                    Layout.preferredWidth: Math.round(100 * colG38Weight)
                     Layout.fillHeight: true
                     color: "transparent"
 
                     RowLayout {
                         anchors.fill: parent
+                        anchors.leftMargin: 10
                         spacing: 4
 
                         Text {
@@ -341,15 +375,26 @@ Item {
                     }
                 }
 
+                // Hairline between Col 6 and Col 7
+                Rectangle {
+                    width: 1
+                    Layout.preferredWidth: 1
+                    Layout.fillHeight: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                }
+
                 // Col 7: Claude 双维配额表头
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 175
+                    Layout.preferredWidth: Math.round(100 * colClaudeWeight)
                     Layout.fillHeight: true
                     color: "transparent"
 
                     RowLayout {
                         anchors.fill: parent
+                        anchors.leftMargin: 10
                         spacing: 4
 
                         Text {
@@ -385,16 +430,193 @@ Item {
                     }
                 }
 
+                // Hairline between Col 7 and Col 8
+                Rectangle {
+                    width: 1
+                    Layout.preferredWidth: 1
+                    Layout.fillHeight: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                }
+
                 // Col 8: 操作
                 Item {
-                    Layout.preferredWidth: 145
+                    Layout.preferredWidth: colActionWidth
                     Layout.fillHeight: true
                     Text {
                         anchors.centerIn: parent
                         text: qsTr("Actions")
                         font.pixelSize: 12
                         font.bold: true
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                    }
+                }
+            }
+        }
+
+        // =============================================================
+        // 1.5. 渐进式批量操作工具栏 (Batch Action Bar - selectedCount > 0 时显式展开)
+        // =============================================================
+        Rectangle {
+            id: batchActionBar
+            visible: accountListView.selectedCount > 0
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 36 : 0
+            radius: 0
+            color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26"
+            border.width: 1
+            border.color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+            clip: true
+
+            Behavior on Layout.preferredHeight { NumberAnimation { duration: 120 } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                spacing: 10
+
+                // 选计数量提示
+                RowLayout {
+                    spacing: 6
+                    Rectangle {
+                        width: 6
+                        height: 6
+                        radius: 0
+                        color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                    }
+                    Text {
+                        text: qsTr("%n account(s) selected", "", accountListView.selectedCount)
+                        font.pixelSize: 12
+                        font.bold: true
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // [批量预热]
+                Rectangle {
+                    height: 26
+                    implicitWidth: btnWarmupText.implicitWidth + 20
+                    radius: 0
+                    color: warmupMouse.containsMouse ?
+                           ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
+                           ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#142620")
+                    border.width: 1
+                    border.color: (theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff"
+
+                    Text {
+                        id: btnWarmupText
+                        anchors.centerIn: parent
+                        text: qsTr("Prewarm")
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                    }
+                    MouseArea {
+                        id: warmupMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: {
+                            var emails = Object.keys(accountListView.selectedEmails);
+                            if (backend && typeof backend.batchWarmup === "function") {
+                                backend.batchWarmup(emails);
+                            } else if (backend) {
+                                backend.triggerPrewarm();
+                            }
+                        }
+                    }
+                }
+
+                // [导出所选]
+                Rectangle {
+                    height: 26
+                    implicitWidth: btnExportText.implicitWidth + 20
+                    radius: 0
+                    color: exportMouse.containsMouse ?
+                           ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
+                           ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#142620")
+                    border.width: 1
+                    border.color: (theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff"
+
+                    Text {
+                        id: btnExportText
+                        anchors.centerIn: parent
+                        text: qsTr("Export Selected")
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                    }
+                    MouseArea {
+                        id: exportMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: {
+                            var emails = Object.keys(accountListView.selectedEmails);
+                            if (backend && typeof backend.exportSelectedAccounts === "function") {
+                                backend.exportSelectedAccounts(emails);
+                            } else if (backend && typeof backend.exportSelected === "function") {
+                                backend.exportSelected(emails);
+                            }
+                        }
+                    }
+                }
+
+                // [删除账号] (Danger 赤陶警示色)
+                Rectangle {
+                    height: 26
+                    implicitWidth: btnDeleteText.implicitWidth + 20
+                    radius: 0
+                    color: deleteMouse.containsMouse ?
+                           Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.25) :
+                           Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.15)
+                    border.width: 1
+                    border.color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
+
+                    Text {
+                        id: btnDeleteText
+                        anchors.centerIn: parent
+                        text: qsTr("Delete Selected")
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
+                    }
+                    MouseArea {
+                        id: deleteMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: deleteConfirmDialog.open()
+                    }
+                }
+
+                // [取消选择]
+                Rectangle {
+                    height: 26
+                    implicitWidth: btnCancelText.implicitWidth + 18
+                    radius: 0
+                    color: cancelMouse.containsMouse ?
+                           ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") : "transparent"
+                    border.width: 1
+                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+
+                    Text {
+                        id: btnCancelText
+                        anchors.centerIn: parent
+                        text: qsTr("Clear Selection")
+                        font.pixelSize: 11
+                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#CBD5E1"
+                    }
+                    MouseArea {
+                        id: cancelMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: accountListView.clearSelection()
                     }
                 }
             }
@@ -410,6 +632,18 @@ Item {
             clip: true
             model: proxyModel
             boundsBehavior: Flickable.StopAtBounds
+
+            ScrollBar.vertical: ScrollBar {
+                id: listScrollBar
+                policy: ScrollBar.AsNeeded
+                width: 6
+                contentItem: Rectangle {
+                    implicitWidth: 6
+                    radius: 0
+                    color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
+                }
+                background: Item {}
+            }
 
             // 空列表状态提示
             Item {
@@ -445,6 +679,7 @@ Item {
                 id: rowDelegate
                 width: listView.width
                 height: 56
+                radius: 0
 
                 // 25 项 QML Role 绑定的直接消费
                 property bool isRowActive: model.isActive || false
@@ -452,22 +687,16 @@ Item {
                 property bool isRowSelected: listView.currentIndex === index
                 property bool isRowChecked: accountListView.selectedEmails[model.email] === true
 
-                // 行背景与高亮逻辑 (加重奇偶斑马纹，提高行条目可视率与辨识度)
+                // 行背景与高亮逻辑 (通过 theme.rowEven / theme.rowOdd 计算带主题色的斑马纹)
                 color: isRowActive ?
-                       ((theme && theme.mode === "light") ?
-                           Qt.alpha((theme && theme.goodText) ? theme.goodText : "#16A34A", 0.15) :
-                           Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.18)) :
+                       Qt.alpha((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f", 0.18) :
                        (isRowSelected ?
-                           ((theme && theme.mode === "light") ?
-                               Qt.alpha((theme && theme.accent) ? theme.accent : "#0284C7", 0.20) :
-                               Qt.alpha((theme && theme.accent) ? theme.accent : "#8bcbb1", 0.25)) :
+                           Qt.alpha((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1", 0.22) :
                            (rowMouse.containsMouse ?
-                               ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
-                               ((theme && theme.mode === "light") ?
-                                   (index % 2 === 0 ? "#FFFFFF" : "#F1F5F9") :
-                                   (index % 2 === 0 ?
-                                       ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#0f1e19") :
-                                       Qt.tint(((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#0f1e19"), "rgba(255, 255, 255, 0.08)")))))
+                               ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") :
+                               (index % 2 === 0 ?
+                                   ((theme && theme.rowEven && theme.rowEven.charAt(0) === '#') ? theme.rowEven : "#0a0a0f") :
+                                   ((theme && theme.rowOdd && theme.rowOdd.charAt(0) === '#') ? theme.rowOdd : "#1a1b26"))))
 
                 border.width: isRowSelected ? 1 : 0
                 border.color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
@@ -477,7 +706,8 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     height: 1
-                    color: (theme && theme.hairline) ? theme.hairline : "rgba(255, 255, 255, 0.08)"
+                    radius: 0
+                    color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                 }
 
                 MouseArea {
@@ -493,13 +723,13 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     anchors.rightMargin: 8
-                    spacing: 8
+                    spacing: 6
 
                     // -------------------------------------------------
                     // Col 1: 行复选框
                     // -------------------------------------------------
                     Item {
-                        Layout.preferredWidth: 34
+                        Layout.preferredWidth: colCheckWidth
                         Layout.fillHeight: true
                         CheckBox {
                             anchors.centerIn: parent
@@ -512,7 +742,7 @@ Item {
                     // Col 2: # 序号 (1-based, 纯白高对比)
                     // -------------------------------------------------
                     Item {
-                        Layout.preferredWidth: 36
+                        Layout.preferredWidth: colIndexWidth
                         Layout.fillHeight: true
                         Text {
                             anchors.centerIn: parent
@@ -525,31 +755,31 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 3: 状态胶囊 (ACTIVE / STANDBY / BLOCKED / EXHAUSTED - 静态无多余动画)
+                    // Col 3: 状态胶囊 (全直角长方形)
                     // -------------------------------------------------
                     Item {
-                        Layout.preferredWidth: 88
+                        Layout.preferredWidth: colStatusWidth
                         Layout.fillHeight: true
 
                         Rectangle {
                             anchors.centerIn: parent
-                            width: 82
+                            width: 74
                             height: 24
-                            radius: 12
+                            radius: 0
 
                             color: model.isActive ?
-                                   Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.18) :
+                                   Qt.alpha((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f", 0.18) :
                                    (model.isBlocked ?
-                                       Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B", 0.18) :
+                                       Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.18) :
                                        (model.status === "EXHAUSTED" ?
-                                           Qt.alpha((theme && theme.text4) ? theme.text4 : "#6B7280", 0.15) :
+                                           Qt.alpha((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280", 0.15) :
                                            ((theme && theme.mode === "light") ? "#0a000000" : "#14ffffff")))
 
                             border.width: 1
-                            border.color: model.isActive ? ((theme && theme.goodText) ? theme.goodText : "#4ADE80") :
-                                          (model.isBlocked ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
-                                              (model.status === "EXHAUSTED" ? ((theme && theme.text4) ? theme.text4 : "#6B7280") :
-                                                  ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")))
+                            border.color: model.isActive ? ((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f") :
+                                          (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                              (model.status === "EXHAUSTED" ? ((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280") :
+                                                  ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")))
 
                             RowLayout {
                                 anchors.centerIn: parent
@@ -562,10 +792,10 @@ Item {
                                     font.family: "Monospace"
                                     font.pixelSize: 11
                                     font.bold: true
-                                    color: model.isActive ? ((theme && theme.goodText) ? theme.goodText : "#4ADE80") :
-                                           (model.isBlocked ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
-                                               (model.status === "EXHAUSTED" ? ((theme && theme.text3) ? theme.text3 : "#CBD5E1") :
-                                                   ((theme && theme.text2) ? theme.text2 : "#F3F4F6")))
+                                    color: model.isActive ? ((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f") :
+                                           (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                               (model.status === "EXHAUSTED" ? ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1") :
+                                                   ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6")))
                                 }
 
                                 // 人工保护倒计时标签
@@ -593,7 +823,7 @@ Item {
                     // Col 4: 账号名称 (纯净用户名，剥离 @gmail.com，默认不脱敏)
                     // -------------------------------------------------
                     Item {
-                        Layout.preferredWidth: 170
+                        Layout.preferredWidth: colAccountWidth
                         Layout.fillHeight: true
 
                         Text {
@@ -619,7 +849,6 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                // 复制完整真实邮箱至系统剪贴板
                                 if (backend && typeof backend.copyToClipboard === "function") {
                                     backend.copyToClipboard(model.email);
                                 }
@@ -627,12 +856,23 @@ Item {
                         }
                     }
 
+                    // Hairline between Col 4 and Col 5
+                    Rectangle {
+                        width: 1
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        radius: 0
+                        color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                    }
+
                     // -------------------------------------------------
-                    // Col 5: Gemini 4 配额单元格 (彻底移除 周 徽标，仅保留原生进度条、数值与倒计时)
+                    // Col 5: Gemini 4 配额单元格 (彻底移除 周 徽标，原生进度条、数值与倒计时)
                     // -------------------------------------------------
                     Item {
                         Layout.fillWidth: true
-                        Layout.preferredWidth: 160
+                        Layout.preferredWidth: Math.round(100 * colG4Weight)
                         Layout.fillHeight: true
 
                         // 账号无 Gemini 4 权限：优雅呈现中线 —
@@ -656,22 +896,27 @@ Item {
                         // 账号具备 Gemini 4 额度：单轨纯净进度条 (零 周 徽标)
                         RowLayout {
                             anchors.fill: parent
+                            anchors.leftMargin: 10
                             visible: model.gemini4Valid
                             spacing: 6
 
-                            // 1. 原生平滑进度条 (无任何 '周' 徽标前缀)
+                            // 1. 原生平滑进度条 (高对比纯直角长方形)
                             Rectangle {
                                 Layout.fillWidth: true
+                                implicitWidth: 64
+                                Layout.minimumWidth: 48
                                 Layout.preferredHeight: 6
-                                radius: 3
-                                color: "#14ffffff"
+                                height: 6
+                                radius: 0
+                                color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
                                 Rectangle {
                                     anchors.left: parent.left
                                     anchors.top: parent.top
                                     anchors.bottom: parent.bottom
-                                    radius: 3
-                                    width: Math.min(parent.width, Math.max(0, parent.width * (model.gemini4Quota || 0.0)))
+                                    radius: 0
+                                    width: (model.gemini4Quota <= 0.0001) ? 0 :
+                                           Math.min(parent.width, Math.max(4, parent.width * (model.gemini4Quota || 0.0)))
                                     color: accountListView.getQuotaColor(model.gemini4Quota)
 
                                     Behavior on width { NumberAnimation { duration: 250 } }
@@ -689,16 +934,28 @@ Item {
                                 color: accountListView.getQuotaColor(model.gemini4Quota)
                             }
 
-                            // 3. 重置倒计时槽位
+                            // 3. 重置倒计时槽位 (52px 零截断)
                             Text {
-                                Layout.preferredWidth: 48
+                                Layout.preferredWidth: 52
                                 text: model.gemini4Reset || "--"
                                 font.family: "Monospace"
                                 font.pixelSize: 11
                                 color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
-                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignRight
+                                elide: Text.ElideNone
                             }
                         }
+                    }
+
+                    // Hairline between Col 5 and Col 6
+                    Rectangle {
+                        width: 1
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        radius: 0
+                        color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                     }
 
                     // -------------------------------------------------
@@ -706,11 +963,12 @@ Item {
                     // -------------------------------------------------
                     Item {
                         Layout.fillWidth: true
-                        Layout.preferredWidth: 175
+                        Layout.preferredWidth: Math.round(100 * colG38Weight)
                         Layout.fillHeight: true
 
                         ColumnLayout {
                             anchors.fill: parent
+                            anchors.leftMargin: 10
                             anchors.topMargin: 4
                             anchors.bottomMargin: 4
                             spacing: 3
@@ -721,33 +979,38 @@ Item {
                                 spacing: 5
 
                                 Rectangle {
-                                    width: 18
-                                    height: 14
-                                    radius: 3
-                                    color: "#14ffffff"
+                                    width: 24
+                                    height: 16
+                                    radius: 0
+                                    color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
+                                    border.width: 1
+                                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     Text {
                                         anchors.centerIn: parent
                                         text: "5h"
                                         font.pixelSize: 10
                                         font.bold: true
-                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
+                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 4
-                                    radius: 2
-                                    color: "#14ffffff"
+                                    implicitWidth: 64
+                                    Layout.minimumWidth: 48
+                                    Layout.preferredHeight: 6
+                                    height: 6
+                                    radius: 0
+                                    color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
                                     Rectangle {
                                         anchors.left: parent.left
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
-                                        radius: 2
-                                        width: (model.gemini38QuotaW <= 0.0001) ? 0 :
-                                               Math.min(parent.width, Math.max(0, parent.width * (model.gemini38Quota5h || 0.0)))
-                                        color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                        radius: 0
+                                        width: (model.gemini38QuotaW <= 0.0001 || model.gemini38Quota5h <= 0.0001) ? 0 :
+                                               Math.min(parent.width, Math.max(4, parent.width * (model.gemini38Quota5h || 0.0)))
+                                        color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                                accountListView.getQuotaColor(model.gemini38Quota5h)
                                     }
                                 }
@@ -760,17 +1023,18 @@ Item {
                                     font.pixelSize: 12
                                     font.bold: true
                                     horizontalAlignment: Text.AlignRight
-                                    color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                    color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            accountListView.getQuotaColor(model.gemini38Quota5h)
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 46
-                                    text: (model.gemini38QuotaW <= 0.0001) ? qsTr("Weekly Depleted") : (model.gemini38Reset5h || "--")
+                                    Layout.preferredWidth: 54
+                                    text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") : (model.gemini38Reset5h || "--")
                                     font.family: "Monospace"
-                                    font.pixelSize: 11
-                                    color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                    font.pixelSize: 10
+                                    color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
+                                    horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideRight
                                 }
                             }
@@ -781,31 +1045,37 @@ Item {
                                 spacing: 5
 
                                 Rectangle {
-                                    width: 18
-                                    height: 14
-                                    radius: 3
-                                    color: "#14ffffff"
+                                    width: 24
+                                    height: 16
+                                    radius: 0
+                                    color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
+                                    border.width: 1
+                                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     Text {
                                         anchors.centerIn: parent
                                         text: qsTr("Weekly")
                                         font.pixelSize: 10
                                         font.bold: true
-                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
+                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 4
-                                    radius: 2
-                                    color: "#14ffffff"
+                                    implicitWidth: 64
+                                    Layout.minimumWidth: 48
+                                    Layout.preferredHeight: 6
+                                    height: 6
+                                    radius: 0
+                                    color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
                                     Rectangle {
                                         anchors.left: parent.left
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
-                                        radius: 2
-                                        width: Math.min(parent.width, Math.max(0, parent.width * (model.gemini38QuotaW || 0.0)))
+                                        radius: 0
+                                        width: (model.gemini38QuotaW <= 0.0001) ? 0 :
+                                               Math.min(parent.width, Math.max(4, parent.width * (model.gemini38QuotaW || 0.0)))
                                         color: accountListView.getQuotaColor(model.gemini38QuotaW)
                                     }
                                 }
@@ -821,15 +1091,27 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 46
+                                    Layout.preferredWidth: 52
                                     text: model.gemini38ResetW || "--"
                                     font.family: "Monospace"
-                                    font.pixelSize: 11
+                                    font.pixelSize: 10
                                     color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
-                                    elide: Text.ElideRight
+                                    horizontalAlignment: Text.AlignRight
+                                    elide: Text.ElideNone
                                 }
                             }
                         }
+                    }
+
+                    // Hairline between Col 6 and Col 7
+                    Rectangle {
+                        width: 1
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        radius: 0
+                        color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                     }
 
                     // -------------------------------------------------
@@ -837,11 +1119,12 @@ Item {
                     // -------------------------------------------------
                     Item {
                         Layout.fillWidth: true
-                        Layout.preferredWidth: 175
+                        Layout.preferredWidth: Math.round(100 * colClaudeWeight)
                         Layout.fillHeight: true
 
                         ColumnLayout {
                             anchors.fill: parent
+                            anchors.leftMargin: 10
                             anchors.topMargin: 4
                             anchors.bottomMargin: 4
                             spacing: 3
@@ -852,33 +1135,38 @@ Item {
                                 spacing: 5
 
                                 Rectangle {
-                                    width: 18
-                                    height: 14
-                                    radius: 3
-                                    color: "#14ffffff"
+                                    width: 24
+                                    height: 16
+                                    radius: 0
+                                    color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
+                                    border.width: 1
+                                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     Text {
                                         anchors.centerIn: parent
                                         text: "5h"
                                         font.pixelSize: 10
                                         font.bold: true
-                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
+                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 4
-                                    radius: 2
-                                    color: "#14ffffff"
+                                    implicitWidth: 64
+                                    Layout.minimumWidth: 48
+                                    Layout.preferredHeight: 6
+                                    height: 6
+                                    radius: 0
+                                    color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
                                     Rectangle {
                                         anchors.left: parent.left
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
-                                        radius: 2
-                                        width: (model.claudeQuotaW <= 0.0001) ? 0 :
-                                               Math.min(parent.width, Math.max(0, parent.width * (model.claudeQuota5h || 0.0)))
-                                        color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                        radius: 0
+                                        width: (model.claudeQuotaW <= 0.0001 || model.claudeQuota5h <= 0.0001) ? 0 :
+                                               Math.min(parent.width, Math.max(4, parent.width * (model.claudeQuota5h || 0.0)))
+                                        color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                                accountListView.getQuotaColor(model.claudeQuota5h)
                                     }
                                 }
@@ -891,17 +1179,18 @@ Item {
                                     font.pixelSize: 12
                                     font.bold: true
                                     horizontalAlignment: Text.AlignRight
-                                    color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                    color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            accountListView.getQuotaColor(model.claudeQuota5h)
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 46
-                                    text: (model.claudeQuotaW <= 0.0001) ? qsTr("Weekly Depleted") : (model.claudeReset5h || "--")
+                                    Layout.preferredWidth: 54
+                                    text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") : (model.claudeReset5h || "--")
                                     font.family: "Monospace"
-                                    font.pixelSize: 11
-                                    color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                    font.pixelSize: 10
+                                    color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
+                                    horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideRight
                                 }
                             }
@@ -912,31 +1201,37 @@ Item {
                                 spacing: 5
 
                                 Rectangle {
-                                    width: 18
-                                    height: 14
-                                    radius: 3
-                                    color: "#14ffffff"
+                                    width: 24
+                                    height: 16
+                                    radius: 0
+                                    color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
+                                    border.width: 1
+                                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     Text {
                                         anchors.centerIn: parent
                                         text: qsTr("Weekly")
                                         font.pixelSize: 10
                                         font.bold: true
-                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
+                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                                     }
                                 }
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 4
-                                    radius: 2
-                                    color: "#14ffffff"
+                                    implicitWidth: 64
+                                    Layout.minimumWidth: 48
+                                    Layout.preferredHeight: 6
+                                    height: 6
+                                    radius: 0
+                                    color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
                                     Rectangle {
                                         anchors.left: parent.left
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
-                                        radius: 2
-                                        width: Math.min(parent.width, Math.max(0, parent.width * (model.claudeQuotaW || 0.0)))
+                                        radius: 0
+                                        width: (model.claudeQuotaW <= 0.0001) ? 0 :
+                                               Math.min(parent.width, Math.max(4, parent.width * (model.claudeQuotaW || 0.0)))
                                         color: accountListView.getQuotaColor(model.claudeQuotaW)
                                     }
                                 }
@@ -952,138 +1247,118 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 46
+                                    Layout.preferredWidth: 52
                                     text: model.claudeResetW || "--"
                                     font.family: "Monospace"
-                                    font.pixelSize: 11
+                                    font.pixelSize: 10
                                     color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
-                                    elide: Text.ElideRight
+                                    horizontalAlignment: Text.AlignRight
+                                    elide: Text.ElideNone
                                 }
                             }
                         }
                     }
 
+                    // Hairline between Col 7 and Col 8
+                    Rectangle {
+                        width: 1
+                        Layout.preferredWidth: 1
+                        Layout.fillHeight: true
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        radius: 0
+                        color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                    }
+
                     // -------------------------------------------------
-                    // Col 8: 快速操作按钮组
+                    // Col 8: 快速操作按钮组 (收紧至 74px，纯直角长方形)
                     // -------------------------------------------------
                     Item {
-                        Layout.preferredWidth: 145
+                        Layout.preferredWidth: colActionWidth
                         Layout.fillHeight: true
 
-                        RowLayout {
+                        // 1. 在用徽章 (ACTIVE 状态)
+                        Rectangle {
                             anchors.centerIn: parent
-                            spacing: 6
+                            visible: model.isActive
+                            width: 58
+                            height: 28
+                            radius: 0
+                            color: Qt.alpha((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f", 0.15)
+                            border.width: 1
+                            border.color: (theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f"
 
-                            // 1. 在用徽章 (ACTIVE 状态)
-                            Rectangle {
-                                visible: model.isActive
-                                width: 56
-                                height: 26
-                                radius: theme ? theme.controlRadius : 6
-                                color: Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.15)
-                                border.width: 1
-                                border.color: (theme && theme.goodText) ? theme.goodText : "#4ADE80"
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("In Use")
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: (theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f"
+                            }
+                        }
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: qsTr("In Use")
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                    color: (theme && theme.goodText) ? theme.goodText : "#4ADE80"
-                                }
+                        // 2. 解封按钮 (BLOCKED 状态)
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: !model.isActive && model.isBlocked
+                            width: 58
+                            height: 28
+                            radius: 0
+                            color: Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.15)
+                            border.width: 1
+                            border.color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("Unblock")
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
                             }
 
-                            // 2. 解封按钮 (BLOCKED 状态)
-                            Rectangle {
-                                visible: !model.isActive && model.isBlocked
-                                width: 56
-                                height: 26
-                                radius: theme ? theme.controlRadius : 6
-                                color: (theme && theme.mode === "light") ? "#14DC2626" : "#26FF6B6B"
-                                border.width: 1
-                                border.color: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: qsTr("Unblock")
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                    color: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (backend) backend.unblockAccount(model.email);
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (backend && typeof backend.unblockAccount === "function") {
+                                        backend.unblockAccount(model.email);
                                     }
                                 }
                             }
+                        }
 
-                            // 3. 切换按钮 (STANDBY 状态)
-                            Rectangle {
-                                id: btnSwitch
-                                visible: !model.isActive && !model.isBlocked
-                                width: 58
-                                height: 28
-                                radius: theme ? theme.controlRadius : 6
-                                color: btnSwitchMouse.containsMouse ?
-                                       ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") :
-                                       ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
-                                border.width: 1
-                                border.color: btnSwitchMouse.containsMouse ?
-                                              ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                                              ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
+                        // 3. 切换按钮 (STANDBY 状态)
+                        Rectangle {
+                            id: btnSwitch
+                            anchors.centerIn: parent
+                            visible: !model.isActive && !model.isBlocked
+                            width: 58
+                            height: 28
+                            radius: 0
+                            color: btnSwitchMouse.containsMouse ?
+                                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") :
+                                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
+                            border.width: 1
+                            border.color: btnSwitchMouse.containsMouse ?
+                                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                          ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: qsTr("Switch")
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
-                                }
-
-                                MouseArea {
-                                    id: btnSwitchMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (backend) backend.switchAccount(model.email);
-                                    }
-                                }
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("Switch")
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             }
 
-                            // 4. 错峰预热图标按钮
-                            Rectangle {
-                                id: btnWarmup
-                                width: 28
-                                height: 28
-                                radius: theme ? theme.controlRadius : 6
-                                color: warmupMouse.containsMouse ?
-                                       ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") : "transparent"
-                                border.width: 1
-                                border.color: warmupMouse.containsMouse ?
-                                              ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                                              ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
-
-                                AppIcon {
-                                    anchors.centerIn: parent
-                                    name: "sparkle"
-                                    size: 14
-                                    tint: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
-                                }
-
-                                ToolTip.visible: warmupMouse.containsMouse
-                                ToolTip.text: qsTr("Warmup")
-
-                                MouseArea {
-                                    id: warmupMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (backend) backend.triggerPrewarm();
+                            MouseArea {
+                                id: btnSwitchMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (backend && typeof backend.switchAccount === "function") {
+                                        backend.switchAccount(model.email);
                                     }
                                 }
                             }
@@ -1094,39 +1369,30 @@ Item {
         }
 
         // =============================================================
-        // 4. 底部状态与分页控制条 (Bottom Status & Pagination Bar)
+        // 4. 底部极简状态与快捷键导航栏 (26px Omarchy Standard Footer Bar)
         // =============================================================
         Rectangle {
             id: bottomBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
+            Layout.preferredHeight: 26
+            radius: 0
             color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c"
             border.width: 1
-            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+            border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
 
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
-                spacing: 8
+                spacing: 12
 
                 // 统计信息
                 RowLayout {
                     spacing: 6
                     Text {
-                        text: qsTr("15 / page")
-                        font.family: "Monospace"
+                        text: "Accounts: " + (proxyModel ? proxyModel.rowCount() : 0)
                         font.pixelSize: 11
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
-                    }
-                    Text {
-                        text: "·"
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
-                    }
-                    Text {
-                        text: qsTr("%1 / %2 pages").arg(1).arg(Math.max(1, Math.ceil((proxyModel ? proxyModel.filteredCount : 0) / 15)))
                         font.family: "Monospace"
-                        font.pixelSize: 11
                         color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                     }
                     Text {
@@ -1134,10 +1400,10 @@ Item {
                         color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                     }
                     Text {
-                        text: qsTr("%n item(s)", "", (proxyModel ? proxyModel.filteredCount : 0))
-                        font.family: "Monospace"
+                        text: "Filtered: " + (proxyModel ? proxyModel.filteredCount : 0)
                         font.pixelSize: 11
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                        font.family: "Monospace"
+                        color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                     }
                 }
 
@@ -1145,39 +1411,132 @@ Item {
                     Layout.fillWidth: true
                 }
 
-                // 简易分页按钮
+                // 键盘快捷键提示
                 RowLayout {
-                    spacing: 6
-
-                    Rectangle {
-                        width: 70
-                        height: 22
-                        radius: 3
-                        color: "transparent"
-                        border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
-                        opacity: 0.5 // 单页模式置灰
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: qsTr("Previous")
-                            font.pixelSize: 10
-                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
-                        }
+                    spacing: 8
+                    Text {
+                        text: "j/k: Navigate · Enter: Switch · r: Refresh · /: Search · ?: Help"
+                        font.pixelSize: 10
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                     }
+                }
+            }
+        }
+    }
 
-                    Rectangle {
-                        width: 70
-                        height: 22
-                        radius: 3
-                        color: "transparent"
-                        border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
-                        opacity: 0.5 // 单页模式置灰
+    // =========================================================================
+    // 彻底删除账号二次确认弹窗 (Omarchy ConfirmDialog)
+    // =========================================================================
+    Dialog {
+        id: deleteConfirmDialog
+        modal: true
+        focus: true
+        dim: true
+        closePolicy: Popup.CloseOnEscape
+        anchors.centerIn: Overlay.overlay
+        width: 400
+        header: null
+        footer: null
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: qsTr("Next")
-                            font.pixelSize: 10
-                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
+        background: Rectangle {
+            color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#142620"
+            border.color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
+            border.width: 1
+            radius: 0
+        }
+
+        Overlay.modal: Rectangle {
+            color: "#a6000000"
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 16
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                AppIcon {
+                    name: "warning"
+                    size: 18
+                    tint: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
+                }
+                Text {
+                    text: qsTr("Operation Confirmation")
+                    font.pixelSize: 14
+                    font.bold: true
+                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                    Layout.fillWidth: true
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Are you sure you want to delete %n account(s)?", "", accountListView.selectedCount)
+                font.pixelSize: 12
+                color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#CBD5E1"
+                wrapMode: Text.WordWrap
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                radius: 0
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                Item { Layout.fillWidth: true }
+
+                Rectangle {
+                    height: 30
+                    implicitWidth: 80
+                    radius: 0
+                    color: cancelDlgMouse.containsMouse ?
+                           ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") : "transparent"
+                    border.width: 1
+                    border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("Cancel")
+                        font.pixelSize: 12
+                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#CBD5E1"
+                    }
+                    MouseArea {
+                        id: cancelDlgMouse
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: deleteConfirmDialog.close()
+                    }
+                }
+
+                Rectangle {
+                    height: 30
+                    implicitWidth: 90
+                    radius: 0
+                    color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("Delete")
+                        font.pixelSize: 12
+                        font.bold: true
+                        color: "#FFFFFF"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onClicked: {
+                            var emails = Object.keys(accountListView.selectedEmails);
+                            if (backend && typeof backend.deleteAccounts === "function") {
+                                backend.deleteAccounts(emails);
+                            }
+                            accountListView.clearSelection();
+                            deleteConfirmDialog.close();
                         }
                     }
                 }

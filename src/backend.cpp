@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QGuiApplication>
 #include <QClipboard>
+#include <QJsonArray>
 
 BackendController::BackendController(QObject *parent)
     : QObject(parent)
@@ -318,6 +319,182 @@ void BackendController::copyToClipboard(const QString &text)
         clipboard->setText(text);
         emit notificationRequested(tr("Antigravity Hub"), tr("Copied to clipboard"), false);
     }
+}
+
+void BackendController::deleteAccounts(const QStringList &emails)
+{
+    if (emails.isEmpty()) return;
+
+    QJsonObject reqObj;
+    QJsonArray arr;
+    for (const QString &email : emails) {
+        const QString trimmed = email.trimmed();
+        if (!trimmed.isEmpty()) {
+            arr.append(trimmed);
+        }
+    }
+    if (arr.isEmpty()) return;
+    reqObj[QStringLiteral("emails")] = arr;
+
+    const QByteArray body = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
+    const int count = arr.size();
+
+    executePost(QStringLiteral("/api/delete_accounts"), body,
+                QStringLiteral("application/json; charset=utf-8"),
+                tr("Delete Accounts"),
+                [this, count](const QByteArray &, int) {
+        emit accountsReloadRequested();
+        emit notificationRequested(tr("Accounts Deleted"),
+                                  tr("Successfully deleted %n account(s).", "", count),
+                                  false);
+        refreshQuota(true);
+    });
+}
+
+void BackendController::ingestActiveAccount()
+{
+    executePost(QStringLiteral("/api/ingest_active"), QByteArray(),
+                QStringLiteral("application/json; charset=utf-8"),
+                tr("Ingest Active Account"),
+                [this](const QByteArray &respBody, int) {
+        QJsonParseError parseErr;
+        const QJsonDocument doc = QJsonDocument::fromJson(respBody, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            const QJsonObject obj = doc.object();
+            const bool ok = obj.value(QStringLiteral("status")).toString() == QLatin1String("ok");
+            const QString email = obj.value(QStringLiteral("email")).toString();
+            const QString msg = obj.value(QStringLiteral("message")).toString();
+
+            if (ok) {
+                emit accountsReloadRequested();
+                emit notificationRequested(tr("Account Ingested"),
+                                          email.isEmpty() ? tr("Active system credential ingested successfully.")
+                                                          : tr("Ingested: %1").arg(email),
+                                          false);
+                refreshQuota(true);
+            } else {
+                emit notificationRequested(tr("Ingest Failed"),
+                                          msg.isEmpty() ? tr("Could not ingest active system account.") : msg,
+                                          true);
+            }
+        } else {
+            emit accountsReloadRequested();
+            emit notificationRequested(tr("Account Ingested"),
+                                      tr("Active system credential ingested successfully."),
+                                      false);
+            refreshQuota(true);
+        }
+    });
+}
+
+void BackendController::startOAuthLogin()
+{
+    QJsonObject reqObj;
+    reqObj[QStringLiteral("open_browser")] = true;
+    reqObj[QStringLiteral("isolated")] = false;
+    const QByteArray body = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
+
+    executePost(QStringLiteral("/api/oauth/start"), body,
+                QStringLiteral("application/json; charset=utf-8"),
+                tr("OAuth Login"),
+                [this](const QByteArray &respBody, int) {
+        QJsonParseError parseErr;
+        const QJsonDocument doc = QJsonDocument::fromJson(respBody, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            emit notificationRequested(tr("OAuth Login Started"),
+                                      tr("Browser opened for Google account authorization."),
+                                      false);
+        } else {
+            emit notificationRequested(tr("OAuth Login"),
+                                      tr("Browser authorization flow initiated."),
+                                      false);
+        }
+    });
+}
+
+void BackendController::importAccounts(const QString &json)
+{
+    const QString trimmed = json.trimmed();
+    if (trimmed.isEmpty()) return;
+
+    QJsonObject reqObj;
+    reqObj[QStringLiteral("json_data")] = trimmed;
+    const QByteArray body = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
+
+    executePost(QStringLiteral("/api/import"), body,
+                QStringLiteral("application/json; charset=utf-8"),
+                tr("Import Accounts"),
+                [this](const QByteArray &respBody, int) {
+        QJsonParseError parseErr;
+        const QJsonDocument doc = QJsonDocument::fromJson(respBody, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            const QJsonObject obj = doc.object();
+            const bool ok = obj.value(QStringLiteral("status")).toString() == QLatin1String("ok");
+            const int added = obj.value(QStringLiteral("added")).toInt();
+            const int updated = obj.value(QStringLiteral("updated")).toInt();
+            const QString msg = obj.value(QStringLiteral("message")).toString();
+
+            if (ok) {
+                emit accountsReloadRequested();
+                emit notificationRequested(tr("Import Complete"),
+                                          tr("Successfully added %1 and updated %2 account(s).").arg(added).arg(updated),
+                                          false);
+                refreshQuota(true);
+            } else {
+                emit notificationRequested(tr("Import Failed"),
+                                          msg.isEmpty() ? tr("Failed to parse or import account credentials.") : msg,
+                                          true);
+            }
+        } else {
+            emit accountsReloadRequested();
+            emit notificationRequested(tr("Import Complete"),
+                                      tr("Accounts imported successfully."),
+                                      false);
+            refreshQuota(true);
+        }
+    });
+}
+
+void BackendController::exportSelectedAccounts(const QStringList &emails)
+{
+    if (emails.isEmpty()) return;
+
+    QJsonObject reqObj;
+    QJsonArray arr;
+    for (const QString &email : emails) {
+        const QString trimmed = email.trimmed();
+        if (!trimmed.isEmpty()) {
+            arr.append(trimmed);
+        }
+    }
+    if (arr.isEmpty()) return;
+    reqObj[QStringLiteral("emails")] = arr;
+
+    const QByteArray body = QJsonDocument(reqObj).toJson(QJsonDocument::Compact);
+    const int count = arr.size();
+
+    executePost(QStringLiteral("/api/export_selected"), body,
+                QStringLiteral("application/json; charset=utf-8"),
+                tr("Export Accounts"),
+                [this, count](const QByteArray &respBody, int) {
+        const QString jsonStr = QString::fromUtf8(respBody);
+        emit accountsExported(jsonStr);
+        copyToClipboard(jsonStr);
+        emit notificationRequested(tr("Export Complete"),
+                                  tr("Exported %n account credential(s) to clipboard.", "", count),
+                                  false);
+    });
+}
+
+void BackendController::exportSelected(const QStringList &emails)
+{
+    exportSelectedAccounts(emails);
+}
+
+void BackendController::batchWarmup(const QStringList &emails)
+{
+    Q_UNUSED(emails);
+    triggerPrewarm();
 }
 
 void BackendController::checkDaemonLiveness()

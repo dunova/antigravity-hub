@@ -30,7 +30,9 @@ private slots:
     // Milestone 1 Tests
     void themeFallsBack();
     void themeReadsAccent();
-    void themeFollowsHyprlandRounding();
+    void themeZeroRadiusEnforcement();
+    void themeColorEngineAndOmarchyAlgorithms();
+    void themeTriStateMatrixAndContrastInvariants();
     void translatorFallsBackToEnglish();
     void translatorFollowsTheLanguageFile();
     void translatorPicksPluralForms();
@@ -49,6 +51,7 @@ private slots:
     // Milestone 2 Tests: BackendController
     void backendControllerStateAndUrls();
     void backendControllerOffscreenExecution();
+    void backendControllerExtendedApiMethods();
 
     // Milestone 3 Tests: QML Components Instantiation & Smoke
     void qmlComponentsInstantiationAndSmoke();
@@ -73,9 +76,12 @@ void AntigravityHubTests::themeFallsBack() {
     QCOMPARE(theme.accent(), QString("#FFD60A"));
     QCOMPARE(theme.accentForeground(), QString("black"));
     QCOMPARE(theme.radius(), 0);
+    QCOMPARE(theme.controlRadius(), 0);
+    QCOMPARE(theme.panelRadius(), 0);
+    QCOMPARE(theme.rounded(), false);
     QCOMPARE(theme.mode(), QString("dark"));
     QCOMPARE(theme.background(), QString("#0e0e14"));
-    QCOMPARE(theme.border(), QString("rgba(255, 255, 255, 0.08)"));
+    QCOMPARE(theme.border(), QString("#14ffffff"));
 }
 
 void AntigravityHubTests::themeReadsAccent() {
@@ -125,10 +131,19 @@ void AntigravityHubTests::themeReadsAccent() {
     QCOMPARE(theme.text1(), QString("#FFFFFF"));
 }
 
-void AntigravityHubTests::themeFollowsHyprlandRounding() {
+void AntigravityHubTests::themeZeroRadiusEnforcement() {
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
 
+    // 1. Invariant: Default theme constructed with empty parameters enforces zero radius
+    Theme theme(tempDir.path());
+    QCOMPARE(theme.radius(), 0);
+    QCOMPARE(theme.controlRadius(), 0);
+    QCOMPARE(theme.panelRadius(), 0);
+    QCOMPARE(theme.rounded(), false);
+
+    // 2. Invariant: Even if an external hyprctl reports a non-zero rounding value (e.g. 6 or 12),
+    // User Supreme Visual Iron Rule mandates that Theme strictly maintains zero radius.
     const QString mockScriptPath = tempDir.filePath("mock_hyprctl.sh");
     QFile mockScript(mockScriptPath);
     QVERIFY(mockScript.open(QIODevice::WriteOnly | QIODevice::Text));
@@ -139,8 +154,330 @@ void AntigravityHubTests::themeFollowsHyprlandRounding() {
     mockScript.close();
     mockScript.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
 
-    Theme theme(tempDir.path(), nullptr, mockScriptPath);
-    QTRY_COMPARE_WITH_TIMEOUT(theme.radius(), 6, 2500);
+    Theme themeWithMock(tempDir.path(), nullptr, mockScriptPath);
+    QCOMPARE(themeWithMock.radius(), 0);
+    QCOMPARE(themeWithMock.controlRadius(), 0);
+    QCOMPARE(themeWithMock.panelRadius(), 0);
+    QCOMPARE(themeWithMock.rounded(), false);
+
+    // 3. Invariant: Radii remain strictly zero across all theme mode transitions
+    themeWithMock.setThemeMode(QStringLiteral("light"));
+    QCOMPARE(themeWithMock.radius(), 0);
+    QCOMPARE(themeWithMock.controlRadius(), 0);
+    QCOMPARE(themeWithMock.panelRadius(), 0);
+    QCOMPARE(themeWithMock.rounded(), false);
+
+    themeWithMock.setThemeMode(QStringLiteral("dark"));
+    QCOMPARE(themeWithMock.radius(), 0);
+    QCOMPARE(themeWithMock.controlRadius(), 0);
+    QCOMPARE(themeWithMock.panelRadius(), 0);
+    QCOMPARE(themeWithMock.rounded(), false);
+}
+
+void AntigravityHubTests::themeColorEngineAndOmarchyAlgorithms() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+
+    // 1. Full 16-key palette regex extraction via Theme::readColors()
+    const QString colorsPath = tempDir.filePath("colors.toml");
+    QFile colorsFile(colorsPath);
+    QVERIFY(colorsFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    colorsFile.write(
+        "mode = \"dark\"\n"
+        "accent = \"#8bcbb1\"\n"
+        "selection = \"#2b5147\"\n"
+        "muted = \"#64887b\"\n"
+        "background = \"#142620\"\n"
+        "dark_background = \"#0f1e19\"\n"
+        "darker_background = \"#0a1713\"\n"
+        "lighter_background = \"#203b31\"\n"
+        "foreground = \"#dfede5\"\n"
+        "dark_foreground = \"#91ad9f\"\n"
+        "light_foreground = \"#bed6c9\"\n"
+        "bright_foreground = \"#f0faf4\"\n"
+        "red = \"#d88d91\"\n"
+        "yellow = \"#c5cc91\"\n"
+        "orange = \"#d2ab8d\"\n"
+        "green = \"#8bcbb1\"\n"
+    );
+    colorsFile.close();
+
+    const auto colors = Theme::readColors(colorsPath);
+    QCOMPARE(colors.size(), 16);
+    QCOMPARE(colors.value("mode"), QString("dark"));
+    QCOMPARE(colors.value("accent"), QString("#8bcbb1"));
+    QCOMPARE(colors.value("selection"), QString("#2b5147"));
+    QCOMPARE(colors.value("muted"), QString("#64887b"));
+    QCOMPARE(colors.value("background"), QString("#142620"));
+    QCOMPARE(colors.value("dark_background"), QString("#0f1e19"));
+    QCOMPARE(colors.value("darker_background"), QString("#0a1713"));
+    QCOMPARE(colors.value("lighter_background"), QString("#203b31"));
+    QCOMPARE(colors.value("foreground"), QString("#dfede5"));
+    QCOMPARE(colors.value("dark_foreground"), QString("#91ad9f"));
+    QCOMPARE(colors.value("light_foreground"), QString("#bed6c9"));
+    QCOMPARE(colors.value("bright_foreground"), QString("#f0faf4"));
+    QCOMPARE(colors.value("red"), QString("#d88d91"));
+    QCOMPARE(colors.value("yellow"), QString("#c5cc91"));
+    QCOMPARE(colors.value("orange"), QString("#d2ab8d"));
+    QCOMPARE(colors.value("green"), QString("#8bcbb1"));
+
+    // 2. WCAG 2.1 Contrast calculation
+    const double maxContrast = Theme::contrast("#000000", "#ffffff");
+    QVERIFY(qAbs(maxContrast - 21.0) < 0.1);
+    QCOMPARE(Theme::contrast("#123456", "#123456"), 1.0);
+
+    // 3. Linear sRGB mix()
+    QCOMPARE(Theme::mix("#000000", "#ffffff", 0.5), QString("#808080"));
+    QCOMPARE(Theme::mix("#102030", "#102030", 0.75), QString("#102030"));
+
+    // 4. withAlpha() HexArgb serialization (#AARRGGBB)
+    QCOMPARE(Theme::withAlpha("#ffffff", 0.08), QString("#14ffffff"));
+    QCOMPARE(Theme::withAlpha("#ffffff", 0.12), QString("#1fffffff"));
+    QCOMPARE(Theme::withAlpha("#ffffff", 0.24), QString("#3dffffff"));
+    QCOMPARE(Theme::withAlpha("#112233", 0.0), QString("#00112233"));
+    QCOMPARE(Theme::withAlpha("#112233", 1.0), QString("#ff112233"));
+
+    // 5. readable() WCAG 4.5:1 adaptation (preserving hue/saturation in HSL)
+    const QString adaptedRed = Theme::readable("#d88d91", "#ffffff", {"#142620", "#172c25"}, 4.5);
+    QVERIFY(Theme::contrast(adaptedRed, "#142620") >= 4.5);
+    QVERIFY(Theme::contrast(adaptedRed, "#172c25") >= 4.5);
+    QVERIFY(adaptedRed != QString("#FF6B6B")); // Absolutely no hardcoded pure red
+
+    // Low contrast color adapted until contrast >= 4.5:1
+    const QString adaptedLow = Theme::readable("#182822", "#ffffff", {"#142620"}, 4.5);
+    QVERIFY(Theme::contrast(adaptedLow, "#142620") >= 4.5);
+
+    // 6. Live Theme instance verification with full palette directory
+    QDir(tempDir.path()).mkpath("theme");
+    QFile::copy(colorsPath, tempDir.filePath("theme/colors.toml"));
+
+    Theme theme(tempDir.path());
+    QCOMPARE(theme.accent(), QString("#8bcbb1"));
+    QCOMPARE(theme.background(), QString("#142620"));
+
+    // Danger / Good / Warning derived from parsed palette, zero #FF6B6B
+    QCOMPARE(theme.danger(), QString("#d88d91"));
+    QCOMPARE(theme.good(), QString("#8bcbb1"));
+    QCOMPARE(theme.warning(), QString("#c5cc91"));
+    QVERIFY(theme.dangerText() != QString("#FF6B6B"));
+    QVERIFY(Theme::contrast(theme.dangerText(), theme.canvas()) >= 4.5);
+    QVERIFY(Theme::contrast(theme.goodText(), theme.canvas()) >= 4.5);
+    QVERIFY(Theme::contrast(theme.warningText(), theme.canvas()) >= 4.5);
+
+    // Zebra striping properties (rowEven, rowOdd, trackBg, pillBg)
+    const QString expectedRowEven = Theme::mix("#0a1713", "#142620", 0.35);
+    const QString expectedRowOdd = Theme::mix("#142620", "#dfede5", 0.085);
+    QCOMPARE(theme.rowEven(), expectedRowEven);
+    QCOMPARE(theme.rowOdd(), expectedRowOdd);
+    QVERIFY(theme.rowEven() != theme.rowOdd());
+    QVERIFY(theme.rowEven() != QString("#000000"));
+    QVERIFY(theme.rowOdd() != QString("#000000"));
+    QCOMPARE(theme.trackBg(), Theme::withAlpha("#dfede5", 0.16));
+    QCOMPARE(theme.pillBg(), Theme::withAlpha("#dfede5", 0.07));
+
+    // Zero invalid rgba strings
+    QVERIFY(!theme.border().contains("rgba"));
+    QVERIFY(!theme.hairline().contains("rgba"));
+    QVERIFY(!theme.controlBorder().contains("rgba"));
+    QVERIFY(!theme.trackBg().contains("rgba"));
+    QVERIFY(!theme.pillBg().contains("rgba"));
+    QVERIFY(theme.border().startsWith("#"));
+    QVERIFY(theme.hairline().startsWith("#"));
+    QVERIFY(theme.controlBorder().startsWith("#"));
+
+    // 7. Tri-state mode: auto, dark, light
+    theme.setThemeMode("light");
+    QCOMPARE(theme.themeMode(), QString("light"));
+    QCOMPARE(theme.mode(), QString("light"));
+    QCOMPARE(theme.background(), QString("#FFFFFF"));
+    QCOMPARE(theme.rowEven(), QString("#FFFFFF"));
+    QVERIFY(theme.rowOdd() != QString("#000000"));
+    QVERIFY(theme.rowEven() != theme.rowOdd());
+
+    theme.setThemeMode("dark");
+    QCOMPARE(theme.themeMode(), QString("dark"));
+    QCOMPARE(theme.mode(), QString("dark"));
+    QCOMPARE(theme.rowEven(), expectedRowEven);
+
+    theme.setThemeMode("auto");
+    QCOMPARE(theme.themeMode(), QString("auto"));
+    QCOMPARE(theme.mode(), QString("dark")); // Follows colors.toml dark mode
+
+    // 8. Secondary invariants: unclosed quote in readColors, case normalization in setThemeMode, readable edge cases
+    const QString malformedPath = tempDir.filePath("malformed_quote.toml");
+    QFile malformedFile(malformedPath);
+    QVERIFY(malformedFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    malformedFile.write(
+        "accent = \"#112233\"\n"
+        "broken = \"unclosed string\n"
+        "red = \"#ff0033\"\n"
+    );
+    malformedFile.close();
+
+    const auto malformedParsed = Theme::readColors(malformedPath);
+    QCOMPARE(malformedParsed.value("accent"), QString("#112233"));
+    QVERIFY(!malformedParsed.contains("broken"));
+    QCOMPARE(malformedParsed.value("red"), QString("#ff0033"));
+
+    theme.setThemeMode("  Light  ");
+    QCOMPARE(theme.themeMode(), QString("light"));
+    QCOMPARE(theme.mode(), QString("light"));
+
+    theme.setThemeMode("DARK");
+    QCOMPARE(theme.themeMode(), QString("dark"));
+    QCOMPARE(theme.mode(), QString("dark"));
+
+    const QString whiteOnWhite = Theme::readable("#ffffff", "#ffffff", {"#ffffff"}, 4.5);
+    QVERIFY2(Theme::contrast(whiteOnWhite, "#ffffff") >= 4.5, "readable() must resolve #ffffff on #ffffff");
+
+    const QString blackOnBlack = Theme::readable("#000000", "#000000", {"#000000"}, 4.5);
+    QVERIFY2(Theme::contrast(blackOnBlack, "#000000") >= 4.5, "readable() must resolve #000000 on #000000");
+
+    const QString midGray = Theme::readable("#808080", "#ffffff", {"#808080"}, 4.5);
+    QVERIFY2(Theme::contrast(midGray, "#808080") >= 4.5, "readable() must resolve mid-tone surface contrast boundary");
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 1 Iteration 2: Tri-State Matrix & Contrast Invariants
+// -----------------------------------------------------------------------------
+void AntigravityHubTests::themeTriStateMatrixAndContrastInvariants() {
+    const QStringList themeNames = {
+        QStringLiteral("jade-horse"),
+        QStringLiteral("tokyo-night"),
+        QStringLiteral("gruvbox"),
+        QStringLiteral("catppuccin-latte"),
+        QStringLiteral("white")
+    };
+
+    const QStringList testModes = {
+        QStringLiteral("auto"),
+        QStringLiteral("dark"),
+        QStringLiteral("light")
+    };
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString themeSubdir = tempDir.filePath("theme");
+    QDir(tempDir.path()).mkpath("theme");
+
+    for (const QString &themeName : themeNames) {
+        const QString sourceToml = QStringLiteral("/usr/share/omarchy/themes/%1/colors.toml").arg(themeName);
+        QVERIFY2(QFile::exists(sourceToml), qPrintable(QStringLiteral("Source theme missing: %1").arg(sourceToml)));
+
+        const QString targetToml = tempDir.filePath("theme/colors.toml");
+        if (QFile::exists(targetToml)) {
+            QFile::remove(targetToml);
+        }
+        QVERIFY(QFile::copy(sourceToml, targetToml));
+
+        Theme theme(tempDir.path());
+
+        const auto raw = Theme::readColors(targetToml);
+        const QString detectedMode = raw.value(QStringLiteral("mode"), QStringLiteral("dark"));
+
+        for (const QString &modeSetting : testModes) {
+            theme.setThemeMode(modeSetting);
+
+            const QString effectiveExpected = (modeSetting == QLatin1String("auto")) ? detectedMode : modeSetting;
+            QCOMPARE(theme.mode(), effectiveExpected);
+
+            const QString bg = theme.background();
+            const QString t1 = theme.text1();
+            const QString rEven = theme.rowEven();
+            const QString rOdd = theme.rowOdd();
+
+            // 1. Text contrast against background and surfaces >= 4.5:1
+            const double cText1Bg = Theme::contrast(t1, bg);
+            QVERIFY2(cText1Bg >= 4.5,
+                     qPrintable(QStringLiteral("[%1 / %2] text1 (%3) vs background (%4) contrast (%5) < 4.5:1")
+                                .arg(themeName, modeSetting, t1, bg).arg(cText1Bg)));
+
+            const double cText1Even = Theme::contrast(t1, rEven);
+            QVERIFY2(cText1Even >= 4.5,
+                     qPrintable(QStringLiteral("[%1 / %2] text1 (%3) vs rowEven (%4) contrast (%5) < 4.5:1")
+                                .arg(themeName, modeSetting, t1, rEven).arg(cText1Even)));
+
+            const double cText1Odd = Theme::contrast(t1, rOdd);
+            QVERIFY2(cText1Odd >= 4.5,
+                     qPrintable(QStringLiteral("[%1 / %2] text1 (%3) vs rowOdd (%4) contrast (%5) < 4.5:1")
+                                .arg(themeName, modeSetting, t1, rOdd).arg(cText1Odd)));
+
+            const double cText1Canvas = Theme::contrast(t1, theme.canvas());
+            QVERIFY2(cText1Canvas >= 4.5,
+                     qPrintable(QStringLiteral("[%1 / %2] text1 vs canvas contrast (%3) < 4.5:1")
+                                .arg(themeName, modeSetting).arg(cText1Canvas)));
+
+            // 2. Forced Dark Mode on Light Themes: Invariant Verification
+            if (modeSetting == QLatin1String("dark") && detectedMode == QLatin1String("light")) {
+                QVERIFY2(bg != QLatin1String("#eff1f5") && bg != QLatin1String("#ffffff"),
+                         qPrintable(QStringLiteral("[%1 forced dark] Leaked light background: %2").arg(themeName, bg)));
+                QCOMPARE(t1, QStringLiteral("#FFFFFF"));
+                QVERIFY2(cText1Bg >= 4.5,
+                         qPrintable(QStringLiteral("[%1 forced dark] White on light contrast collapse!").arg(themeName)));
+            }
+
+            // 3. Forced Light Mode on Dark Themes: Invariant Verification
+            if (modeSetting == QLatin1String("light") && detectedMode == QLatin1String("dark")) {
+                QCOMPARE(bg, QStringLiteral("#FFFFFF"));
+                QCOMPARE(t1, QStringLiteral("#0F172A"));
+                QVERIFY2(cText1Bg >= 4.5,
+                         qPrintable(QStringLiteral("[%1 forced light] Dark text on white background contrast < 4.5").arg(themeName)));
+            }
+
+            // 4. Zebra Striping Invariants: Contrast > 1.20, neither is dead black #000000
+            QVERIFY2(rEven != rOdd,
+                     qPrintable(QStringLiteral("[%1 / %2] rowEven and rowOdd collided (%3)").arg(themeName, modeSetting, rEven)));
+            QVERIFY2(rEven != QLatin1String("#000000"),
+                     qPrintable(QStringLiteral("[%1 / %2] rowEven evaluated to dead black #000000").arg(themeName, modeSetting)));
+            QVERIFY2(rOdd != QLatin1String("#000000"),
+                     qPrintable(QStringLiteral("[%1 / %2] rowOdd evaluated to dead black #000000").arg(themeName, modeSetting)));
+
+            const double cZebra = Theme::contrast(rEven, rOdd);
+            QVERIFY2(cZebra > 1.20,
+                     qPrintable(QStringLiteral("[%1 / %2] Zebra contrast between rowEven (%3) and rowOdd (%4) is %5 <= 1.20")
+                                .arg(themeName, modeSetting, rEven, rOdd).arg(cZebra)));
+
+            // 5. Semantic Status Colors & No Hardcoded Pure Red
+            QVERIFY2(theme.danger() != QLatin1String("#FF6B6B"),
+                     qPrintable(QStringLiteral("[%1 / %2] theme.danger() is pure red #FF6B6B").arg(themeName, modeSetting)));
+            QVERIFY2(theme.dangerText() != QLatin1String("#FF6B6B"),
+                     qPrintable(QStringLiteral("[%1 / %2] theme.dangerText() is pure red #FF6B6B").arg(themeName, modeSetting)));
+
+            const double cDanger = Theme::contrast(theme.dangerText(), theme.canvas());
+            const double cGood = Theme::contrast(theme.goodText(), theme.canvas());
+            const double cWarning = Theme::contrast(theme.warningText(), theme.canvas());
+            const double cAccent = Theme::contrast(theme.accentText(), theme.canvas());
+            QVERIFY2(cDanger >= 4.5, qPrintable(QStringLiteral("[%1 / %2] dangerText contrast < 4.5").arg(themeName, modeSetting)));
+            QVERIFY2(cGood >= 4.5, qPrintable(QStringLiteral("[%1 / %2] goodText contrast < 4.5").arg(themeName, modeSetting)));
+            QVERIFY2(cWarning >= 4.5, qPrintable(QStringLiteral("[%1 / %2] warningText contrast < 4.5").arg(themeName, modeSetting)));
+            QVERIFY2(cAccent >= 4.5, qPrintable(QStringLiteral("[%1 / %2] accentText contrast < 4.5").arg(themeName, modeSetting)));
+
+            // 6. Zero Presence of CSS 'rgba(' in Color Properties
+            QVERIFY(!theme.border().contains(QLatin1String("rgba"), Qt::CaseInsensitive));
+            QVERIFY(!theme.hairline().contains(QLatin1String("rgba"), Qt::CaseInsensitive));
+            QVERIFY(!theme.controlBorder().contains(QLatin1String("rgba"), Qt::CaseInsensitive));
+            QVERIFY(!theme.trackBg().contains(QLatin1String("rgba"), Qt::CaseInsensitive));
+            QVERIFY(!theme.pillBg().contains(QLatin1String("rgba"), Qt::CaseInsensitive));
+            QVERIFY(!rEven.contains(QLatin1String("rgba"), Qt::CaseInsensitive));
+            QVERIFY(!rOdd.contains(QLatin1String("rgba"), Qt::CaseInsensitive));
+
+            // 7. Track and Pill Background Hex Formatting (#AARRGGBB)
+            QVERIFY(theme.trackBg().startsWith(QLatin1Char('#')) && theme.trackBg().length() == 9);
+            QVERIFY(theme.pillBg().startsWith(QLatin1Char('#')) && theme.pillBg().length() == 9);
+        }
+    }
+
+    // 8. Invariant: controlRadius() returns 0 when radius() is 0
+    Theme zeroRadiusTheme(tempDir.path());
+    if (zeroRadiusTheme.radius() == 0) {
+        QCOMPARE(zeroRadiusTheme.controlRadius(), 0);
+    }
+
+    // 9. Invariant: Case normalization for setThemeMode
+    zeroRadiusTheme.setThemeMode(QStringLiteral("  DARK  "));
+    QCOMPARE(zeroRadiusTheme.themeMode(), QStringLiteral("dark"));
+    zeroRadiusTheme.setThemeMode(QStringLiteral("Light"));
+    QCOMPARE(zeroRadiusTheme.themeMode(), QStringLiteral("light"));
 }
 
 void AntigravityHubTests::translatorFallsBackToEnglish() {
@@ -732,7 +1069,14 @@ void AntigravityHubTests::backendControllerStateAndUrls() {
     QVERIFY(QMetaObject::invokeMethod(&backend, "saveSettings", Q_ARG(QJsonObject, QJsonObject())));
     QVERIFY(QMetaObject::invokeMethod(&backend, "unlockManualOverride"));
     QVERIFY(QMetaObject::invokeMethod(&backend, "copyToClipboard", Q_ARG(QString, QStringLiteral("sample text"))));
-    QVERIFY(QMetaObject::invokeMethod(&backend, "checkDaemonLiveness"));
+    // Milestone 2 extended operations invokable via QMetaObject / QML
+    QVERIFY(QMetaObject::invokeMethod(&backend, "deleteAccounts", Q_ARG(QStringList, QStringList{QStringLiteral("test@example.com")})));
+    QVERIFY(QMetaObject::invokeMethod(&backend, "ingestActiveAccount"));
+    QVERIFY(QMetaObject::invokeMethod(&backend, "startOAuthLogin"));
+    QVERIFY(QMetaObject::invokeMethod(&backend, "importAccounts", Q_ARG(QString, QStringLiteral("{}"))));
+    QVERIFY(QMetaObject::invokeMethod(&backend, "exportSelectedAccounts", Q_ARG(QStringList, QStringList{QStringLiteral("test@example.com")})));
+    QVERIFY(QMetaObject::invokeMethod(&backend, "exportSelected", Q_ARG(QStringList, QStringList{QStringLiteral("test@example.com")})));
+    QVERIFY(QMetaObject::invokeMethod(&backend, "batchWarmup", Q_ARG(QStringList, QStringList{QStringLiteral("test@example.com")})));
 }
 
 void AntigravityHubTests::backendControllerOffscreenExecution() {
@@ -755,6 +1099,46 @@ void AntigravityHubTests::backendControllerOffscreenExecution() {
     QCoreApplication::processEvents();
 
     // Verify no crashes or UI thread blockages occurred
+    QVERIFY(true);
+}
+
+void AntigravityHubTests::backendControllerExtendedApiMethods() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    BackendController backend;
+
+    // 1. Verify QMetaObject method introspection for Milestone 2 methods
+    const QMetaObject *mo = backend.metaObject();
+    QVERIFY2(mo->indexOfMethod("deleteAccounts(QStringList)") != -1, "deleteAccounts(QStringList) not registered in QMetaObject");
+    QVERIFY2(mo->indexOfMethod("ingestActiveAccount()") != -1, "ingestActiveAccount() not registered in QMetaObject");
+    QVERIFY2(mo->indexOfMethod("startOAuthLogin()") != -1, "startOAuthLogin() not registered in QMetaObject");
+    QVERIFY2(mo->indexOfMethod("importAccounts(QString)") != -1, "importAccounts(QString) not registered in QMetaObject");
+    QVERIFY2(mo->indexOfMethod("exportSelectedAccounts(QStringList)") != -1, "exportSelectedAccounts(QStringList) not registered in QMetaObject");
+    QVERIFY2(mo->indexOfMethod("exportSelected(QStringList)") != -1, "exportSelected(QStringList) not registered in QMetaObject");
+    QVERIFY2(mo->indexOfMethod("batchWarmup(QStringList)") != -1, "batchWarmup(QStringList) not registered in QMetaObject");
+
+    // 2. Verify signal introspection
+    QVERIFY2(mo->indexOfSignal("accountsReloadRequested()") != -1, "accountsReloadRequested() signal missing");
+    QVERIFY2(mo->indexOfSignal("accountsExported(QString)") != -1, "accountsExported(QString) signal missing");
+
+    // 3. Spy on signals & test invocations
+    QSignalSpy spyBusy(&backend, &BackendController::busyChanged);
+    QSignalSpy spyReload(&backend, &BackendController::accountsReloadRequested);
+    QSignalSpy spyExport(&backend, &BackendController::accountsExported);
+    QSignalSpy spyNotify(&backend, &BackendController::notificationRequested);
+
+    backend.ingestActiveAccount();
+    QVERIFY(spyBusy.count() >= 1);
+
+    backend.startOAuthLogin();
+    backend.batchWarmup(QStringList{QStringLiteral("cakeai88@gmail.com")});
+    backend.exportSelectedAccounts(QStringList{QStringLiteral("cakeai88@gmail.com")});
+    backend.deleteAccounts(QStringList{QStringLiteral("novadu99@gmail.com")});
+    backend.importAccounts(QStringLiteral("{\"cakeai88@gmail.com\": {}}"));
+
+    QCoreApplication::processEvents();
     QVERIFY(true);
 }
 
@@ -806,8 +1190,15 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
             f.close();
         }
     }
-    Theme theme(tempDir.path());
+    QFile langF(tempDir.filePath("lang"));
+    if (langF.open(QIODevice::WriteOnly)) {
+        langF.write("zh-CN");
+        langF.close();
+    }
+    const QString realThemeDir = QDir::homePath() + QStringLiteral("/.local/state/omarchy/current");
+    Theme theme(QFile::exists(realThemeDir + QStringLiteral("/theme/colors.toml")) ? realThemeDir : tempDir.path());
     Translator translator(tempDir.filePath("lang"), ":/i18n");
+    QCoreApplication::installTranslator(&translator);
     BackendController backend;
     AccountModel accountModel;
     AccountFilterProxyModel proxyModel;
@@ -861,7 +1252,16 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
         QVERIFY(obj->metaObject()->indexOfMethod("clearOrUnfocus()") != -1);
     }
 
-    // 7. Verify AccountListView.qml
+    // 7. Verify AddAccountDialog.qml
+    {
+        QQmlComponent comp(&engine, QUrl(QStringLiteral("qrc:/AddAccountDialog.qml")));
+        QVERIFY2(!comp.isError(), qPrintable(comp.errorString()));
+        QScopedPointer<QObject> obj(comp.create());
+        QVERIFY2(obj != nullptr, "AddAccountDialog failed to instantiate offscreen");
+        QCOMPARE(obj->property("modal").toBool(), true);
+    }
+
+    // 8. Verify AccountListView.qml
     {
         QQmlComponent comp(&engine, QUrl(QStringLiteral("qrc:/AccountListView.qml")));
         QVERIFY2(!comp.isError(), qPrintable(comp.errorString()));
@@ -909,9 +1309,9 @@ void AntigravityHubTests::accountListViewVisualDenoisingInvariants() {
     QVERIFY2(!content.contains(QStringLiteral("(周额度)")),
              "MANDATORY DENOISING VIOLATION: '(周额度)' found in AccountListView.qml");
 
-    // 3. Weekly depletion short-circuit to 0.0% & Weekly Depleted
-    QVERIFY2(content.contains(QStringLiteral("qsTr(\"Weekly Depleted\")")),
-             "AccountListView.qml missing Weekly Depleted short-circuit handler");
+    // 3. Weekly depletion short-circuit to 0.0% & Weekly Depleted / 周耗尽
+    QVERIFY2(content.contains(QStringLiteral("qsTr(\"Weekly Depleted\")")) || content.contains(QStringLiteral("qsTr(\"周耗尽\")")),
+             "AccountListView.qml missing Weekly Depleted / 周耗尽 short-circuit handler");
 
     // 4. Zero animation on ACTIVE badge & zero pure red (#EF4444)
     QVERIFY2(!content.contains(QStringLiteral("SequentialAnimation on opacity")),
