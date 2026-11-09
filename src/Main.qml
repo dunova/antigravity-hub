@@ -12,13 +12,14 @@ ApplicationWindow {
     minimumHeight: 540
     title: qsTr("Antigravity Hub")
 
-    // Dynamic Material Dark/Light Theme following Omarchy & Hyprland
-    color: (theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#142620"
+    // Dynamic Omarchy Design System & Typography
+    color: (theme && theme.canvas) ? theme.canvas : ((theme && theme.background) ? theme.background : "#142620")
+    font.family: (theme && theme.uiFont) ? theme.uiFont : "sans-serif"
     Material.theme: (theme && theme.mode === "light") ? Material.Light : Material.Dark
     Material.accent: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
     Material.background: (theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#142620"
-    Material.foreground: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4"
-    Material.roundedScale: theme ? theme.radius : 0
+    Material.foreground: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+    Material.roundedScale: theme ? theme.controlRadius : 4
 
     // Focus guard: prevents single-character shortcuts from intercepting text input
     property bool isInputFocused: {
@@ -245,8 +246,12 @@ ApplicationWindow {
             radius: Math.max((theme ? theme.radius : 0) - 2, 6)
             height: 38
             implicitWidth: toastContentRow.implicitWidth + 28
-            color: isErrorToast ? "#26EF4444" : "#2622C55E"
-            border.color: isErrorToast ? "#EF4444" : "#22C55E"
+            color: isErrorToast ?
+                   Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B", 0.15) :
+                   Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.15)
+            border.color: isErrorToast ?
+                          ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                          ((theme && theme.goodText) ? theme.goodText : "#4ADE80")
             border.width: 1
 
             property bool isErrorToast: false
@@ -261,7 +266,9 @@ ApplicationWindow {
                 AppIcon {
                     name: toastNotification.isErrorToast ? "warning" : "check"
                     size: 14
-                    tint: toastNotification.isErrorToast ? "#EF4444" : "#22C55E"
+                    tint: toastNotification.isErrorToast ?
+                          ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                          ((theme && theme.goodText) ? theme.goodText : "#4ADE80")
                 }
 
                 Text {

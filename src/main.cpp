@@ -12,10 +12,14 @@
 
 int main(int argc, char *argv[])
 {
+    // Suppress redundant Qt Wayland client-side decorations (CSD)
+    // Ensures Hyprland's hyprbars is the single canonical window titlebar
+    qputenv("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1");
+
     // 1. Initialize GUI Application
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("antigravity-hub"));
-    app.setApplicationVersion(QStringLiteral("2.47.0"));
+    app.setApplicationVersion(QStringLiteral("2.48.0"));
     app.setOrganizationName(QStringLiteral("Omarchy"));
     app.setOrganizationDomain(QStringLiteral("omarchy.org"));
 

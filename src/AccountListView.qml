@@ -70,13 +70,13 @@ Item {
     function selectPrevRow() { selectPrevious(); }
     function switchSelectedRow() { activateCurrent(); }
 
-    // 配额颜色判定阈值逻辑 (Omarchy Material Dark 规范)
+    // 配额颜色判定阈值逻辑 (Omarchy High-Contrast WCAG 规范)
     function getQuotaColor(ratio) {
-        if (ratio === undefined || ratio === null || isNaN(ratio)) return "#6B7280";
-        if (ratio <= 0.0001) return "#EF4444"; // 枯竭归零红标告警
-        if (ratio >= 0.50) return "#22C55E";   // 充足 (翠绿)
-        if (ratio >= 0.15) return "#F59E0B";   // 告急 (琥珀橙)
-        return "#EF4444";                      // 危险 (玫瑰红)
+        if (ratio === undefined || ratio === null || isNaN(ratio)) return (theme && theme.text3) ? theme.text3 : "#CBD5E1";
+        if (ratio <= 0.0001) return (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"; // 枯竭归零高对比红标告警
+        if (ratio >= 0.50) return (theme && theme.goodText) ? theme.goodText : "#4ADE80";       // 充足 (高对比亮绿)
+        if (ratio >= 0.15) return (theme && theme.warningText) ? theme.warningText : "#FFD166"; // 告急 (高对比金橙)
+        return (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B";                      // 危险 (高对比亮珊瑚红)
     }
 
     ColumnLayout {
@@ -90,9 +90,13 @@ Item {
             id: headerRow
             Layout.fillWidth: true
             Layout.preferredHeight: 34
-            color: (theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31"
+            radius: theme ? theme.controlRadius : 6
+            gradient: Gradient {
+                GradientStop { position: 0; color: (theme && theme.surfaceTop) ? theme.surfaceTop : "#172c25" }
+                GradientStop { position: 1; color: (theme && theme.surfaceBottom) ? theme.surfaceBottom : "#11201b" }
+            }
             border.width: 1
-            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)"
+            border.color: (theme && theme.hairline) ? theme.hairline : "rgba(255, 255, 255, 0.12)"
 
             RowLayout {
                 anchors.fill: parent
@@ -118,45 +122,134 @@ Item {
                     }
                 }
 
-                // Col 2: # 序号
-                Item {
+                // Col 2: # 序号 (支持点击按序号排序)
+                Rectangle {
                     Layout.preferredWidth: 36
                     Layout.fillHeight: true
-                    Text {
+                    color: "transparent"
+
+                    RowLayout {
                         anchors.centerIn: parent
-                        text: "#"
-                        font.family: "Monospace"
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                        spacing: 2
+
+                        Text {
+                            text: "#"
+                            font.family: "Monospace"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: (proxyModel && proxyModel.sortField === "index") ?
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
+                        }
+
+                        Text {
+                            visible: proxyModel ? (proxyModel.sortField === "index") : false
+                            text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
+                            font.pixelSize: 10
+                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (!proxyModel) return;
+                            if (proxyModel.sortField !== "index") {
+                                proxyModel.setSortRule("index", Qt.AscendingOrder);
+                            } else if (proxyModel.sortOrder === Qt.AscendingOrder) {
+                                proxyModel.setSortRule("index", Qt.DescendingOrder);
+                            } else {
+                                proxyModel.setSortRule("default", Qt.DescendingOrder);
+                            }
+                        }
                     }
                 }
 
-                // Col 3: 状态
-                Item {
+                // Col 3: 状态 (支持点击按状态排序)
+                Rectangle {
                     Layout.preferredWidth: 88
                     Layout.fillHeight: true
-                    Text {
+                    color: "transparent"
+
+                    RowLayout {
                         anchors.centerIn: parent
-                        text: qsTr("Status")
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                        spacing: 2
+
+                        Text {
+                            text: qsTr("Status")
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: (proxyModel && proxyModel.sortField === "status") ?
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
+                        }
+
+                        Text {
+                            visible: proxyModel ? (proxyModel.sortField === "status") : false
+                            text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
+                            font.pixelSize: 10
+                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (!proxyModel) return;
+                            if (proxyModel.sortField !== "status") {
+                                proxyModel.setSortRule("status", Qt.AscendingOrder);
+                            } else if (proxyModel.sortOrder === Qt.AscendingOrder) {
+                                proxyModel.setSortRule("status", Qt.DescendingOrder);
+                            } else {
+                                proxyModel.setSortRule("default", Qt.DescendingOrder);
+                            }
+                        }
                     }
                 }
 
-                // Col 4: 账号 (纯净用户名，剥离 @gmail.com)
-                Item {
+                // Col 4: 账号 (支持点击按账号字母序排序)
+                Rectangle {
                     Layout.preferredWidth: 170
                     Layout.fillHeight: true
-                    Text {
-                        anchors.left: parent.left
+                    color: "transparent"
+
+                    RowLayout {
+                        anchors.fill: parent
                         anchors.leftMargin: 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qsTr("Account")
-                        font.pixelSize: 11
-                        font.bold: true
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                        spacing: 2
+
+                        Text {
+                            text: qsTr("Account")
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: (proxyModel && (proxyModel.sortField === "account" || proxyModel.sortField === "username")) ?
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
+                        }
+
+                        Text {
+                            visible: proxyModel ? (proxyModel.sortField === "account" || proxyModel.sortField === "username") : false
+                            text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
+                            font.pixelSize: 10
+                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (!proxyModel) return;
+                            if (proxyModel.sortField !== "account") {
+                                proxyModel.setSortRule("account", Qt.AscendingOrder);
+                            } else if (proxyModel.sortOrder === Qt.AscendingOrder) {
+                                proxyModel.setSortRule("account", Qt.DescendingOrder);
+                            } else {
+                                proxyModel.setSortRule("default", Qt.DescendingOrder);
+                            }
+                        }
                     }
                 }
 
@@ -173,11 +266,11 @@ Item {
 
                         Text {
                             text: qsTr("Gemini 4") // MANDATORY: STRICTLY "Gemini 4"
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.bold: true
                             color: (proxyModel && proxyModel.sortField === "gemini4") ?
                                    ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4")
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
                         Text {
@@ -217,11 +310,11 @@ Item {
 
                         Text {
                             text: qsTr("Gemini 3.8")
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.bold: true
                             color: (proxyModel && proxyModel.sortField === "gemini38_w") ?
                                    ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4")
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
                         Text {
@@ -261,11 +354,11 @@ Item {
 
                         Text {
                             text: qsTr("Claude")
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.bold: true
                             color: (proxyModel && proxyModel.sortField === "claude_w") ?
                                    ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4")
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
                         Text {
@@ -299,7 +392,7 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         text: qsTr("Actions")
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         font.bold: true
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
                     }
@@ -351,7 +444,7 @@ Item {
             delegate: Rectangle {
                 id: rowDelegate
                 width: listView.width
-                height: 54
+                height: 56
 
                 // 25 项 QML Role 绑定的直接消费
                 property bool isRowActive: model.isActive || false
@@ -359,24 +452,32 @@ Item {
                 property bool isRowSelected: listView.currentIndex === index
                 property bool isRowChecked: accountListView.selectedEmails[model.email] === true
 
-                // 行背景与高亮逻辑
-                color: isRowActive ? "#1422C55E" :
-                       (isRowSelected ? "#15FFD60A" :
+                // 行背景与高亮逻辑 (加重奇偶斑马纹，提高行条目可视率与辨识度)
+                color: isRowActive ?
+                       ((theme && theme.mode === "light") ?
+                           Qt.alpha((theme && theme.goodText) ? theme.goodText : "#16A34A", 0.15) :
+                           Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.18)) :
+                       (isRowSelected ?
+                           ((theme && theme.mode === "light") ?
+                               Qt.alpha((theme && theme.accent) ? theme.accent : "#0284C7", 0.20) :
+                               Qt.alpha((theme && theme.accent) ? theme.accent : "#8bcbb1", 0.25)) :
                            (rowMouse.containsMouse ?
-                               ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26") :
-                               (index % 2 === 0 ?
-                                   ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c") :
-                                   ((theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#0e0e14"))))
+                               ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
+                               ((theme && theme.mode === "light") ?
+                                   (index % 2 === 0 ? "#FFFFFF" : "#F1F5F9") :
+                                   (index % 2 === 0 ?
+                                       ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#0f1e19") :
+                                       Qt.tint(((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#0f1e19"), "rgba(255, 255, 255, 0.08)")))))
 
                 border.width: isRowSelected ? 1 : 0
-                border.color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                border.color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
 
                 Rectangle {
                     anchors.bottom: parent.bottom
                     anchors.left: parent.left
                     anchors.right: parent.right
                     height: 1
-                    color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#10ffffff"
+                    color: (theme && theme.hairline) ? theme.hairline : "rgba(255, 255, 255, 0.08)"
                 }
 
                 MouseArea {
@@ -408,7 +509,7 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 2: # 序号 (1-based)
+                    // Col 2: # 序号 (1-based, 纯白高对比)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: 36
@@ -417,13 +518,14 @@ Item {
                             anchors.centerIn: parent
                             text: model.index
                             font.family: "Monospace"
-                            font.pixelSize: 11
-                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                         }
                     }
 
                     // -------------------------------------------------
-                    // Col 3: 状态胶囊 (ACTIVE / STANDBY / BLOCKED / EXHAUSTED)
+                    // Col 3: 状态胶囊 (ACTIVE / STANDBY / BLOCKED / EXHAUSTED - 静态无多余动画)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: 88
@@ -435,24 +537,19 @@ Item {
                             height: 24
                             radius: 12
 
-                            color: model.isActive ? "#2622C55E" :
-                                   (model.isBlocked ? "#26EF4444" :
-                                       (model.status === "EXHAUSTED" ? "#266B7280" :
-                                           ((theme && theme.mode === "light") ? "#14000000" : "#266B7280")))
+                            color: model.isActive ?
+                                   Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.18) :
+                                   (model.isBlocked ?
+                                       Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B", 0.18) :
+                                       (model.status === "EXHAUSTED" ?
+                                           Qt.alpha((theme && theme.text4) ? theme.text4 : "#6B7280", 0.15) :
+                                           ((theme && theme.mode === "light") ? "#0a000000" : "#14ffffff")))
 
                             border.width: 1
-                            border.color: model.isActive ? "#22C55E" :
-                                          (model.isBlocked ? "#EF4444" :
-                                              (model.status === "EXHAUSTED" ? "#6B7280" :
-                                                  ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")))
-
-                            // ACTIVE 绿色呼吸光效
-                            SequentialAnimation on opacity {
-                                running: model.isActive
-                                loops: Animation.Infinite
-                                NumberAnimation { to: 0.65; duration: 900; easing.type: Easing.InOutQuad }
-                                NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
-                            }
+                            border.color: model.isActive ? ((theme && theme.goodText) ? theme.goodText : "#4ADE80") :
+                                          (model.isBlocked ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                              (model.status === "EXHAUSTED" ? ((theme && theme.text4) ? theme.text4 : "#6B7280") :
+                                                  ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")))
 
                             RowLayout {
                                 anchors.centerIn: parent
@@ -463,12 +560,12 @@ Item {
                                           (model.isBlocked ? qsTr("Blocked") :
                                               (model.status === "EXHAUSTED" ? qsTr("Exhausted") : qsTr("STANDBY")))
                                     font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 11
                                     font.bold: true
-                                    color: model.isActive ? "#22C55E" :
-                                           (model.isBlocked ? "#EF4444" :
-                                               (model.status === "EXHAUSTED" ? "#9CA3AF" :
-                                                   ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6")))
+                                    color: model.isActive ? ((theme && theme.goodText) ? theme.goodText : "#4ADE80") :
+                                           (model.isBlocked ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                               (model.status === "EXHAUSTED" ? ((theme && theme.text3) ? theme.text3 : "#CBD5E1") :
+                                                   ((theme && theme.text2) ? theme.text2 : "#F3F4F6")))
                                 }
 
                                 // 人工保护倒计时标签
@@ -483,7 +580,8 @@ Item {
                                     Text {
                                         text: model.manualLockRemainingStr || ""
                                         font.family: "Monospace"
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
+                                        font.bold: true
                                         color: "#F59E0B"
                                     }
                                 }
@@ -503,13 +601,13 @@ Item {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             text: model.displayUsername || ""
-                            font.family: "Monospace"
-                            font.pixelSize: 12
-                            font.bold: model.isActive
+                            font.family: (theme && theme.uiFont) ? theme.uiFont : "sans-serif"
+                            font.pixelSize: 13
+                            font.bold: true
                             elide: Text.ElideRight
                             color: model.isActive ?
                                    ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff")
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
 
                             ToolTip.visible: nameMouse.containsMouse
                             ToolTip.text: (model.email || "") + " (" + qsTr("Click to copy") + ")"
@@ -585,7 +683,8 @@ Item {
                                 Layout.preferredWidth: 44
                                 text: ((model.gemini4Quota || 0.0) * 100).toFixed(1) + "%"
                                 font.family: "Monospace"
-                                font.pixelSize: 11
+                                font.pixelSize: 12
+                                font.bold: true
                                 horizontalAlignment: Text.AlignRight
                                 color: accountListView.getQuotaColor(model.gemini4Quota)
                             }
@@ -595,8 +694,8 @@ Item {
                                 Layout.preferredWidth: 48
                                 text: model.gemini4Reset || "--"
                                 font.family: "Monospace"
-                                font.pixelSize: 10
-                                color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                                font.pixelSize: 11
+                                color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                 elide: Text.ElideRight
                             }
                         }
@@ -629,8 +728,9 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: "5h"
-                                        font.pixelSize: 9
-                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                     }
                                 }
 
@@ -647,7 +747,7 @@ Item {
                                         radius: 2
                                         width: (model.gemini38QuotaW <= 0.0001) ? 0 :
                                                Math.min(parent.width, Math.max(0, parent.width * (model.gemini38Quota5h || 0.0)))
-                                        color: (model.gemini38QuotaW <= 0.0001) ? "#EF4444" :
+                                        color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
                                                accountListView.getQuotaColor(model.gemini38Quota5h)
                                     }
                                 }
@@ -657,9 +757,10 @@ Item {
                                     text: (model.gemini38QuotaW <= 0.0001) ? "0.0%" :
                                           (((model.gemini38Quota5h || 0.0) * 100).toFixed(1) + "%")
                                     font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 12
+                                    font.bold: true
                                     horizontalAlignment: Text.AlignRight
-                                    color: (model.gemini38QuotaW <= 0.0001) ? "#EF4444" :
+                                    color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
                                            accountListView.getQuotaColor(model.gemini38Quota5h)
                                 }
 
@@ -667,9 +768,9 @@ Item {
                                     Layout.preferredWidth: 46
                                     text: (model.gemini38QuotaW <= 0.0001) ? qsTr("Weekly Depleted") : (model.gemini38Reset5h || "--")
                                     font.family: "Monospace"
-                                    font.pixelSize: 9
-                                    color: (model.gemini38QuotaW <= 0.0001) ? "#EF4444" :
-                                           ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF")
+                                    font.pixelSize: 11
+                                    color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                           ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                     elide: Text.ElideRight
                                 }
                             }
@@ -687,8 +788,9 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: qsTr("Weekly")
-                                        font.pixelSize: 9
-                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                     }
                                 }
 
@@ -712,7 +814,8 @@ Item {
                                     Layout.preferredWidth: 42
                                     text: ((model.gemini38QuotaW || 0.0) * 100).toFixed(1) + "%"
                                     font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 12
+                                    font.bold: true
                                     horizontalAlignment: Text.AlignRight
                                     color: accountListView.getQuotaColor(model.gemini38QuotaW)
                                 }
@@ -721,8 +824,8 @@ Item {
                                     Layout.preferredWidth: 46
                                     text: model.gemini38ResetW || "--"
                                     font.family: "Monospace"
-                                    font.pixelSize: 9
-                                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
+                                    font.pixelSize: 11
+                                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                     elide: Text.ElideRight
                                 }
                             }
@@ -730,7 +833,7 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 7: Claude 双维配额单元格 (带周耗尽 0.0% 熔断)
+                    // Col 7: Claude 双维配额单元格
                     // -------------------------------------------------
                     Item {
                         Layout.fillWidth: true
@@ -756,8 +859,9 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: "5h"
-                                        font.pixelSize: 9
-                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                     }
                                 }
 
@@ -774,7 +878,7 @@ Item {
                                         radius: 2
                                         width: (model.claudeQuotaW <= 0.0001) ? 0 :
                                                Math.min(parent.width, Math.max(0, parent.width * (model.claudeQuota5h || 0.0)))
-                                        color: (model.claudeQuotaW <= 0.0001) ? "#EF4444" :
+                                        color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
                                                accountListView.getQuotaColor(model.claudeQuota5h)
                                     }
                                 }
@@ -784,9 +888,10 @@ Item {
                                     text: (model.claudeQuotaW <= 0.0001) ? "0.0%" :
                                           (((model.claudeQuota5h || 0.0) * 100).toFixed(1) + "%")
                                     font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 12
+                                    font.bold: true
                                     horizontalAlignment: Text.AlignRight
-                                    color: (model.claudeQuotaW <= 0.0001) ? "#EF4444" :
+                                    color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
                                            accountListView.getQuotaColor(model.claudeQuota5h)
                                 }
 
@@ -794,9 +899,9 @@ Item {
                                     Layout.preferredWidth: 46
                                     text: (model.claudeQuotaW <= 0.0001) ? qsTr("Weekly Depleted") : (model.claudeReset5h || "--")
                                     font.family: "Monospace"
-                                    font.pixelSize: 9
-                                    color: (model.claudeQuotaW <= 0.0001) ? "#EF4444" :
-                                           ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF")
+                                    font.pixelSize: 11
+                                    color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                                           ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                     elide: Text.ElideRight
                                 }
                             }
@@ -814,8 +919,9 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: qsTr("Weekly")
-                                        font.pixelSize: 9
-                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                     }
                                 }
 
@@ -839,7 +945,8 @@ Item {
                                     Layout.preferredWidth: 42
                                     text: ((model.claudeQuotaW || 0.0) * 100).toFixed(1) + "%"
                                     font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 12
+                                    font.bold: true
                                     horizontalAlignment: Text.AlignRight
                                     color: accountListView.getQuotaColor(model.claudeQuotaW)
                                 }
@@ -848,8 +955,8 @@ Item {
                                     Layout.preferredWidth: 46
                                     text: model.claudeResetW || "--"
                                     font.family: "Monospace"
-                                    font.pixelSize: 9
-                                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
+                                    font.pixelSize: 11
+                                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                     elide: Text.ElideRight
                                 }
                             }
@@ -872,17 +979,17 @@ Item {
                                 visible: model.isActive
                                 width: 56
                                 height: 26
-                                radius: 4
-                                color: "#2022C55E"
+                                radius: theme ? theme.controlRadius : 6
+                                color: Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.15)
                                 border.width: 1
-                                border.color: "#22C55E"
+                                border.color: (theme && theme.goodText) ? theme.goodText : "#4ADE80"
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: qsTr("In Use")
                                     font.pixelSize: 11
                                     font.bold: true
-                                    color: "#22C55E"
+                                    color: (theme && theme.goodText) ? theme.goodText : "#4ADE80"
                                 }
                             }
 
@@ -891,17 +998,17 @@ Item {
                                 visible: !model.isActive && model.isBlocked
                                 width: 56
                                 height: 26
-                                radius: 4
-                                color: "#26EF4444"
+                                radius: theme ? theme.controlRadius : 6
+                                color: (theme && theme.mode === "light") ? "#14DC2626" : "#26FF6B6B"
                                 border.width: 1
-                                border.color: "#EF4444"
+                                border.color: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: qsTr("Unblock")
                                     font.pixelSize: 11
                                     font.bold: true
-                                    color: "#EF4444"
+                                    color: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"
                                 }
 
                                 MouseArea {
@@ -917,22 +1024,23 @@ Item {
                             Rectangle {
                                 id: btnSwitch
                                 visible: !model.isActive && !model.isBlocked
-                                width: 56
-                                height: 26
-                                radius: 4
+                                width: 58
+                                height: 28
+                                radius: theme ? theme.controlRadius : 6
                                 color: btnSwitchMouse.containsMouse ?
                                        ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") :
                                        ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
                                 border.width: 1
                                 border.color: btnSwitchMouse.containsMouse ?
-                                              ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
-                                              ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
+                                              ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                              ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
 
                                 Text {
                                     anchors.centerIn: parent
                                     text: qsTr("Switch")
-                                    font.pixelSize: 11
-                                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                                 }
 
                                 MouseArea {
@@ -949,19 +1057,21 @@ Item {
                             // 4. 错峰预热图标按钮
                             Rectangle {
                                 id: btnWarmup
-                                width: 26
-                                height: 26
-                                radius: 4
+                                width: 28
+                                height: 28
+                                radius: theme ? theme.controlRadius : 6
                                 color: warmupMouse.containsMouse ?
                                        ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") : "transparent"
                                 border.width: 1
-                                border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                                border.color: warmupMouse.containsMouse ?
+                                              ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                              ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
 
                                 AppIcon {
                                     anchors.centerIn: parent
                                     name: "sparkle"
                                     size: 14
-                                    tint: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#dfede5"
+                                    tint: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                                 }
 
                                 ToolTip.visible: warmupMouse.containsMouse

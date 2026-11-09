@@ -40,12 +40,12 @@ Item {
             id: searchBox
             Layout.preferredWidth: 230
             Layout.preferredHeight: 32
-            radius: Math.max((theme ? theme.radius : 0) - 4, 4)
+            radius: theme ? theme.controlRadius : 6
             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
             border.width: searchInput.activeFocus ? 1.5 : 1
             border.color: searchInput.activeFocus ?
-                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
-                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
+                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                          ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
 
             Behavior on border.color { ColorAnimation { duration: 150 } }
 
@@ -59,7 +59,7 @@ Item {
                 AppIcon {
                     name: "search"
                     size: 14
-                    tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
+                    tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                 }
 
                 TextInput {
@@ -67,9 +67,9 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     verticalAlignment: TextInput.AlignVCenter
-                    font.family: "Monospace"
+                    font.family: (theme && theme.uiFont) ? theme.uiFont : "sans-serif"
                     font.pixelSize: 12
-                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     selectByMouse: true
                     clip: true
 
@@ -78,8 +78,8 @@ Item {
                         anchors.fill: parent
                         verticalAlignment: Text.AlignVCenter
                         text: qsTr("Search accounts...")
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
-                        font.family: "Monospace"
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
+                        font.family: (theme && theme.uiFont) ? theme.uiFont : "sans-serif"
                         font.pixelSize: 12
                         visible: !searchInput.text && !searchInput.activeFocus
                     }
@@ -109,7 +109,7 @@ Item {
                         anchors.centerIn: parent
                         name: "close"
                         size: 11
-                        tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
+                        tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                     }
 
                     MouseArea {
@@ -129,9 +129,9 @@ Item {
                     visible: !searchInput.activeFocus && searchInput.text.length === 0
                     width: 16
                     height: 16
-                    radius: 3
+                    radius: theme ? Math.max(theme.controlRadius - 2, 2) : 3
                     color: (theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b"
-                    border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                    border.color: (theme && theme.hairline) ? theme.hairline : "rgba(255, 255, 255, 0.12)"
                     border.width: 1
 
                     Text {
@@ -140,7 +140,7 @@ Item {
                         font.family: "Monospace"
                         font.pixelSize: 10
                         font.bold: true
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                     }
                 }
             }
@@ -155,10 +155,10 @@ Item {
             Repeater {
                 model: [
                     { key: "all", label: qsTr("All"), dot: "" },
-                    { key: "usable", label: qsTr("Usable"), dot: "#3B82F6" },
-                    { key: "plentiful", label: qsTr("Plentiful"), dot: "#22C55E" },
-                    { key: "warning", label: qsTr("Warning"), dot: "#F59E0B" },
-                    { key: "exhausted", label: qsTr("Exhausted"), dot: "#EF4444" }
+                    { key: "usable", label: qsTr("Usable"), dot: (theme && theme.accent) ? theme.accent : "#8bcbb1" },
+                    { key: "plentiful", label: qsTr("Plentiful"), dot: (theme && theme.goodText) ? theme.goodText : "#4ADE80" },
+                    { key: "warning", label: qsTr("Warning"), dot: (theme && theme.warningText) ? theme.warningText : "#FFD166" },
+                    { key: "exhausted", label: qsTr("Exhausted"), dot: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B" }
                 ]
 
                 delegate: Rectangle {
@@ -168,7 +168,7 @@ Item {
 
                     implicitWidth: tabRow.implicitWidth + 16
                     implicitHeight: 28
-                    radius: Math.max((theme ? theme.radius : 0) - 4, 4)
+                    radius: theme ? theme.controlRadius : 6
 
                     color: isActive ?
                            ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") :
@@ -176,8 +176,8 @@ Item {
                                ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26") : "transparent")
                     border.width: 1
                     border.color: isActive ?
-                                  ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
-                                  ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
+                                  ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                  ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
 
                     Behavior on color { ColorAnimation { duration: 120 } }
                     Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -201,8 +201,8 @@ Item {
                             font.pixelSize: 11
                             font.bold: tabCapsule.isActive
                             color: tabCapsule.isActive ?
-                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff") :
-                                   ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6")
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF") :
+                                   ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                         }
                     }
 
@@ -296,15 +296,16 @@ Item {
                 implicitWidth: btnDeleteText.implicitWidth + 14
                 implicitHeight: 26
                 radius: 4
-                color: "#26EF4444"
-                border.color: "#EF4444"
+                color: Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B", 0.15)
+                border.color: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"
 
                 Text {
                     id: btnDeleteText
                     anchors.centerIn: parent
                     text: qsTr("Delete")
                     font.pixelSize: 11
-                    color: "#EF4444"
+                    font.bold: true
+                    color: (theme && theme.dangerText) ? theme.dangerText : "#FF6B6B"
                 }
                 MouseArea {
                     anchors.fill: parent

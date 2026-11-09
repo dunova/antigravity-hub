@@ -28,6 +28,21 @@ class Theme : public QObject {
     Q_PROPERTY(QString muted READ muted NOTIFY changed)
     Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged)
 
+    // Omarchy Standard Design System Tokens
+    Q_PROPERTY(QString uiFont READ uiFont CONSTANT)
+    Q_PROPERTY(QString canvas READ canvas NOTIFY changed)
+    Q_PROPERTY(QString surfaceTop READ surfaceTop NOTIFY changed)
+    Q_PROPERTY(QString surfaceBottom READ surfaceBottom NOTIFY changed)
+    Q_PROPERTY(QString hairline READ hairline NOTIFY changed)
+    Q_PROPERTY(QString controlBorder READ controlBorder NOTIFY changed)
+    Q_PROPERTY(int panelRadius READ panelRadius NOTIFY changed)
+    Q_PROPERTY(int controlRadius READ controlRadius NOTIFY changed)
+    Q_PROPERTY(bool rounded READ rounded NOTIFY changed)
+    Q_PROPERTY(QString dangerText READ dangerText NOTIFY changed)
+    Q_PROPERTY(QString goodText READ goodText NOTIFY changed)
+    Q_PROPERTY(QString warningText READ warningText NOTIFY changed)
+    Q_PROPERTY(QString accentText READ accentText NOTIFY changed)
+
 public:
     explicit Theme(const QString &currentDirectory = {}, QObject *parent = nullptr, const QString &hyprctl = {});
     ~Theme() override;
@@ -51,6 +66,21 @@ public:
 
     QString themeMode() const { return m_themeMode; }
     void setThemeMode(const QString &mode);
+
+    // Omarchy Standard Getters
+    QString uiFont() const { return m_uiFont; }
+    QString canvas() const { return m_background; }
+    QString surfaceTop() const { return m_surfaceTop; }
+    QString surfaceBottom() const { return m_surfaceBottom; }
+    QString hairline() const { return m_hairline; }
+    QString controlBorder() const { return m_controlBorder; }
+    int panelRadius() const { return qMin(m_radius, 14); }
+    int controlRadius() const { return m_radius > 0 ? qBound(4, m_radius * 2 / 3, 8) : 4; }
+    bool rounded() const { return m_radius > 0; }
+    QString dangerText() const { return m_dangerText; }
+    QString goodText() const { return m_goodText; }
+    QString warningText() const { return m_warningText; }
+    QString accentText() const { return m_accentText; }
 
     // Static helper for isolated file parsing & testing
     static void parsePalette(const QString &path,
@@ -79,10 +109,20 @@ private:
     QString m_surface3 = "#24283b";
     QString m_text1 = "#FFFFFF";
     QString m_text2 = "#F3F4F6";
-    QString m_text3 = "#9CA3AF";
-    QString m_text4 = "#6B7280";
+    QString m_text3 = "#CBD5E1";
+    QString m_text4 = "#94A3B8";
     QString m_border = "rgba(255, 255, 255, 0.08)";
     int m_radius = 0;
+
+    QString m_uiFont = "sans-serif";
+    QString m_surfaceTop = "#172c25";
+    QString m_surfaceBottom = "#11201b";
+    QString m_hairline = "rgba(255, 255, 255, 0.12)";
+    QString m_controlBorder = "rgba(255, 255, 255, 0.24)";
+    QString m_dangerText = "#FF6B6B";
+    QString m_goodText = "#4ADE80";
+    QString m_warningText = "#FFD166";
+    QString m_accentText = "#8bcbb1";
 
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;

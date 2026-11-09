@@ -12,6 +12,7 @@
 #include <QQmlEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
+#include <QQuickWindow>
 #include <cstdio>
 
 #include "theme.h"
@@ -43,6 +44,7 @@ private slots:
 
     // Milestone 2 Tests: AccountFilterProxyModel
     void accountFilterProxyModelFiltering();
+    void accountFilterProxyModelFullSorting();
 
     // Milestone 2 Tests: BackendController
     void backendControllerStateAndUrls();
@@ -106,8 +108,8 @@ void AntigravityHubTests::themeReadsAccent() {
     QCOMPARE(theme.surface3(), QString("#203b31"));
     QCOMPARE(theme.text1(), QString("#FFFFFF"));
     QCOMPARE(theme.text2(), QString("#F3F4F6"));
-    QCOMPARE(theme.text3(), QString("#9CA3AF"));
-    QCOMPARE(theme.text4(), QString("#6B7280"));
+    QCOMPARE(theme.text3(), QString("#CBD5E1"));
+    QCOMPARE(theme.text4(), QString("#94A3B8"));
 
     // Verify Light Mode (白色主题) switch
     theme.setThemeMode("light");
@@ -600,6 +602,96 @@ void AntigravityHubTests::accountFilterProxyModelFiltering() {
     QCOMPARE(proxy.filteredCount(), 3);
 }
 
+void AntigravityHubTests::accountFilterProxyModelFullSorting() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    QDir(tempDir.path()).mkpath("data");
+    const QString accountsFile = tempDir.filePath("data/accounts_hub.json");
+
+    QJsonObject accountsObj;
+
+    // Account A: zebra@gmail.com (Index 1), gemini4: 0.20, standby
+    QJsonObject a1;
+    a1["email"] = "zebra@gmail.com";
+    a1["name"] = "zebra";
+    a1["validation_blocked"] = false;
+    QJsonObject a1Gem; a1Gem["quota_5h"] = 0.5; a1Gem["quota_weekly"] = 0.4; a1["gemini"] = a1Gem;
+    QJsonObject a1Cla; a1Cla["quota_5h"] = 0.5; a1Cla["quota_weekly"] = 0.3; a1["claude"] = a1Cla;
+    QJsonObject a1G4; a1G4["quota_weekly"] = 0.20; a1["gemini4"] = a1G4;
+    accountsObj["zebra@gmail.com"] = a1;
+
+    // Account B: alpha@gmail.com (Index 2), gemini4: 0.90, active
+    QJsonObject a2;
+    a2["email"] = "alpha@gmail.com";
+    a2["name"] = "alpha";
+    a2["validation_blocked"] = false;
+    QJsonObject a2Gem; a2Gem["quota_5h"] = 0.9; a2Gem["quota_weekly"] = 0.8; a2["gemini"] = a2Gem;
+    QJsonObject a2Cla; a2Cla["quota_5h"] = 0.9; a2Cla["quota_weekly"] = 0.8; a2["claude"] = a2Cla;
+    QJsonObject a2G4; a2G4["quota_weekly"] = 0.90; a2["gemini4"] = a2G4;
+    accountsObj["alpha@gmail.com"] = a2;
+
+    // Account C: mango@gmail.com (Index 3), gemini4: 0.50, blocked
+    QJsonObject a3;
+    a3["email"] = "mango@gmail.com";
+    a3["name"] = "mango";
+    a3["validation_blocked"] = true;
+    QJsonObject a3Gem; a3Gem["quota_5h"] = 0.1; a3Gem["quota_weekly"] = 0.1; a3["gemini"] = a3Gem;
+    QJsonObject a3Cla; a3Cla["quota_5h"] = 0.1; a3Cla["quota_weekly"] = 0.1; a3["claude"] = a3Cla;
+    QJsonObject a3G4; a3G4["quota_weekly"] = 0.50; a3["gemini4"] = a3G4;
+    accountsObj["mango@gmail.com"] = a3;
+
+    QJsonObject rootDoc;
+    rootDoc["active_email"] = "alpha@gmail.com";
+    rootDoc["accounts"] = accountsObj;
+
+    QFile file(accountsFile);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(QJsonDocument(rootDoc).toJson());
+    file.close();
+
+    AccountModel model;
+    AccountFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+    QCOMPARE(proxy.rowCount(), 3);
+
+    // 1. Sort by index ascending (natural 1, 2, 3)
+    proxy.setSortRule("index", Qt::AscendingOrder);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::IndexRole).toInt(), 1);
+    QCOMPARE(proxy.data(proxy.index(2, 0), AccountModel::IndexRole).toInt(), 3);
+
+    // 2. Sort by index descending (3, 2, 1)
+    proxy.setSortRule("index", Qt::DescendingOrder);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::IndexRole).toInt(), 3);
+    QCOMPARE(proxy.data(proxy.index(2, 0), AccountModel::IndexRole).toInt(), 1);
+
+    // 3. Sort by account ascending (alpha, mango, zebra)
+    proxy.setSortRule("account", Qt::AscendingOrder);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::DisplayUsernameRole).toString(), QString("alpha"));
+    QCOMPARE(proxy.data(proxy.index(1, 0), AccountModel::DisplayUsernameRole).toString(), QString("mango"));
+    QCOMPARE(proxy.data(proxy.index(2, 0), AccountModel::DisplayUsernameRole).toString(), QString("zebra"));
+
+    // 4. Sort by account descending (zebra, mango, alpha)
+    proxy.setSortRule("account", Qt::DescendingOrder);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::DisplayUsernameRole).toString(), QString("zebra"));
+    QCOMPARE(proxy.data(proxy.index(2, 0), AccountModel::DisplayUsernameRole).toString(), QString("alpha"));
+
+    // 5. Sort by status (Active first)
+    proxy.setSortRule("status", Qt::AscendingOrder);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::IsActiveRole).toBool(), true); // alpha is active
+
+    // 6. Sort by Gemini 4 descending (alpha 0.90, mango 0.50, zebra 0.20)
+    proxy.setSortRule("gemini4", Qt::DescendingOrder);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::DisplayUsernameRole).toString(), QString("alpha"));
+    QCOMPARE(proxy.data(proxy.index(1, 0), AccountModel::DisplayUsernameRole).toString(), QString("mango"));
+    QCOMPARE(proxy.data(proxy.index(2, 0), AccountModel::DisplayUsernameRole).toString(), QString("zebra"));
+
+    // 7. Reset to default order
+    proxy.setSortRule("default", Qt::DescendingOrder);
+    QCOMPARE(proxy.sortField(), QString("default"));
+}
+
 // -----------------------------------------------------------------------------
 // Milestone 2: BackendController State & Endpoints
 // -----------------------------------------------------------------------------
@@ -682,6 +774,38 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
     // 2. Setup mock environment & context properties
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+    QDir(tempDir.path()).mkpath("data");
+    const QString accountsFile = tempDir.filePath("data/accounts_hub.json");
+    {
+        QJsonObject accountsObj;
+        QJsonObject a1; a1["email"] = "cakeai88@gmail.com"; a1["name"] = "cakeai88"; a1["validation_blocked"] = false;
+        QJsonObject a1Gem; a1Gem["quota_5h"] = 0.85; a1Gem["quota_weekly"] = 0.72; a1["gemini"] = a1Gem;
+        QJsonObject a1Cla; a1Cla["quota_5h"] = 0.90; a1Cla["quota_weekly"] = 0.65; a1["claude"] = a1Cla;
+        QJsonObject a1G4; a1G4["quota_weekly"] = 0.80; a1["gemini4"] = a1G4;
+        accountsObj["cakeai88@gmail.com"] = a1;
+
+        QJsonObject a2; a2["email"] = "novadu99@gmail.com"; a2["name"] = "novadu99"; a2["validation_blocked"] = false;
+        QJsonObject a2Gem; a2Gem["quota_5h"] = 0.12; a2Gem["quota_weekly"] = 0.08; a2["gemini"] = a2Gem;
+        QJsonObject a2Cla; a2Cla["quota_5h"] = 0.14; a2Cla["quota_weekly"] = 0.06; a2["claude"] = a2Cla;
+        QJsonObject a2G4; a2G4["quota_weekly"] = 0.10; a2["gemini4"] = a2G4;
+        accountsObj["novadu99@gmail.com"] = a2;
+
+        QJsonObject a3; a3["email"] = "deadlock@gmail.com"; a3["name"] = "deadlock"; a3["validation_blocked"] = true;
+        QJsonObject a3Gem; a3Gem["quota_5h"] = 0.0; a3Gem["quota_weekly"] = 0.0; a3["gemini"] = a3Gem;
+        QJsonObject a3Cla; a3Cla["quota_5h"] = 0.0; a3Cla["quota_weekly"] = 0.0; a3["claude"] = a3Cla;
+        QJsonObject a3G4; a3G4["quota_weekly"] = 0.0; a3["gemini4"] = a3G4;
+        accountsObj["deadlock@gmail.com"] = a3;
+
+        QJsonObject rootDoc;
+        rootDoc["active_email"] = "cakeai88@gmail.com";
+        rootDoc["accounts"] = accountsObj;
+        QFile f(accountsFile);
+        if (f.open(QIODevice::WriteOnly)) {
+            f.write(QJsonDocument(rootDoc).toJson());
+            f.close();
+        }
+    }
     Theme theme(tempDir.path());
     Translator translator(tempDir.filePath("lang"), ":/i18n");
     BackendController backend;
@@ -754,6 +878,14 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
         QVERIFY2(!comp.isError(), qPrintable(comp.errorString()));
         QScopedPointer<QObject> obj(comp.create());
         QVERIFY2(obj != nullptr, "Main.qml failed to instantiate offscreen");
+        if (auto *win = qobject_cast<QQuickWindow*>(obj.data())) {
+            win->show();
+            QCoreApplication::processEvents();
+            const QImage snapshot = win->grabWindow();
+            if (!snapshot.isNull()) {
+                snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/hub_pure_offscreen.png"));
+            }
+        }
     }
 }
 
@@ -780,6 +912,29 @@ void AntigravityHubTests::accountListViewVisualDenoisingInvariants() {
     // 3. Weekly depletion short-circuit to 0.0% & Weekly Depleted
     QVERIFY2(content.contains(QStringLiteral("qsTr(\"Weekly Depleted\")")),
              "AccountListView.qml missing Weekly Depleted short-circuit handler");
+
+    // 4. Zero animation on ACTIVE badge & zero pure red (#EF4444)
+    QVERIFY2(!content.contains(QStringLiteral("SequentialAnimation on opacity")),
+             "MANDATORY DENOISING VIOLATION: SequentialAnimation on opacity found in AccountListView.qml");
+    QVERIFY2(!content.contains(QStringLiteral("#EF4444")),
+             "MANDATORY COLOR VIOLATION: Pure red '#EF4444' found in AccountListView.qml");
+
+    // 5. Verify HeaderBar visual invariants
+    QFile headerFile(QStringLiteral(":/HeaderBar.qml"));
+    QVERIFY(headerFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString headerContent = QString::fromUtf8(headerFile.readAll());
+    headerFile.close();
+
+    QVERIFY2(!headerContent.contains(QStringLiteral("SequentialAnimation on opacity")),
+             "MANDATORY DENOISING VIOLATION: Breathing animation found in HeaderBar.qml");
+    QVERIFY2(!headerContent.contains(QStringLiteral("#EF4444")),
+             "MANDATORY COLOR VIOLATION: Pure red '#EF4444' found in HeaderBar.qml");
+    QVERIFY2(!headerContent.contains(QStringLiteral("name: \"gear\"")),
+             "MANDATORY DENOISING VIOLATION: Gear logo found in HeaderBar settings capsule");
+    QVERIFY2(!headerContent.contains(QStringLiteral("name: \"bolt\"")),
+             "MANDATORY DENOISING VIOLATION: Bolt logo found in HeaderBar topg capsule");
+    QVERIFY2(!headerContent.contains(QStringLiteral("name: \"sparkle\"")),
+             "MANDATORY DENOISING VIOLATION: Sparkle logo found in HeaderBar prewarm capsule");
 }
 
 void AntigravityHubTests::cleanupTestCase() {

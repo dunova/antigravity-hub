@@ -27,5 +27,9 @@
         <!-- Internationalization Catalogs -->
         <file alias="i18n/en.json">i18n/en.json</file>
         <file alias="i18n/zh-CN.json">i18n/zh-CN.json</file>
+
+        <!-- Typography Fonts -->
+        <file alias="fonts/InterVariable.ttf">fonts/InterVariable.ttf</file>
+        <file alias="fonts/Inter-LICENSE.txt">fonts/Inter-LICENSE.txt</file>
     </qresource>
 </RCC>

@@ -7,10 +7,13 @@ import QtQuick.Controls.impl 2.15
 Rectangle {
     id: headerBarRoot
     height: 48
-    color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#0f1e19"
-    radius: Math.max((theme ? theme.radius : 0) - 2, 0)
-    border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+    radius: theme ? theme.panelRadius : 8
+    border.color: (theme && theme.hairline) ? theme.hairline : "rgba(255, 255, 255, 0.12)"
     border.width: 1
+    gradient: Gradient {
+        GradientStop { position: 0; color: (theme && theme.surfaceTop) ? theme.surfaceTop : "#172c25" }
+        GradientStop { position: 1; color: (theme && theme.surfaceBottom) ? theme.surfaceBottom : "#11201b" }
+    }
 
     signal openSettings()
 
@@ -56,7 +59,7 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
         }
 
-        // 3. Current ACTIVE Account Highlight Badge
+        // 3. Current ACTIVE Account Highlight Badge (Static, no blinking animation)
         Rectangle {
             id: activeBadge
             height: 28
@@ -65,8 +68,12 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
 
             // Adaptive coloring based on manual protection lock
-            color: (backend && backend.isManualLocked) ? "#26EF4444" : "#2022C55E"
-            border.color: (backend && backend.isManualLocked) ? "#EF4444" : "#22C55E"
+            color: (backend && backend.isManualLocked) ?
+                   Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B", 0.15) :
+                   Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.15)
+            border.color: (backend && backend.isManualLocked) ?
+                          ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                          ((theme && theme.goodText) ? theme.goodText : "#4ADE80")
             border.width: 1
 
             RowLayout {
@@ -74,20 +81,15 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 6
 
-                // Breathing Glow Indicator Dot
+                // Static Solid Indicator Dot (No blinking/breathing)
                 Rectangle {
                     id: breathingDot
                     width: 8
                     height: 8
                     radius: 4
-                    color: (backend && backend.isManualLocked) ? "#EF4444" : "#22C55E"
-
-                    SequentialAnimation on opacity {
-                        loops: Animation.Infinite
-                        running: !(backend && backend.isManualLocked)
-                        NumberAnimation { from: 0.3; to: 1.0; duration: 1200; easing.type: Easing.InOutSine }
-                        NumberAnimation { from: 1.0; to: 0.3; duration: 1200; easing.type: Easing.InOutSine }
-                    }
+                    color: (backend && backend.isManualLocked) ?
+                           ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                           ((theme && theme.goodText) ? theme.goodText : "#4ADE80")
                 }
 
                 // Badge Status Tag
@@ -103,8 +105,10 @@ Rectangle {
                         return qsTr("Not Active");
                     }
                     font.bold: true
-                    font.pixelSize: 10
-                    color: (backend && backend.isManualLocked) ? "#EF4444" : "#22C55E"
+                    font.pixelSize: 11
+                    color: (backend && backend.isManualLocked) ?
+                           ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                           ((theme && theme.goodText) ? theme.goodText : "#4ADE80")
                 }
 
                 // Active Account Handle (Masked if masking enabled)
@@ -121,8 +125,9 @@ Rectangle {
                         return uname;
                     }
                     font.pixelSize: 12
+                    font.bold: true
                     font.family: "Monospace"
-                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#dfede5"
+                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     elide: Text.ElideRight
                     Layout.maximumWidth: 180
                 }
@@ -161,7 +166,7 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.47.0")
+                text: qsTr("v%1").arg("2.48.0")
                 font.family: "Monospace"
                 font.pixelSize: 11
                 color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#64887b"
@@ -182,7 +187,7 @@ Rectangle {
             id: maskCapsule
             height: 30
             implicitWidth: maskText.implicitWidth + 22
-            radius: Math.max((theme ? theme.radius : 0) - 4, 4)
+            radius: theme ? theme.controlRadius : 6
             Layout.alignment: Qt.AlignVCenter
 
             color: (backend && backend.masked) ?
@@ -192,7 +197,7 @@ Rectangle {
                        ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26"))
             border.color: (backend && backend.masked) ?
                           ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
+                          ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
             border.width: 1
 
             Text {
@@ -203,7 +208,7 @@ Rectangle {
                 font.bold: true
                 color: (backend && backend.masked) ?
                        ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                       ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#dfede5")
+                       ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
             }
 
             MouseArea {
@@ -219,37 +224,29 @@ Rectangle {
             }
         }
 
-        // 2. Settings Capsule (设置)
+        // 2. Settings Capsule (设置 - 纯文本跟随系统)
         Rectangle {
             id: settingsCapsule
             height: 30
-            implicitWidth: settRow.implicitWidth + 22
-            radius: Math.max((theme ? theme.radius : 0) - 4, 4)
+            implicitWidth: settText.implicitWidth + 24
+            radius: theme ? theme.controlRadius : 6
             Layout.alignment: Qt.AlignVCenter
 
             color: settMouse.containsMouse ?
                    ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31") :
                    ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#142620")
-            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)"
+            border.color: settMouse.containsMouse ?
+                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                          ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
             border.width: 1
 
-            RowLayout {
-                id: settRow
+            Text {
+                id: settText
                 anchors.centerIn: parent
-                spacing: 6
-
-                AppIcon {
-                    name: "gear"
-                    size: 14
-                    tint: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4"
-                }
-
-                Text {
-                    id: settText
-                    text: qsTr("Settings")
-                    font.pixelSize: 12
-                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4"
-                }
+                text: qsTr("Settings")
+                font.pixelSize: 12
+                font.bold: true
+                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
             }
 
             MouseArea {
@@ -263,40 +260,29 @@ Rectangle {
             }
         }
 
-        // 3. TopG Capsule
+        // 3. TopG Capsule (纯文本跟随系统，无小图标)
         Rectangle {
             id: topgCapsule
             height: 30
-            implicitWidth: topgRow.implicitWidth + 22
-            radius: Math.max((theme ? theme.radius : 0) - 4, 4)
+            implicitWidth: topgText.implicitWidth + 24
+            radius: theme ? theme.controlRadius : 6
             Layout.alignment: Qt.AlignVCenter
 
             color: topgMouse.containsMouse ?
                    ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31") :
                    ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#142620")
             border.color: topgMouse.containsMouse ?
-                          "#F59E0B" :
-                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)")
+                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                          ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)")
             border.width: 1
 
-            RowLayout {
-                id: topgRow
+            Text {
+                id: topgText
                 anchors.centerIn: parent
-                spacing: 5
-
-                AppIcon {
-                    name: "bolt"
-                    size: 13
-                    tint: "#F59E0B"
-                }
-
-                Text {
-                    id: topgText
-                    text: "TopG"
-                    font.pixelSize: 12
-                    font.bold: true
-                    color: "#F59E0B"
-                }
+                text: "TopG"
+                font.pixelSize: 12
+                font.bold: true
+                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
             }
 
             MouseArea {
@@ -317,7 +303,7 @@ Rectangle {
             id: rotationCapsule
             height: 30
             implicitWidth: geminiText.implicitWidth + 22
-            radius: Math.max((theme ? theme.radius : 0) - 4, 4)
+            radius: theme ? theme.controlRadius : 6
             Layout.alignment: Qt.AlignVCenter
 
             property string currentMode: backend ? backend.rotationMode : "gemini"
@@ -328,7 +314,7 @@ Rectangle {
             border.color: {
                 if (currentMode === "gemini") return (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1";
                 if (currentMode === "claude") return "#bb9af7";
-                return (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff";
+                return (theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)";
             }
             border.width: 1
 
@@ -362,12 +348,12 @@ Rectangle {
             }
         }
 
-        // 5. Prewarm Capsule (预热)
+        // 5. Prewarm Capsule (预热 - 纯文本跟随系统，无小图标)
         Rectangle {
             id: prewarmCapsule
             height: 30
-            implicitWidth: prewarmRow.implicitWidth + 22
-            radius: Math.max((theme ? theme.radius : 0) - 4, 4)
+            implicitWidth: prewarmRow.implicitWidth + 24
+            radius: theme ? theme.controlRadius : 6
             Layout.alignment: Qt.AlignVCenter
 
             color: prewarmMouse.containsMouse ?
@@ -375,7 +361,9 @@ Rectangle {
                    ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26")
             border.color: (backend && backend.busy) ?
                           ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
+                          (prewarmMouse.containsMouse ?
+                              ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                              ((theme && theme.controlBorder) ? theme.controlBorder : "rgba(255, 255, 255, 0.24)"))
             border.width: 1
 
             RowLayout {
@@ -390,19 +378,12 @@ Rectangle {
                     visible: backend ? backend.busy : false
                 }
 
-                AppIcon {
-                    visible: !(backend && backend.busy)
-                    name: "sparkle"
-                    size: 14
-                    tint: "#EF4444"
-                }
-
                 Text {
                     id: prewarmLabel
                     text: qsTr("Prewarm")
                     font.pixelSize: 12
                     font.bold: true
-                    color: "#EF4444"
+                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                 }
             }
 

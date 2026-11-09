@@ -625,8 +625,10 @@ void AccountFilterProxyModel::setSortField(const QString &field) {
         emit sortFieldChanged(m_sortField);
         if (m_sortField != QStringLiteral("default") && !m_sortField.isEmpty()) {
             sort(0, m_sortOrder);
+            invalidate();
         } else {
             sort(-1);
+            invalidate();
         }
     }
 }
@@ -637,6 +639,7 @@ void AccountFilterProxyModel::setSortOrder(Qt::SortOrder order) {
         emit sortOrderChanged(m_sortOrder);
         if (m_sortField != QStringLiteral("default") && !m_sortField.isEmpty()) {
             sort(0, m_sortOrder);
+            invalidate();
         }
     }
 }
@@ -648,8 +651,10 @@ void AccountFilterProxyModel::setSortRule(const QString &field, Qt::SortOrder or
     emit sortOrderChanged(m_sortOrder);
     if (m_sortField != QStringLiteral("default") && !m_sortField.isEmpty()) {
         sort(0, m_sortOrder);
+        invalidate();
     } else {
         sort(-1);
+        invalidate();
     }
 }
 
@@ -711,7 +716,29 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
 }
 
 bool AccountFilterProxyModel::lessThan(const QModelIndex &sourceLeft, const QModelIndex &sourceRight) const {
-    if (m_sortField == QStringLiteral("gemini4")) {
+    if (m_sortField == QStringLiteral("index")) {
+        const int a = sourceModel()->data(sourceLeft, AccountModel::IndexRole).toInt();
+        const int b = sourceModel()->data(sourceRight, AccountModel::IndexRole).toInt();
+        if (a != b) return a < b;
+    } else if (m_sortField == QStringLiteral("account") || m_sortField == QStringLiteral("username")) {
+        const QString a = sourceModel()->data(sourceLeft, AccountModel::DisplayUsernameRole).toString().toLower();
+        const QString b = sourceModel()->data(sourceRight, AccountModel::DisplayUsernameRole).toString().toLower();
+        if (a != b) return a < b;
+    } else if (m_sortField == QStringLiteral("status")) {
+        // Active > Standby > Cooling > Exhausted > Blocked
+        const auto statusRank = [](const QModelIndex &idx) -> int {
+            if (idx.data(AccountModel::IsActiveRole).toBool()) return 0;
+            const QString st = idx.data(AccountModel::StatusRole).toString();
+            if (st == QStringLiteral("STANDBY")) return 1;
+            if (st == QStringLiteral("COOLING")) return 2;
+            if (st == QStringLiteral("EXHAUSTED")) return 3;
+            if (idx.data(AccountModel::IsBlockedRole).toBool()) return 4;
+            return 5;
+        };
+        const int a = statusRank(sourceLeft);
+        const int b = statusRank(sourceRight);
+        if (a != b) return a < b;
+    } else if (m_sortField == QStringLiteral("gemini4")) {
         const double a = sourceModel()->data(sourceLeft, AccountModel::Gemini4QuotaRole).toDouble();
         const double b = sourceModel()->data(sourceRight, AccountModel::Gemini4QuotaRole).toDouble();
         if (a != b) return a < b;

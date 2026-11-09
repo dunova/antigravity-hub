@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMap>
@@ -11,9 +12,27 @@
 #include <QStandardPaths>
 #include <cmath>
 
+static QString mixColors(const QString &from, const QString &to, double amount) {
+    const QColor a(from), b(to);
+    return QColor::fromRgbF(a.redF() + (b.redF() - a.redF()) * amount,
+                            a.greenF() + (b.greenF() - a.greenF()) * amount,
+                            a.blueF() + (b.blueF() - a.blueF()) * amount).name();
+}
+
+static QString withAlphaColor(const QString &color, double alpha) {
+    QColor c(color);
+    c.setAlphaF(alpha);
+    return c.name(QColor::HexArgb);
+}
+
 Theme::Theme(const QString &directory, QObject *parent, const QString &hyprctl)
     : QObject(parent),
       m_directory(directory.isEmpty() ? QDir::homePath() + "/.local/state/omarchy/current" : directory) {
+
+    // Load InterVariable font directly for authentic Omarchy typography
+    const int fontId = QFontDatabase::addApplicationFont(":/fonts/InterVariable.ttf");
+    const QStringList families = fontId >= 0 ? QFontDatabase::applicationFontFamilies(fontId) : QStringList();
+    m_uiFont = families.isEmpty() ? QStringLiteral("sans-serif") : families.first();
 
     // 80ms single-shot debounce timer
     m_debounce.setSingleShot(true);
@@ -207,6 +226,9 @@ void Theme::reload() {
     }
 
     QString mode = effectiveMode;
+    QString surfaceTop, surfaceBottom, hairline, controlBorder;
+    QString dangerText, goodText, warningText, accentText;
+
     if (effectiveMode == "light") {
         // Pure White Theme (白色主题)
         mode = "light";
@@ -223,6 +245,14 @@ void Theme::reload() {
         if (accent.isEmpty() || accent == "#798186" || accent == "#cacccc") {
             accent = "#0284C7"; // Vibrant Sky
         }
+        surfaceTop = "#F8FAFC";
+        surfaceBottom = "#F1F5F9";
+        hairline = "rgba(0, 0, 0, 0.08)";
+        controlBorder = "rgba(0, 0, 0, 0.16)";
+        dangerText = "#DC2626";
+        goodText = "#16A34A";
+        warningText = "#D97706";
+        accentText = accent;
     } else {
         // Dark Mode: Aligned with Omarchy Control (Pure White text for crystal-clear readability)
         mode = "dark";
@@ -234,15 +264,27 @@ void Theme::reload() {
         // Pure white & high-contrast text invariants
         text1 = "#FFFFFF";    // Pure White (Headings, titles, account names, badges)
         text2 = "#F3F4F6";    // Crisp near-white
-        text3 = "#9CA3AF";    // Legible silver-gray (countdowns, column secondary)
-        text4 = "#6B7280";    // Legible muted gray
+        text3 = "#CBD5E1";    // Legible silver-gray (countdowns, column secondary)
+        text4 = "#94A3B8";    // Legible muted gray
         border = "rgba(255, 255, 255, 0.08)";
         if (accent.isEmpty()) accent = "#8bcbb1";
+
+        surfaceTop = mixColors(background, "#FFFFFF", 0.055);
+        surfaceBottom = mixColors(background, "#FFFFFF", 0.025);
+        hairline = withAlphaColor(text1, 0.12);
+        controlBorder = withAlphaColor(text1, 0.24);
+        dangerText = "#FF6B6B";
+        goodText = "#4ADE80";
+        warningText = "#FFD166";
+        accentText = accent;
     }
 
     bool hasChanged = (mode != m_mode || accent != m_accent || selection != m_selection || muted != m_muted ||
                        background != m_background || surface1 != m_surface1 || surface2 != m_surface2 || surface3 != m_surface3 ||
-                       text1 != m_text1 || text2 != m_text2 || text3 != m_text3 || text4 != m_text4 || border != m_border);
+                       text1 != m_text1 || text2 != m_text2 || text3 != m_text3 || text4 != m_text4 || border != m_border ||
+                       surfaceTop != m_surfaceTop || surfaceBottom != m_surfaceBottom || hairline != m_hairline ||
+                       controlBorder != m_controlBorder || dangerText != m_dangerText || goodText != m_goodText ||
+                       warningText != m_warningText || accentText != m_accentText);
 
     if (hasChanged) {
         m_mode = mode;
@@ -258,6 +300,14 @@ void Theme::reload() {
         m_text3 = text3;
         m_text4 = text4;
         m_border = border;
+        m_surfaceTop = surfaceTop;
+        m_surfaceBottom = surfaceBottom;
+        m_hairline = hairline;
+        m_controlBorder = controlBorder;
+        m_dangerText = dangerText;
+        m_goodText = goodText;
+        m_warningText = warningText;
+        m_accentText = accentText;
         emit changed();
     }
 }
