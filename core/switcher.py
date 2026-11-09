@@ -325,9 +325,11 @@ class AntigravityPhysicalManager:
 
     def write_to_linux_secret(self, access_token: str, refresh_token: str, email: str = "", expiry_str: str = "") -> bool:
         """
-        写入 Linux Secret Service (secret-tool)，100% 对齐官方 Go 语言服务器反序列化标准：
-        1. expiry: 必须为 RFC3339 标准纳秒/微秒时间戳 (如 2026-11-08T21:14:29.420585+08:00)；
-        2. writer_id: 优先继承已有密钥的原始 writer_id，无则生成合法随机字符，杜绝反序列化拒绝；
+        写入 Linux Secret Service (secret-tool)，100% 对齐官方 Go 语言服务器反序列化标准与上游 v5.0.3 规范：
+        1. 双集合双写 (Dual Collection Sync):
+           - 优先写入 '/org/freedesktop/secrets/collection/login' 集合 (供 agy CLI 及 IDE 核心语言服务检索)；
+           - 同时写入默认集合 (Default Collection) 保证全系统工具统一；
+        2. expiry: 必须为 RFC3339 标准纳秒/微秒时间戳；
         3. expires_in: 3599 (整数)；
         4. auth_method: "consumer"；
         5. id_token_email: 当前账号。
@@ -336,7 +338,6 @@ class AntigravityPhysicalManager:
             logger.error("❌ write_to_linux_secret: access_token 或 refresh_token 为空")
             return False
 
-        # 提取现有凭据中的 writer_id 与 expires_in
         existing_writer_id = ""
         try:
             curr_cred = self.read_system_credential()
@@ -359,31 +360,51 @@ class AntigravityPhysicalManager:
             },
             "auth_method": "consumer",
             "id_token_email": email or "",
+            "id_token": "",
             "writer_id": final_writer_id
         }
         raw_val = json.dumps(payload_obj)
 
-        cmd = [
-            "secret-tool", "store",
-            "--label=Password for 'antigravity' on 'gemini'",
-            "service", "gemini",
-            "username", "antigravity"
+        commands_to_execute = [
+            # 1. 'login' collection (agy CLI)
+            [
+                "secret-tool", "store",
+                "--collection=/org/freedesktop/secrets/collection/login",
+                "--label=Password for 'antigravity' on 'gemini'",
+                "service", "gemini",
+                "username", "antigravity"
+            ],
+            # 2. default collection
+            [
+                "secret-tool", "store",
+                "--label=Password for 'antigravity' on 'gemini'",
+                "service", "gemini",
+                "username", "antigravity"
+            ]
         ]
+
+        success_count = 0
         with KeychainFileLock(timeout=5.0):
-            for attempt in range(1, 4):
-                try:
-                    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    out, err = p.communicate(input=raw_val, timeout=5)
-                    if p.returncode == 0:
-                        logger.info(f"🔑 [Linux secret-tool] 凭据已成功原子写入系统密钥环: {email} (expiry={clean_expiry})")
-                        return True
-                    else:
-                        logger.warning(f"⚠️ 写入 secret-tool 失败 (尝试 {attempt}/3): {err}")
+            for cmd in commands_to_execute:
+                col_name = "login" if "--collection=" in " ".join(cmd) else "default"
+                for attempt in range(1, 4):
+                    try:
+                        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        out, err = p.communicate(input=raw_val, timeout=5)
+                        if p.returncode == 0:
+                            success_count += 1
+                            break
+                        else:
+                            logger.warning(f"⚠️ 写入 secret-tool [{col_name}] 失败 (尝试 {attempt}/3): {err}")
+                            time.sleep(0.1 * attempt)
+                    except Exception as e:
+                        logger.error(f"❌ 执行 secret-tool [{col_name}] 异常: {e}")
                         time.sleep(0.1 * attempt)
-                except Exception as e:
-                    logger.error(f"❌ 执行 secret-tool 异常: {e}")
-                    time.sleep(0.1 * attempt)
-            return False
+
+        if success_count > 0:
+            logger.info(f"🔑 [Linux secret-tool] 凭据已成功同步写入密钥环集合 ({success_count}/2): {email} (expiry={clean_expiry})")
+            return True
+        return False
 
     def read_system_credential(self) -> Optional[Dict[str, Any]]:
         """跨平台安全读取系统钥匙串/密钥环凭据"""
@@ -454,39 +475,87 @@ class AntigravityPhysicalManager:
             return False
 
     def sync_local_credentials(self, email: str, access_token: str, refresh_token: str, expiry_ts: float):
-        """同步本地文件凭据 (oauth_creds.json 与 google_accounts.json)"""
+        """
+        同步本地文件凭据 (对齐官方 Standalone 架构与上游 v5.0.3 规范):
+        1. ~/.gemini/jetski-standalone-oauth-token (语言服务优先回退凭据，0o600 权限)；
+        2. ~/.gemini/oauth_creds.json (Gemini 官方标准凭据，毫秒时间戳保底正数，0o600 权限)；
+        3. ~/.gemini/google_accounts.json (活跃指针，0o600 权限)；
+        4. ~/.config/Antigravity/app_storage.json (注入 agy.onboarding.lastLoginUsername 杜绝掉登录页)。
+        """
+        now_ts = time.time()
         safe_expiry_ms = _safe_i64(expiry_ts * 1000)
+        if safe_expiry_ms <= 0:
+            safe_expiry_ms = int((now_ts + 3600) * 1000)
 
-        # 1. 更新 oauth_creds.json
+        clean_expiry_rfc = format_rfc3339(expiry_ts or (now_ts + 3600))
+
+        # 1. 写入 Standalone / 语言服务原生凭据: ~/.gemini/jetski-standalone-oauth-token
         try:
-            orig_scope = ""
-            if os.path.exists(OAUTH_CREDS_PATH):
-                with open(OAUTH_CREDS_PATH, "r") as f:
-                    orig_scope = json.load(f).get("scope", "")
+            jetski_path = os.path.expanduser("~/.gemini/jetski-standalone-oauth-token")
+            jetski_payload = {
+                "token": {
+                    "access_token": str(access_token),
+                    "token_type": "Bearer",
+                    "refresh_token": str(refresh_token),
+                    "expiry": clean_expiry_rfc,
+                    "expires_in": 3599
+                },
+                "auth_method": "consumer",
+                "id_token_email": email or "",
+                "id_token": ""
+            }
+            if atomic_write_json(jetski_path, jetski_payload):
+                try:
+                    os.chmod(jetski_path, 0o600)
+                except Exception:
+                    pass
+                logger.info(f"✅ Standalone 凭据已原子同步: {jetski_path} (600)")
+        except Exception as e:
+            logger.warning(f"⚠️ 同步 jetski-standalone-oauth-token 异常: {e}")
+
+        # 2. 更新 oauth_creds.json
+        try:
             oauth_payload = {
-                "access_token": access_token,
-                "refresh_token": refresh_token,
+                "access_token": str(access_token),
+                "refresh_token": str(refresh_token),
                 "token_type": "Bearer",
                 "expiry_date": safe_expiry_ms,
                 "id_token": "",
-                "scope": orig_scope
+                "scope": "https://www.googleapis.com/auth/userinfo.email openid https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.profile"
             }
-            atomic_write_json(OAUTH_CREDS_PATH, oauth_payload)
-            logger.info(f"✅ 本地凭据已原子同步: {OAUTH_CREDS_PATH}")
+            if atomic_write_json(OAUTH_CREDS_PATH, oauth_payload):
+                try:
+                    os.chmod(OAUTH_CREDS_PATH, 0o600)
+                except Exception:
+                    pass
+                logger.info(f"✅ 本地凭据已原子同步: {OAUTH_CREDS_PATH} (expiry_ms={safe_expiry_ms})")
         except Exception as e:
             logger.error(f"❌ 同步 oauth_creds.json 失败: {e}")
 
-        # 2. 更新 google_accounts.json active 字段
+        # 3. 更新 google_accounts.json active 字段
         try:
-            g_acc = {}
-            if os.path.exists(GOOGLE_ACCOUNTS_PATH):
-                with open(GOOGLE_ACCOUNTS_PATH, "r") as f:
-                    g_acc = json.load(f)
-            g_acc["active"] = email
-            atomic_write_json(GOOGLE_ACCOUNTS_PATH, g_acc)
-            logger.info(f"✅ 活跃账号已同步: {GOOGLE_ACCOUNTS_PATH} -> {email}")
+            g_acc = {"active": email, "old": []}
+            if atomic_write_json(GOOGLE_ACCOUNTS_PATH, g_acc):
+                try:
+                    os.chmod(GOOGLE_ACCOUNTS_PATH, 0o600)
+                except Exception:
+                    pass
+                logger.info(f"✅ 活跃账号已同步: {GOOGLE_ACCOUNTS_PATH} -> {email}")
         except Exception as e:
             logger.error(f"❌ 同步 google_accounts.json 失败: {e}")
+
+        # 4. 同步 Electron app_storage.json 的 lastLoginUsername 锁定
+        try:
+            app_storage_path = os.path.expanduser("~/.config/Antigravity/app_storage.json")
+            if os.path.isfile(app_storage_path):
+                with open(app_storage_path, "r", encoding="utf-8") as f:
+                    storage_data = json.load(f)
+                if storage_data.get("agy.onboarding.lastLoginUsername") != email:
+                    storage_data["agy.onboarding.lastLoginUsername"] = email
+                    atomic_write_json(app_storage_path, storage_data)
+                    logger.info(f"✅ Electron 登录指针已成功注入: {app_storage_path} -> {email}")
+        except Exception as e:
+            logger.warning(f"⚠️ 同步 app_storage.json 登录指针异常: {e}")
 
     def fetch_available_models(self, access_token: str) -> Tuple[str, List[str], Optional[Dict[str, Any]]]:
         """
@@ -539,7 +608,7 @@ class AntigravityPhysicalManager:
             logger.debug(f"探测模型矩阵异常: {e}")
             return "4.6", [], None
 
-    def execute_hot_switch(self, timeout_sec: float = 8.0, force: bool = False) -> bool:
+    def execute_hot_switch(self, timeout_sec: float = 8.0, force: bool = False, target_account: Optional[Dict[str, Any]] = None) -> bool:
         """
         【原生热切号】平滑重启 language_server 子进程，并等待新进程拉起就绪。
         IDE 主窗口、编辑器标签页与前端会话保持存活，language_server 重启后自动读取新钥匙串。
@@ -563,6 +632,24 @@ class AntigravityPhysicalManager:
                 for pid in old_pids:
                     logger.info(f"⚡ [Hot Switch] 发现旧 language_server (PID {pid})，发送平滑退出信号...")
                     subprocess.run(["kill", "-TERM", pid], capture_output=True)
+
+                # [Post-Kill Re-assert 权威二次断言] (对齐 upstream v5.0.3 规范)
+                # 语言服务子进程终止后立即补写一次凭据，覆盖退出钩子可能向 Keyring/文件回写陈旧 Session Token 的竞态！
+                if target_account:
+                    try:
+                        t_email = target_account.get("email", "")
+                        t_at = target_account.get("access_token", "")
+                        t_rt = target_account.get("refresh_token", "")
+                        t_exp = target_account.get("expiry_timestamp", 0)
+                        t_exp_rfc = format_rfc3339(t_exp)
+                        if sys.platform == "darwin":
+                            self.write_to_macos_keychain(t_at, t_rt, expiry_str=t_exp_rfc)
+                        elif sys.platform.startswith("linux"):
+                            self.write_to_linux_secret(t_at, t_rt, email=t_email, expiry_str=t_exp_rfc)
+                        self.sync_local_credentials(t_email, t_at, t_rt, t_exp)
+                        logger.info(f"🛡️ [Post-Kill Re-assert] 凭据权威二次补写断言成功: {t_email}")
+                    except Exception as rex:
+                        logger.warning(f"⚠️ [Post-Kill Re-assert] 补写告警: {rex}")
 
                 # 等待旧进程彻底退出，并轮询等待新 language_server 进程生成
                 start_t = time.time()
@@ -646,9 +733,9 @@ class AntigravityPhysicalManager:
         hub_data["last_updated"] = int(time.time())
         self.save_hub_accounts(hub_data)
 
-        # 4. 执行原生热切号
+        # 4. 执行原生热切号 (带 post-kill 二次权威断言)
         if force_hot_switch:
-            self.execute_hot_switch()
+            self.execute_hot_switch(target_account=fresh_acc)
 
         # 5. 原生断点接力投递
         if inject_recovery:

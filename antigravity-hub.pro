@@ -20,7 +20,8 @@ DEPENDPATH += src
 # Headers
 HEADERS += \
     src/theme.h \
-    src/translator.h
+    src/translator.h \
+    src/iconprovider.h
 
 exists(src/backend.h): HEADERS += src/backend.h
 exists(src/models.h):  HEADERS += src/models.h
@@ -28,7 +29,8 @@ exists(src/models.h):  HEADERS += src/models.h
 # Sources
 SOURCES += \
     src/theme.cpp \
-    src/translator.cpp
+    src/translator.cpp \
+    src/iconprovider.cpp
 
 exists(src/main.cpp):    SOURCES += src/main.cpp
 exists(src/backend.cpp): SOURCES += src/backend.cpp

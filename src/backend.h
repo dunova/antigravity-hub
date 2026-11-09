@@ -31,6 +31,7 @@ class BackendController : public QObject
     // 暴露给 QML 绑定的状态属性
     Q_PROPERTY(bool busy READ isBusy NOTIFY busyChanged)
     Q_PROPERTY(bool masked READ isMasked WRITE setMasked NOTIFY maskedChanged)
+    Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged)
     Q_PROPERTY(QString activeEmail READ activeEmail NOTIFY activeEmailChanged)
     Q_PROPERTY(QString rotationMode READ rotationMode NOTIFY rotationModeChanged)
     Q_PROPERTY(bool isDaemonActive READ isDaemonActive NOTIFY daemonActiveChanged)
@@ -45,6 +46,7 @@ public:
     // 属性读取器
     bool isBusy() const { return m_busyCount > 0; }
     bool isMasked() const { return m_isMasked; }
+    QString themeMode() const { return m_themeMode; }
     QString activeEmail() const { return m_activeEmail; }
     QString rotationMode() const { return m_rotationMode; }
     bool isDaemonActive() const { return m_isDaemonActive; }
@@ -54,6 +56,7 @@ public:
 
     // 属性写入器
     Q_INVOKABLE void setMasked(bool masked);
+    Q_INVOKABLE void setThemeMode(const QString &mode);
 
     // QML 调用的核心业务控制方法 (Q_INVOKABLE)
     Q_INVOKABLE void switchAccount(const QString &email);
@@ -76,6 +79,7 @@ public:
 signals:
     void busyChanged();
     void maskedChanged();
+    void themeModeChanged();
     void activeEmailChanged();
     void rotationModeChanged();
     void daemonActiveChanged();
@@ -119,6 +123,7 @@ private:
     // 内部状态字
     int m_busyCount = 0;
     bool m_isMasked = false;
+    QString m_themeMode = QStringLiteral("system");
     QString m_activeEmail;
     QString m_rotationMode = QStringLiteral("gemini");
     bool m_isDaemonActive = true;

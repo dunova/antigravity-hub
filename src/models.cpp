@@ -38,6 +38,27 @@ QString AccountModel::computeMaskedName(const QString &rawName) {
     }
 }
 
+QString AccountModel::computeMaskedUsername(const QString &rawUname) {
+    if (rawUname.isEmpty()) return QString();
+
+    QString target = rawUname;
+    int atIdx = target.indexOf('@');
+    if (atIdx != -1) {
+        target = target.left(atIdx);
+    }
+
+    const int len = target.length();
+    if (len == 0) {
+        return QString();
+    } else if (len == 1) {
+        return target + QStringLiteral("***");
+    } else if (len == 2) {
+        return target.left(1) + QStringLiteral("***") + target.right(1);
+    } else {
+        return target.left(1) + QStringLiteral("***") + target.right(2);
+    }
+}
+
 qint64 AccountModel::parseIsoTimestamp(const QString &isoStr) {
     if (isoStr.isEmpty() || isoStr == QStringLiteral("--")) {
         return 0;
@@ -200,13 +221,16 @@ void AccountModel::loadFromDisk() {
         item.isBlocked = a.value(QStringLiteral("validation_blocked")).toBool(false);
         item.validationUrl = a.value(QStringLiteral("validation_url")).toString();
 
-        // 账号名与脱敏名
+        // 账号名与脱敏名 (剥离 @ 后缀保留纯净用户名作为账号列标识)
+        item.username = item.email.contains('@') ? item.email.section('@', 0, 0) : item.email;
+        item.maskedUsername = computeMaskedUsername(item.username);
+
         QString rawName = a.value(QStringLiteral("name")).toString();
         if (rawName.isEmpty()) {
-            rawName = item.email.contains('@') ? item.email.split('@').first() : item.email;
+            rawName = item.username;
         }
         item.name = rawName;
-        item.shortName = item.email.contains('@') ? item.email.split('@').first() : item.email;
+        item.shortName = item.username;
         item.maskedName = computeMaskedName(item.shortName);
 
         // Claude 版本与模型矩阵探测
@@ -380,7 +404,7 @@ void AccountModel::setIsMasked(bool masked) {
         m_isMasked = masked;
         emit isMaskedChanged(m_isMasked);
         if (!m_accounts.isEmpty()) {
-            emit dataChanged(index(0), index(m_accounts.size() - 1), { MaskedNameRole, NameRole });
+            emit dataChanged(index(0), index(m_accounts.size() - 1), { MaskedNameRole, NameRole, UsernameRole, DisplayUsernameRole });
         }
     }
 }
@@ -402,6 +426,10 @@ QVariant AccountModel::data(const QModelIndex &index, int role) const {
         return index.row() + 1; // 1-based 表格序号
     case EmailRole:
         return item.email;
+    case UsernameRole:
+        return item.username;
+    case DisplayUsernameRole:
+        return m_isMasked ? item.maskedUsername : item.username;
     case NameRole:
         return m_isMasked ? item.maskedName : item.name;
     case ShortNameRole:
@@ -462,6 +490,8 @@ QHash<int, QByteArray> AccountModel::roleNames() const {
     QHash<int, QByteArray> roles;
     roles[IndexRole] = "index";
     roles[EmailRole] = "email";
+    roles[UsernameRole] = "username";
+    roles[DisplayUsernameRole] = "displayUsername";
     roles[NameRole] = "name";
     roles[ShortNameRole] = "shortName";
     roles[MaskedNameRole] = "maskedName";
@@ -495,6 +525,8 @@ QVariantMap AccountModel::getAccount(int row) const {
     const auto &item = m_accounts.at(row);
     map[QStringLiteral("index")] = row + 1;
     map[QStringLiteral("email")] = item.email;
+    map[QStringLiteral("username")] = item.username;
+    map[QStringLiteral("displayUsername")] = m_isMasked ? item.maskedUsername : item.username;
     map[QStringLiteral("name")] = m_isMasked ? item.maskedName : item.name;
     map[QStringLiteral("shortName")] = item.shortName;
     map[QStringLiteral("maskedName")] = item.maskedName;

@@ -70,6 +70,18 @@ Dialog {
                 break;
             }
         }
+
+        // 5. Theme Mode
+        var thMode = s.theme_mode || (backend ? backend.themeMode : "system");
+        for (var k = 0; k < themeModeCombo.model.length; ++k) {
+            if (themeModeCombo.model[k].value === thMode) {
+                themeModeCombo.currentIndex = k;
+                break;
+            }
+        }
+
+        // 6. Account Mask
+        maskSwitch.checked = (backend ? backend.masked : false);
     }
 
     function saveAndApply() {
@@ -79,11 +91,18 @@ Dialog {
             "claude_threshold": Number(claudeSlider.value.toFixed(2)),
             "hourly_warmup": prewarmSwitch.checked,
             "notifications_enabled": notificationSwitch.checked,
+            "account_mask": maskSwitch.checked,
+            "theme_mode": themeModeCombo.model[themeModeCombo.currentIndex].value,
             "language": languageCombo.model[languageCombo.currentIndex].value
         };
 
         if (backend) {
             backend.saveSettings(payload);
+            backend.setMasked(maskSwitch.checked);
+            backend.setThemeMode(payload.theme_mode);
+        }
+        if (theme) {
+            theme.setThemeMode(payload.theme_mode);
         }
         root.settingsSaved(payload);
         root.accept();
@@ -121,12 +140,10 @@ Dialog {
                         color: parent.hovered ? "#14ffffff" : "transparent"
                         radius: 4
                     }
-                    contentItem: Text {
-                        text: "✕"
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#b4bee6"
-                        font.pixelSize: 13
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                    contentItem: AppIcon {
+                        name: "close"
+                        size: 13
+                        tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
                     }
                     onClicked: root.reject()
                 }
@@ -438,7 +455,118 @@ Dialog {
                     }
                 }
 
-                // 6. Language Selection
+                // 6. Mask Account Identifiers Switch (账号脱敏选项，默认关闭)
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            text: qsTr("Mask Account Identifiers")
+                            font.pixelSize: 12
+                            font.weight: Font.Medium
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4"
+                        }
+                        Text {
+                            text: qsTr("Mask account usernames into c***8 format in table view")
+                            font.pixelSize: 11
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    Switch {
+                        id: maskSwitch
+                        checked: backend ? backend.masked : false
+                        onToggled: {
+                            if (backend) backend.setMasked(checked);
+                        }
+
+                        indicator: Rectangle {
+                            implicitWidth: 38
+                            implicitHeight: 22
+                            radius: 11
+                            color: maskSwitch.checked ?
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31")
+                            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)"
+
+                            Rectangle {
+                                x: maskSwitch.checked ? parent.width - width - 3 : 3
+                                y: 3
+                                width: 16
+                                height: 16
+                                radius: 8
+                                color: maskSwitch.checked ?
+                                       ((theme && theme.accentForeground && theme.accentForeground.charAt(0) === '#') ? theme.accentForeground : "#000000") :
+                                       ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9")
+                                Behavior on x { NumberAnimation { duration: 120 } }
+                            }
+                        }
+                    }
+                }
+
+                // 7. Theme Mode Selection
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: qsTr("Theme")
+                        font.pixelSize: 12
+                        font.weight: Font.Medium
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                    }
+
+                    ComboBox {
+                        id: themeModeCombo
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 34
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [
+                            { text: qsTr("Follow System"), value: "system" },
+                            { text: qsTr("Dark Mode"), value: "dark" },
+                            { text: qsTr("Light Mode (White Theme)"), value: "light" }
+                        ]
+
+                        currentIndex: {
+                            var m = backend ? backend.themeMode : "system";
+                            if (m === "dark") return 1;
+                            if (m === "light") return 2;
+                            return 0;
+                        }
+
+                        onActivated: {
+                            var val = model[currentIndex].value;
+                            if (theme) theme.setThemeMode(val);
+                        }
+
+                        background: Rectangle {
+                            color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#142620"
+                            radius: 6
+                            border.color: parent.activeFocus ?
+                                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)")
+                            border.width: 1
+                        }
+
+                        contentItem: Text {
+                            leftPadding: 10
+                            rightPadding: 24
+                            text: themeModeCombo.displayText
+                            font.pixelSize: 12
+                            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+
+                // 8. Language Selection
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4

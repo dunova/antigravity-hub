@@ -135,34 +135,7 @@ fi
 
 # Hyprland window rule configuration
 if [[ "${INSTALL_HYPR}" == true ]]; then
-    echo -e "\033[1;34m==>\033[0m Configuring Hyprland window rule..."
-    if [[ -f "${HYPR_CONF}" ]]; then
-        if grep -q "antigravity-hub" "${HYPR_CONF}"; then
-            echo -e "\033[1;33m!\033[0m Hyprland window rule for antigravity-hub already present. Skipping."
-        else
-            cp "${HYPR_CONF}" "${HYPR_CONF}.bak_$(date +%Y%m%d_%H%M%S)"
-            cat >> "${HYPR_CONF}" <<'EOF'
-
--- Antigravity Hub: Omarchy native floating window
-o.window("^antigravity-hub$", {
-  float = true,
-  center = true,
-  size = { 1080, 720 },
-})
-EOF
-            if command -v hyprctl &>/dev/null; then
-                hyprctl reload
-                ERR=$(hyprctl configerrors 2>&1 || true)
-                if [[ -n "${ERR}" && "${ERR}" != "no flags were set" ]]; then
-                    echo -e "\033[1;31mWarning:\033[0m Hyprland config warning: ${ERR}" >&2
-                else
-                    echo -e "\033[1;32m✔\033[0m Hyprland rule registered and reloaded."
-                fi
-            fi
-        fi
-    else
-        echo -e "\033[1;33m!\033[0m ${HYPR_CONF} not found. Skipping Hyprland configuration."
-    fi
+    echo -e "\033[1;34m==>\033[0m Hyprland integration: uses native dynamic tiling (SUPER+T to toggle floating)."
 fi
 
 echo -e "\033[1;32m🎉 Antigravity Hub installation complete!\033[0m"

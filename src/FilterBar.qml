@@ -56,10 +56,10 @@ Item {
                 spacing: 6
 
                 // 搜索矢量图标
-                Text {
-                    text: "🔍"
-                    font.pixelSize: 11
-                    opacity: 0.6
+                AppIcon {
+                    name: "search"
+                    size: 14
+                    tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
                 }
 
                 TextInput {
@@ -78,7 +78,7 @@ Item {
                         anchors.fill: parent
                         verticalAlignment: Text.AlignVCenter
                         text: qsTr("Search accounts...")
-                        color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                         font.family: "Monospace"
                         font.pixelSize: 12
                         visible: !searchInput.text && !searchInput.activeFocus
@@ -95,7 +95,7 @@ Item {
                     }
                 }
 
-                // 清空搜索按钮 (✕)
+                // 清空搜索按钮
                 Rectangle {
                     id: btnClear
                     visible: searchInput.text.length > 0
@@ -103,13 +103,13 @@ Item {
                     height: 16
                     radius: 8
                     color: clearMouse.containsMouse ?
-                           ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") : "transparent"
+                           ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31") : "transparent"
 
-                    Text {
+                    AppIcon {
                         anchors.centerIn: parent
-                        text: "✕"
-                        font.pixelSize: 9
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                        name: "close"
+                        size: 11
+                        tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
                     }
 
                     MouseArea {
@@ -140,7 +140,7 @@ Item {
                         font.family: "Monospace"
                         font.pixelSize: 10
                         font.bold: true
-                        color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                     }
                 }
             }
@@ -252,7 +252,7 @@ Item {
                     text: " / " + (proxyModel ? proxyModel.totalCount : 0)
                     font.family: "Monospace"
                     font.pixelSize: 11
-                    color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                 }
             }
         }
@@ -325,7 +325,7 @@ Item {
                     anchors.centerIn: parent
                     text: qsTr("Cancel")
                     font.pixelSize: 11
-                    color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                 }
                 MouseArea {
                     anchors.fill: parent

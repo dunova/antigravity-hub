@@ -17,6 +17,8 @@
 struct AccountItem {
     QString id;
     QString email;
+    QString username;           // 剥离 @gmail.com 等后缀的纯净用户名 (如 cakeai88)
+    QString maskedUsername;     // 脱敏用户名 (如 c***8)
     QString name;
     QString shortName;
     QString maskedName;
@@ -66,6 +68,8 @@ public:
     enum AccountRoles {
         IndexRole = Qt::UserRole + 1,
         EmailRole,
+        UsernameRole,
+        DisplayUsernameRole,
         NameRole,
         ShortNameRole,
         MaskedNameRole,
@@ -111,6 +115,7 @@ public:
     Q_INVOKABLE int findIndexByEmail(const QString &email) const;
 
     static QString computeMaskedName(const QString &rawName);
+    static QString computeMaskedUsername(const QString &rawUname);
     static qint64 parseIsoTimestamp(const QString &isoStr);
     static QString formatCountdown(qint64 targetEpoch, qint64 nowEpoch);
 

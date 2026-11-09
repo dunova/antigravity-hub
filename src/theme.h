@@ -26,6 +26,7 @@ class Theme : public QObject {
     Q_PROPERTY(QString mode READ mode NOTIFY changed)
     Q_PROPERTY(QString selection READ selection NOTIFY changed)
     Q_PROPERTY(QString muted READ muted NOTIFY changed)
+    Q_PROPERTY(QString themeMode READ themeMode WRITE setThemeMode NOTIFY themeModeChanged)
 
 public:
     explicit Theme(const QString &currentDirectory = {}, QObject *parent = nullptr, const QString &hyprctl = {});
@@ -48,6 +49,9 @@ public:
     QString selection() const { return m_selection; }
     QString muted() const { return m_muted; }
 
+    QString themeMode() const { return m_themeMode; }
+    void setThemeMode(const QString &mode);
+
     // Static helper for isolated file parsing & testing
     static void parsePalette(const QString &path,
                              QString &mode, QString &accent, QString &selection, QString &muted,
@@ -56,6 +60,7 @@ public:
 
 signals:
     void changed();
+    void themeModeChanged();
 
 private:
     void reload();
@@ -63,6 +68,8 @@ private:
 
     QString m_directory;
     QString m_mode = "dark";
+    QString m_themeMode = "system";
+    QString m_detectedMode = "dark";
     QString m_accent = "#FFD60A";
     QString m_selection = "#292e42";
     QString m_muted = "#64887b";
@@ -70,10 +77,10 @@ private:
     QString m_surface1 = "#13141c";
     QString m_surface2 = "#1a1b26";
     QString m_surface3 = "#24283b";
-    QString m_text1 = "#c0caf5";
-    QString m_text2 = "#a9b1d6";
-    QString m_text3 = "#b4bee6";
-    QString m_text4 = "#565f89";
+    QString m_text1 = "#FFFFFF";
+    QString m_text2 = "#F3F4F6";
+    QString m_text3 = "#9CA3AF";
+    QString m_text4 = "#6B7280";
     QString m_border = "rgba(255, 255, 255, 0.08)";
     int m_radius = 0;
 

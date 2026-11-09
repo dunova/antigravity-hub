@@ -12,12 +12,12 @@ ApplicationWindow {
     minimumHeight: 540
     title: qsTr("Antigravity Hub")
 
-    // Dynamic Material Dark Theme following Omarchy & Hyprland
-    color: (theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#0e0e14"
+    // Dynamic Material Dark/Light Theme following Omarchy & Hyprland
+    color: (theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#142620"
     Material.theme: (theme && theme.mode === "light") ? Material.Light : Material.Dark
-    Material.accent: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
-    Material.background: (theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#0e0e14"
-    Material.foreground: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#c0caf5"
+    Material.accent: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+    Material.background: (theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#142620"
+    Material.foreground: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4"
     Material.roundedScale: theme ? theme.radius : 0
 
     // Focus guard: prevents single-character shortcuts from intercepting text input
@@ -258,10 +258,10 @@ ApplicationWindow {
                 anchors.centerIn: parent
                 spacing: 8
 
-                Text {
-                    text: toastNotification.isErrorToast ? "⚠️" : "✓"
-                    font.pixelSize: 13
-                    color: toastNotification.isErrorToast ? "#EF4444" : "#22C55E"
+                AppIcon {
+                    name: toastNotification.isErrorToast ? "warning" : "check"
+                    size: 14
+                    tint: toastNotification.isErrorToast ? "#EF4444" : "#22C55E"
                 }
 
                 Text {

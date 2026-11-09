@@ -110,10 +110,15 @@ Rectangle {
                 // Active Account Handle (Masked if masking enabled)
                 Text {
                     text: {
+                        var isM = (accountModel && accountModel.isMasked);
                         var rawEmail = backend ? backend.activeEmail : "";
                         if (!rawEmail || rawEmail.length === 0) return qsTr("None");
-                        if (accountModel) return accountModel.maskName(rawEmail);
-                        return rawEmail;
+                        var atIdx = rawEmail.indexOf('@');
+                        var uname = (atIdx > 0) ? rawEmail.substring(0, atIdx) : rawEmail;
+                        if (isM && accountModel) {
+                            return accountModel.maskName(uname);
+                        }
+                        return uname;
                     }
                     font.pixelSize: 12
                     font.family: "Monospace"
@@ -156,7 +161,7 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.46.0")
+                text: qsTr("v%1").arg("2.47.0")
                 font.family: "Monospace"
                 font.pixelSize: 11
                 color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#64887b"
@@ -218,22 +223,33 @@ Rectangle {
         Rectangle {
             id: settingsCapsule
             height: 30
-            implicitWidth: settText.implicitWidth + 22
+            implicitWidth: settRow.implicitWidth + 22
             radius: Math.max((theme ? theme.radius : 0) - 4, 4)
             Layout.alignment: Qt.AlignVCenter
 
             color: settMouse.containsMouse ?
-                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
-                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26")
-            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31") :
+                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#142620")
+            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)"
             border.width: 1
 
-            Text {
-                id: settText
+            RowLayout {
+                id: settRow
                 anchors.centerIn: parent
-                text: "⚙ " + qsTr("Settings")
-                font.pixelSize: 12
-                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#dfede5"
+                spacing: 6
+
+                AppIcon {
+                    name: "gear"
+                    size: 14
+                    tint: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4"
+                }
+
+                Text {
+                    id: settText
+                    text: qsTr("Settings")
+                    font.pixelSize: 12
+                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4"
+                }
             }
 
             MouseArea {
@@ -251,25 +267,36 @@ Rectangle {
         Rectangle {
             id: topgCapsule
             height: 30
-            implicitWidth: topgText.implicitWidth + 22
+            implicitWidth: topgRow.implicitWidth + 22
             radius: Math.max((theme ? theme.radius : 0) - 4, 4)
             Layout.alignment: Qt.AlignVCenter
 
             color: topgMouse.containsMouse ?
-                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
-                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26")
+                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31") :
+                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#142620")
             border.color: topgMouse.containsMouse ?
                           "#F59E0B" :
-                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff")
+                          ((theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)")
             border.width: 1
 
-            Text {
-                id: topgText
+            RowLayout {
+                id: topgRow
                 anchors.centerIn: parent
-                text: "⚡ TopG"
-                font.pixelSize: 12
-                font.bold: true
-                color: "#F59E0B"
+                spacing: 5
+
+                AppIcon {
+                    name: "bolt"
+                    size: 13
+                    tint: "#F59E0B"
+                }
+
+                Text {
+                    id: topgText
+                    text: "TopG"
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: "#F59E0B"
+                }
             }
 
             MouseArea {
@@ -363,9 +390,16 @@ Rectangle {
                     visible: backend ? backend.busy : false
                 }
 
+                AppIcon {
+                    visible: !(backend && backend.busy)
+                    name: "sparkle"
+                    size: 14
+                    tint: "#EF4444"
+                }
+
                 Text {
                     id: prewarmLabel
-                    text: (backend && backend.busy ? "" : "🔥 ") + qsTr("Prewarm")
+                    text: qsTr("Prewarm")
                     font.pixelSize: 12
                     font.bold: true
                     color: "#EF4444"

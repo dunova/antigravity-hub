@@ -1466,23 +1466,33 @@ class HubEngine:
             mgr = AntigravityPhysicalManager()
             success = mgr.perform_real_switch(target_email, restart_app=True, relay_prompt=DEFAULT_RELAY_PROMPT, force=True, inject_recovery=True)
             if success:
-                # 同步更新 Hub 本地数据库活跃指针，并刷新原账号与目标账号的真实配额
+                # 异步执行原账号与目标账号的真实配额并发刷新，绝不阻塞当前 HTTP 响应
+                def _async_post_refresh(old_em, new_em):
+                    try:
+                        d = self.load_accounts()
+                        accs = d.get("accounts", {})
+                        if old_em and old_em in accs and old_em != new_em:
+                            try:
+                                self.refresh_single_account_quota(old_em, accs[old_em])
+                            except Exception:
+                                pass
+                        if new_em in accs:
+                            try:
+                                self.refresh_single_account_quota(new_em, accs[new_em])
+                            except Exception:
+                                pass
+                        self.save_accounts(d)
+                    except Exception as ex:
+                        logger.warning(f"异步配额刷新异常: {ex}")
+
                 data = self.load_accounts()
                 old_active = data.get("active_email", "")
-                accounts = data.get("accounts", {})
-                if old_active and old_active in accounts and old_active != target_email:
-                    try:
-                        self.refresh_single_account_quota(old_active, accounts[old_active])
-                    except Exception:
-                        pass
-                if target_email in accounts:
-                    try:
-                        self.refresh_single_account_quota(target_email, accounts[target_email])
-                    except Exception:
-                        pass
                 data["active_email"] = target_email
                 data["last_updated"] = int(time.time())
                 self.save_accounts(data)
+
+                threading.Thread(target=_async_post_refresh, args=(old_active, target_email), daemon=True).start()
+
                 # 用户手动点击切换账号：建立 15 分钟人工保护锁，绝不永久关闭全局自动轮换模式！
                 set_manual_override_lock(target_email, duration_sec=900, reason="用户手动切换")
                 logger.info(f"🛡️ [人工切换保护] 已建立 15 分钟临时保护锁，保持自动轮换监控 (账号 {target_email} 额度用尽时将自动瀑布切走)！")

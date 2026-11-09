@@ -73,12 +73,10 @@ Popup {
                     color: parent.hovered ? "#14ffffff" : "transparent"
                     radius: 4
                 }
-                contentItem: Text {
-                    text: "✕"
-                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#b4bee6"
-                    font.pixelSize: 13
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                contentItem: AppIcon {
+                    name: "close"
+                    size: 13
+                    tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
                 }
                 onClicked: root.close()
             }
@@ -243,7 +241,7 @@ Popup {
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("Press Esc or ? to close")
             font.pixelSize: 11
-            color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
         }
     }
 }

@@ -18,6 +18,7 @@
 #include "translator.h"
 #include "models.h"
 #include "backend.h"
+#include "iconprovider.h"
 
 class AntigravityHubTests : public QObject {
     Q_OBJECT
@@ -99,14 +100,27 @@ void AntigravityHubTests::themeReadsAccent() {
     Theme theme(tempDir.path());
     QCOMPARE(theme.accent(), QString("#112233"));
     QCOMPARE(theme.accentForeground(), QString("white"));
-    QCOMPARE(theme.background(), QString("#0a1713"));
+    QCOMPARE(theme.background(), QString("#142620"));
     QCOMPARE(theme.surface1(), QString("#0f1e19"));
     QCOMPARE(theme.surface2(), QString("#142620"));
     QCOMPARE(theme.surface3(), QString("#203b31"));
-    QCOMPARE(theme.text1(), QString("#f0faf4"));
-    QCOMPARE(theme.text2(), QString("#dfede5"));
-    QCOMPARE(theme.text3(), QString("#bed6c9"));
-    QCOMPARE(theme.text4(), QString("#91ad9f"));
+    QCOMPARE(theme.text1(), QString("#FFFFFF"));
+    QCOMPARE(theme.text2(), QString("#F3F4F6"));
+    QCOMPARE(theme.text3(), QString("#9CA3AF"));
+    QCOMPARE(theme.text4(), QString("#6B7280"));
+
+    // Verify Light Mode (白色主题) switch
+    theme.setThemeMode("light");
+    QCOMPARE(theme.mode(), QString("light"));
+    QCOMPARE(theme.background(), QString("#FFFFFF"));
+    QCOMPARE(theme.surface1(), QString("#F8FAFC"));
+    QCOMPARE(theme.text1(), QString("#0F172A"));
+    QCOMPARE(theme.text2(), QString("#1E293B"));
+
+    // Verify Dark Mode switch
+    theme.setThemeMode("dark");
+    QCOMPARE(theme.mode(), QString("dark"));
+    QCOMPARE(theme.text1(), QString("#FFFFFF"));
 }
 
 void AntigravityHubTests::themeFollowsHyprlandRounding() {
@@ -654,6 +668,7 @@ void AntigravityHubTests::backendControllerOffscreenExecution() {
 
 void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
     QQmlEngine engine;
+    engine.addImageProvider(QStringLiteral("icons"), new IconProvider());
 
     // 1. Register required custom C++ types
     qmlRegisterType<AccountModel>("AntigravityHub", 1, 0, "AccountModel");

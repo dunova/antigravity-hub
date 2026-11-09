@@ -7,9 +7,22 @@
         <file alias="AccountListView.qml">AccountListView.qml</file>
         <file alias="SettingsDialog.qml">SettingsDialog.qml</file>
         <file alias="HelpOverlay.qml">HelpOverlay.qml</file>
+        <file alias="AppIcon.qml">AppIcon.qml</file>
 
         <!-- Vector Graphic Assets -->
         <file alias="assets/logo.svg">assets/logo.svg</file>
+        <file alias="assets/icons/gear.svg">assets/icons/gear.svg</file>
+        <file alias="assets/icons/bolt.svg">assets/icons/bolt.svg</file>
+        <file alias="assets/icons/sparkle.svg">assets/icons/sparkle.svg</file>
+        <file alias="assets/icons/search.svg">assets/icons/search.svg</file>
+        <file alias="assets/icons/close.svg">assets/icons/close.svg</file>
+        <file alias="assets/icons/lock.svg">assets/icons/lock.svg</file>
+        <file alias="assets/icons/refresh.svg">assets/icons/refresh.svg</file>
+        <file alias="assets/icons/check.svg">assets/icons/check.svg</file>
+        <file alias="assets/icons/warning.svg">assets/icons/warning.svg</file>
+        <file alias="assets/icons/shield.svg">assets/icons/shield.svg</file>
+        <file alias="assets/icons/help.svg">assets/icons/help.svg</file>
+        <file alias="assets/icons/clipboard.svg">assets/icons/clipboard.svg</file>
 
         <!-- Internationalization Catalogs -->
         <file alias="i18n/en.json">i18n/en.json</file>

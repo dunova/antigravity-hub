@@ -92,6 +92,14 @@ void BackendController::setMasked(bool masked)
     }
 }
 
+void BackendController::setThemeMode(const QString &mode)
+{
+    if (m_themeMode != mode) {
+        m_themeMode = mode;
+        emit themeModeChanged();
+    }
+}
+
 QNetworkRequest BackendController::createRequest(const QString &path) const
 {
     QUrl url(m_baseUrl + path);
@@ -243,7 +251,7 @@ void BackendController::refreshQuota(bool force)
 
 void BackendController::triggerPrewarm()
 {
-    // ★ 关键映射: 实机服务端端点为 /api/warmup-all
+    // 关键映射: 实机服务端端点为 /api/warmup-all
     executePost(QStringLiteral("/api/warmup-all"), QByteArray(), QString(),
                 tr("Fleet Prewarm"), [this](const QByteArray &, int) {
         emit notificationRequested(tr("Fleet Prewarm"),
@@ -492,6 +500,9 @@ void BackendController::fetchSettings()
             m_settings = doc.object();
             if (m_settings.contains(QStringLiteral("account_mask"))) {
                 setMasked(m_settings.value(QStringLiteral("account_mask")).toBool());
+            }
+            if (m_settings.contains(QStringLiteral("theme_mode"))) {
+                setThemeMode(m_settings.value(QStringLiteral("theme_mode")).toString());
             }
             if (m_settings.contains(QStringLiteral("rotation_mode"))) {
                 m_rotationMode = m_settings.value(QStringLiteral("rotation_mode")).toString();

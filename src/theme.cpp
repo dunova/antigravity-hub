@@ -109,9 +109,9 @@ void Theme::parsePalette(const QString &path,
     if (raw.contains("selection")) selection = raw["selection"];
     if (raw.contains("muted")) muted = raw["muted"];
 
-    // Canvas Background: darker_background (preferred base) -> background
-    if (raw.contains("darker_background")) background = raw["darker_background"];
-    else if (raw.contains("background")) background = raw["background"];
+    // Canvas Background: strictly background from Omarchy theme spec (e.g. Jade Horse: #142620)
+    if (raw.contains("background")) background = raw["background"];
+    else if (raw.contains("darker_background")) background = raw["darker_background"];
 
     // Surface 1 (Cards, list rows): dark_background
     if (raw.contains("surface1")) surface1 = raw["surface1"];
@@ -153,6 +153,14 @@ void Theme::parsePalette(const QString &path,
     else border = (mode == "light") ? "rgba(0, 0, 0, 0.08)" : "rgba(255, 255, 255, 0.08)";
 }
 
+void Theme::setThemeMode(const QString &mode) {
+    if (m_themeMode != mode) {
+        m_themeMode = mode;
+        emit themeModeChanged();
+        reload();
+    }
+}
+
 void Theme::reload() {
     refreshRounding();
 
@@ -173,7 +181,8 @@ void Theme::reload() {
         m_directory,
         m_directory + "/theme",
         m_directory + "/theme/colors.toml",
-        m_directory + "/theme.generation"
+        m_directory + "/theme.generation",
+        m_directory + "/theme.name"
     };
     candidates.removeDuplicates();
     for (const auto &path : candidates) {
@@ -183,13 +192,53 @@ void Theme::reload() {
 
     // 4. Parse colors.toml
     const QString colorsPath = m_directory + "/theme/colors.toml";
-    QString mode = m_mode, accent = m_accent, selection = m_selection, muted = m_muted;
+    QString parsedMode = "dark", accent = m_accent, selection = m_selection, muted = m_muted;
     QString background = m_background, surface1 = m_surface1, surface2 = m_surface2, surface3 = m_surface3;
     QString text1 = m_text1, text2 = m_text2, text3 = m_text3, text4 = m_text4, border = m_border;
 
-    parsePalette(colorsPath, mode, accent, selection, muted,
+    parsePalette(colorsPath, parsedMode, accent, selection, muted,
                  background, surface1, surface2, surface3,
                  text1, text2, text3, text4, border);
+
+    m_detectedMode = parsedMode;
+    QString effectiveMode = m_themeMode;
+    if (effectiveMode != "light" && effectiveMode != "dark") {
+        effectiveMode = m_detectedMode;
+    }
+
+    QString mode = effectiveMode;
+    if (effectiveMode == "light") {
+        // Pure White Theme (白色主题)
+        mode = "light";
+        background = "#FFFFFF";
+        surface1 = "#F8FAFC"; // Slate 50
+        surface2 = "#F1F5F9"; // Slate 100
+        surface3 = "#E2E8F0"; // Slate 200
+        text1 = "#0F172A";    // Slate 900 (Maximum Contrast Deep Ink)
+        text2 = "#1E293B";    // Slate 800 (Crisp Body)
+        text3 = "#475569";    // Slate 600 (Secondary Text / Countdowns)
+        text4 = "#64748B";    // Slate 500 (Muted Hints)
+        border = "rgba(0, 0, 0, 0.08)";
+        selection = "#E2E8F0";
+        if (accent.isEmpty() || accent == "#798186" || accent == "#cacccc") {
+            accent = "#0284C7"; // Vibrant Sky
+        }
+    } else {
+        // Dark Mode: Aligned with Omarchy Control (Pure White text for crystal-clear readability)
+        mode = "dark";
+        if (background.isEmpty() || background == "#FFFFFF") background = "#142620";
+        if (surface1.isEmpty() || surface1 == "#F8FAFC") surface1 = "#0f1e19";
+        if (surface2.isEmpty() || surface2 == "#F1F5F9") surface2 = "#142620";
+        if (surface3.isEmpty() || surface3 == "#E2E8F0") surface3 = "#203b31";
+
+        // Pure white & high-contrast text invariants
+        text1 = "#FFFFFF";    // Pure White (Headings, titles, account names, badges)
+        text2 = "#F3F4F6";    // Crisp near-white
+        text3 = "#9CA3AF";    // Legible silver-gray (countdowns, column secondary)
+        text4 = "#6B7280";    // Legible muted gray
+        border = "rgba(255, 255, 255, 0.08)";
+        if (accent.isEmpty()) accent = "#8bcbb1";
+    }
 
     bool hasChanged = (mode != m_mode || accent != m_accent || selection != m_selection || muted != m_muted ||
                        background != m_background || surface1 != m_surface1 || surface2 != m_surface2 || surface3 != m_surface3 ||

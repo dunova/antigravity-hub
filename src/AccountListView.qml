@@ -72,8 +72,8 @@ Item {
 
     // 配额颜色判定阈值逻辑 (Omarchy Material Dark 规范)
     function getQuotaColor(ratio) {
-        if (ratio === undefined || ratio === null || isNaN(ratio)) return "#565f89";
-        if (ratio <= 0.0001) return "#565f89"; // 枯竭归零
+        if (ratio === undefined || ratio === null || isNaN(ratio)) return "#6B7280";
+        if (ratio <= 0.0001) return "#EF4444"; // 枯竭归零红标告警
         if (ratio >= 0.50) return "#22C55E";   // 充足 (翠绿)
         if (ratio >= 0.15) return "#F59E0B";   // 告急 (琥珀橙)
         return "#EF4444";                      // 危险 (玫瑰红)
@@ -90,9 +90,9 @@ Item {
             id: headerRow
             Layout.fillWidth: true
             Layout.preferredHeight: 34
-            color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c"
+            color: (theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31"
             border.width: 1
-            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+            border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "rgba(255, 255, 255, 0.08)"
 
             RowLayout {
                 anchors.fill: parent
@@ -127,7 +127,8 @@ Item {
                         text: "#"
                         font.family: "Monospace"
                         font.pixelSize: 11
-                        color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                        font.bold: true
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
                     }
                 }
 
@@ -140,13 +141,13 @@ Item {
                         text: qsTr("Status")
                         font.pixelSize: 11
                         font.bold: true
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
                     }
                 }
 
-                // Col 4: 账号 (严格切除额外标签)
+                // Col 4: 账号 (纯净用户名，剥离 @gmail.com)
                 Item {
-                    Layout.preferredWidth: 130
+                    Layout.preferredWidth: 170
                     Layout.fillHeight: true
                     Text {
                         anchors.left: parent.left
@@ -155,7 +156,7 @@ Item {
                         text: qsTr("Account")
                         font.pixelSize: 11
                         font.bold: true
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
                     }
                 }
 
@@ -175,8 +176,8 @@ Item {
                             font.pixelSize: 11
                             font.bold: true
                             color: (proxyModel && proxyModel.sortField === "gemini4") ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
-                                   ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6")
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4")
                         }
 
                         Text {
@@ -219,15 +220,15 @@ Item {
                             font.pixelSize: 11
                             font.bold: true
                             color: (proxyModel && proxyModel.sortField === "gemini38_w") ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
-                                   ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6")
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4")
                         }
 
                         Text {
                             visible: proxyModel ? (proxyModel.sortField === "gemini38_w") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
                             font.pixelSize: 11
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                         }
                     }
 
@@ -263,15 +264,15 @@ Item {
                             font.pixelSize: 11
                             font.bold: true
                             color: (proxyModel && proxyModel.sortField === "claude_w") ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
-                                   ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6")
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#f0faf4")
                         }
 
                         Text {
                             visible: proxyModel ? (proxyModel.sortField === "claude_w") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
                             font.pixelSize: 11
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A"
+                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                         }
                     }
 
@@ -300,7 +301,7 @@ Item {
                         text: qsTr("Actions")
                         font.pixelSize: 11
                         font.bold: true
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff"
                     }
                 }
             }
@@ -328,17 +329,18 @@ Item {
                     anchors.centerIn: parent
                     spacing: 8
 
-                    Text {
+                    AppIcon {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "📭"
-                        font.pixelSize: 28
+                        name: "help"
+                        size: 32
+                        tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
                     }
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: qsTr("No matching accounts found")
                         font.pixelSize: 13
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#bed6c9"
                     }
                 }
             }
@@ -416,7 +418,7 @@ Item {
                             text: model.index
                             font.family: "Monospace"
                             font.pixelSize: 11
-                            color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                         }
                     }
 
@@ -435,7 +437,8 @@ Item {
 
                             color: model.isActive ? "#2622C55E" :
                                    (model.isBlocked ? "#26EF4444" :
-                                       (model.status === "EXHAUSTED" ? "#266B7280" : "#26565f89"))
+                                       (model.status === "EXHAUSTED" ? "#266B7280" :
+                                           ((theme && theme.mode === "light") ? "#14000000" : "#266B7280")))
 
                             border.width: 1
                             border.color: model.isActive ? "#22C55E" :
@@ -469,35 +472,43 @@ Item {
                                 }
 
                                 // 人工保护倒计时标签
-                                Text {
+                                RowLayout {
                                     visible: model.isActive && (model.manualLockRemaining > 0)
-                                    text: "🔒" + (model.manualLockRemainingStr || "")
-                                    font.family: "Monospace"
-                                    font.pixelSize: 9
-                                    color: "#F59E0B"
+                                    spacing: 2
+                                    AppIcon {
+                                        name: "lock"
+                                        size: 10
+                                        tint: "#F59E0B"
+                                    }
+                                    Text {
+                                        text: model.manualLockRemainingStr || ""
+                                        font.family: "Monospace"
+                                        font.pixelSize: 9
+                                        color: "#F59E0B"
+                                    }
                                 }
                             }
                         }
                     }
 
                     // -------------------------------------------------
-                    // Col 4: 账号名称 (用户铁律：严禁出现多余版本标签！)
+                    // Col 4: 账号名称 (纯净用户名，剥离 @gmail.com，默认不脱敏)
                     // -------------------------------------------------
                     Item {
-                        Layout.preferredWidth: 130
+                        Layout.preferredWidth: 170
                         Layout.fillHeight: true
 
                         Text {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            text: model.name || ""
+                            text: model.displayUsername || ""
                             font.family: "Monospace"
                             font.pixelSize: 12
                             font.bold: model.isActive
                             elide: Text.ElideRight
                             color: model.isActive ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#FFD60A") :
+                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#ffffff")
 
                             ToolTip.visible: nameMouse.containsMouse
@@ -510,7 +521,7 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                // 复制邮箱至系统剪贴板
+                                // 复制完整真实邮箱至系统剪贴板
                                 if (backend && typeof backend.copyToClipboard === "function") {
                                     backend.copyToClipboard(model.email);
                                 }
@@ -533,7 +544,7 @@ Item {
                             text: "—"
                             font.family: "Monospace"
                             font.pixelSize: 14
-                            color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                             ToolTip.visible: g4EmptyMouse.containsMouse
                             ToolTip.text: qsTr("No Gemini 4 access")
 
@@ -658,7 +669,7 @@ Item {
                                     font.family: "Monospace"
                                     font.pixelSize: 9
                                     color: (model.gemini38QuotaW <= 0.0001) ? "#EF4444" :
-                                           ((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89")
+                                           ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF")
                                     elide: Text.ElideRight
                                 }
                             }
@@ -711,7 +722,7 @@ Item {
                                     text: model.gemini38ResetW || "--"
                                     font.family: "Monospace"
                                     font.pixelSize: 9
-                                    color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                                     elide: Text.ElideRight
                                 }
                             }
@@ -785,7 +796,7 @@ Item {
                                     font.family: "Monospace"
                                     font.pixelSize: 9
                                     color: (model.claudeQuotaW <= 0.0001) ? "#EF4444" :
-                                           ((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89")
+                                           ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF")
                                     elide: Text.ElideRight
                                 }
                             }
@@ -838,7 +849,7 @@ Item {
                                     text: model.claudeResetW || "--"
                                     font.family: "Monospace"
                                     font.pixelSize: 9
-                                    color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                                     elide: Text.ElideRight
                                 }
                             }
@@ -946,10 +957,11 @@ Item {
                                 border.width: 1
                                 border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
 
-                                Text {
+                                AppIcon {
                                     anchors.centerIn: parent
-                                    text: "⚡"
-                                    font.pixelSize: 11
+                                    name: "sparkle"
+                                    size: 14
+                                    tint: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#dfede5"
                                 }
 
                                 ToolTip.visible: warmupMouse.containsMouse
@@ -995,27 +1007,27 @@ Item {
                         text: qsTr("15 / page")
                         font.family: "Monospace"
                         font.pixelSize: 11
-                        color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                     }
                     Text {
                         text: "·"
-                        color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                     }
                     Text {
                         text: qsTr("%1 / %2 pages").arg(1).arg(Math.max(1, Math.ceil((proxyModel ? proxyModel.filteredCount : 0) / 15)))
                         font.family: "Monospace"
                         font.pixelSize: 11
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#a9b1d6"
+                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                     }
                     Text {
                         text: "·"
-                        color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                     }
                     Text {
                         text: qsTr("%n item(s)", "", (proxyModel ? proxyModel.filteredCount : 0))
                         font.family: "Monospace"
                         font.pixelSize: 11
-                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#c0caf5"
+                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                 }
 
@@ -1039,7 +1051,7 @@ Item {
                             anchors.centerIn: parent
                             text: qsTr("Previous")
                             font.pixelSize: 10
-                            color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                         }
                     }
 
@@ -1055,7 +1067,7 @@ Item {
                             anchors.centerIn: parent
                             text: qsTr("Next")
                             font.pixelSize: 10
-                            color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#565f89"
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                         }
                     }
                 }

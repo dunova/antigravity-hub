@@ -253,8 +253,30 @@ class AntigravitySessionRecoveryManager:
         # 只要该子代理或其任一后代在 max_idle (默认45分钟) 内有活动，且未被 KILLED，即为活跃！
         return (now - tree_mtime) <= max_idle
 
+    def get_open_conversation_panes(self) -> set:
+        """提取当前在 Antigravity 界面中打开的所有活体窗格会话 ID (穿透 aux-pane-v2-session)"""
+        open_ids = set()
+        app_storage_path = os.path.expanduser("~/.config/Antigravity/app_storage.json")
+        if os.path.isfile(app_storage_path):
+            try:
+                with open(app_storage_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                v2 = data.get("aux-pane-v2-session", {})
+                if isinstance(v2, str):
+                    try:
+                        v2 = json.loads(v2)
+                    except Exception:
+                        v2 = {}
+                panes = v2.get("conversationPanes", {})
+                for cid in panes.keys():
+                    if cid and len(cid) >= 32:
+                        open_ids.add(cid)
+            except Exception as ex:
+                logger.debug(f"读取活体窗格异常: {ex}")
+        return open_ids
+
     def get_active_subagents_for_session(self, session_dir: str, max_idle: int = 2700) -> List[str]:
-        """探测主会话下属正在运行的 Subagents ID 列表（包含树状递归与存活状态核验）"""
+        """探测主会话下属正在运行的 Subagents ID 列表（包含状态显式穿透与树状递归）"""
         active_subs = []
         sub_dir = os.path.join(session_dir, ".system_generated", "subagents")
         if not os.path.isdir(sub_dir):
@@ -263,7 +285,21 @@ class AntigravitySessionRecoveryManager:
         for fname in os.listdir(sub_dir):
             if fname.endswith(".json"):
                 sub_id = fname[:-5]
-                if self.check_subagent_is_active(sub_id, max_idle=max_idle, parent_session_dir=session_dir):
+                # 1. 优先读取 subagent 元数据中的显式运行状态
+                meta_p = os.path.join(sub_dir, fname)
+                is_alive_state = False
+                try:
+                    with open(meta_p, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    if meta.get("state") == "SUBAGENT_STATE_ALIVE":
+                        is_alive_state = True
+                    elif meta.get("state") == "SUBAGENT_STATE_KILLED":
+                        continue
+                except Exception:
+                    pass
+
+                # 2. 状态为 ALIVE 或 mtime 在活跃期内，判定为活跃子代理
+                if is_alive_state or self.check_subagent_is_active(sub_id, max_idle=max_idle, parent_session_dir=session_dir):
                     active_subs.append(sub_id)
 
         return active_subs
@@ -296,10 +332,11 @@ class AntigravitySessionRecoveryManager:
         return False
 
     def scan_active_sessions(self, max_idle_seconds: int = 2700) -> List[Dict[str, Any]]:
-        """扫描 brain 目录，识别最近活跃且未完工的主会话"""
+        """扫描 brain 目录，识别最近活跃且未完工的主会话 (结合活体窗格嗅探)"""
         if not os.path.exists(self.brain_dir):
             return []
 
+        open_panes = self.get_open_conversation_panes()
         active_sessions = []
         now = time.time()
 
@@ -370,8 +407,10 @@ class AntigravitySessionRecoveryManager:
                     continue
 
                 # 真正已完工会话物理拦截跳过：
-                # 仅当：1. 无任何在途/活跃子代理；2. 最后一条记录为纯文本 PLANNER_RESPONSE 且无工具调用；3. 距离根会话最后活动已超 300 秒静默
-                if not has_active_subs and last_major_type == "PLANNER_RESPONSE" and len(last_major_tool_calls) == 0 and (now - root_mtime) > 300:
+                # 豁免门禁：凡处于 Antigravity 活体打开窗格中 (open_panes)，或拥有活跃在途子代理，100% 豁免静默过滤！
+                # 仅当：既不在活体窗格、又无活跃子代理、且最后一条为纯文本且静默 > 300s 时才跳过
+                is_open_pane = (session_id in open_panes)
+                if not is_open_pane and not has_active_subs and last_major_type == "PLANNER_RESPONSE" and len(last_major_tool_calls) == 0 and (now - root_mtime) > 300:
                     continue
 
                 # 防重复接力拦截：仅拦截尾部正在等待响应的同款接力指令
