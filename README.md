@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.1 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.2 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,35 +9,35 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.0.1-0F172A?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v3.0.2-0F172A?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/C++-17-00599C?style=flat-square&logo=c%2B%2B" alt="C++" />
   <img src="https://img.shields.io/badge/Framework-Qt%206.12%20QML-41CD52?style=flat-square&logo=qt" alt="Qt" />
   <img src="https://img.shields.io/badge/Platform-Omarchy%20%7C%20Wayland%20%7C%20Linux-black?style=flat-square" alt="Platform" />
   <img src="https://img.shields.io/badge/Design-Omarchy%20Flat%20%7C%20Zero--Gradient-1c1c1e?style=flat-square" alt="Style" />
-  <img src="https://img.shields.io/badge/Token%20Guardian-Active%2030s%20Keepalive-10B981?style=flat-square" alt="Token Guardian" />
+  <img src="https://img.shields.io/badge/Token%20Refresh-Mac%20Canonical%2015m%20Skew-10B981?style=flat-square" alt="Token Refresh" />
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.1 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.2 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub v3.0.1 生产级实际 UI 界面（基于 Omarchy 设计规范，零渐变纯平顶栏、正统 Antigravity 单色剪影 Logo、闭合 1px 细线外框、屏幕绝对固定的偶奇斑马纹行、Gemini 4 / 3.8 / Claude 三模型配额毫米级对齐排版与一键脱敏打码保护）</em>
+  <em>图：Antigravity Hub v3.0.2 生产级实际 UI 界面（基于 Omarchy 设计规范，零渐变纯平顶栏、正统 Antigravity 单色剪影 Logo、闭合 1px 细线外框、屏幕绝对固定的偶奇斑马纹行、Gemini 4 / 3.8 / Claude 三模型配额毫米级对齐排版与一键脱敏打码保护）</em>
 </p>
 
 ---
 
-## ⚡ v3.0.1 核心架构演进与重大革新
+## ⚡ v3.0.2 核心架构演进与重大革新
 
-**Antigravity Hub v3.0.1** 全面学习并严格对齐 Mac 原版 Token 定时保鲜机制，重构全端凭据强一致性自愈流水线：
+**Antigravity Hub v3.0.2** 全面学习并严格对齐 Mac 原版 Token 定时保鲜机制，杜绝过度工程与冗余线程，重构全端凭据强一致性自愈流水线：
 
-1. **Mac 原版 Token 保鲜对齐与 30s 常驻守护看门狗**：
+1. **Mac 原版单轨嵌入式 Token 保鲜机制（零冗余线程）**：
    - 彻底修复 Linux 移植版仅在切号时写入凭据、日常使用 1 小时后 Token 自然过期导致“模型失效”的恶性缺陷；
-   - 建立 30 秒高频 Token 临期守护线程（`token_guardian_worker`），主动扫描活跃账号与全池 11 账号剩余有效期；
+   - 严格对齐 Mac 原版架构：不引入任何冗余的独立看门狗轮询线程，完全将 Token 保鲜嵌入在现有的 `refresh_all_quotas`（配额同步）与 `ensure_fresh_token` 自然调度链路中；
    - 严格执行 **15 分钟临期安全偏置（`TOKEN_REFRESH_SKEW_SECONDS = 900`）**：在 Token 到期前 15 分钟内，后台自动以 `refresh_token` 向 Google OAuth 端点换取全新 3600s `access_token`，无需重启进程，实现 100% 物理无感续签。
 2. **全端凭据强一致性原子写入契约（Multi-Store Dual Sync）**：
-   - 凡活跃账号发生续签或刷新，立即原子级强一致性双向同步：
+   - 凡活跃账号在嵌入式刷新中发生续签，立即原子级强一致性双向同步：
      1. Linux Secret Service (`secret-tool`) / macOS Keychain (`security`)；
      2. `~/.gemini/oauth_creds.json`（供 `agy` CLI 与工具层直接调用，彻底告别 `invalid_token`）；
      3. `~/.gemini/jetski-standalone-oauth-token`（供语言服务器底层零回退直接解析）；

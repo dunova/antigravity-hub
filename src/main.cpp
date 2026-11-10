@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     // 1. Initialize GUI Application
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("antigravity-hub"));
-    app.setApplicationVersion(QStringLiteral("3.0.0"));
+    app.setApplicationVersion(QStringLiteral("3.0.2"));
     app.setOrganizationName(QStringLiteral("Omarchy"));
     app.setOrganizationDomain(QStringLiteral("omarchy.org"));
 

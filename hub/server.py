@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.1"
-__canonical_version_tag__ = "20261110-v3.0.1-PROACTIVE_TOKEN_GUARDIAN_RELEASE"
-__last_updated__ = "2026-11-10 19:15:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.1：全面学习对齐 Mac 定时保鲜机制，实装全池与活跃账号 30s 临期看门狗守护、401 自愈与全端凭据强一致性原子同步"
+__version__ = "3.0.2"
+__canonical_version_tag__ = "20261110-v3.0.2-MAC_CANONICAL_TOKEN_REFRESH_RELEASE"
+__last_updated__ = "2026-11-10 19:30:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.2：严格对齐 Mac 原版架构，剔除冗余 30s 巡检线程，纯粹依托 ensure_fresh_token 临期自愈与活跃凭据全端原子同步"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -1017,20 +1017,35 @@ class HubEngine:
                 logger.info(f"✅ [热维护自动纳管成功] 账号 {detected_email} 已纳入 Hub 账本并设为活跃账号！")
                 return detected_email, True
             else:
-                # 已存在，检查是否需要同步更新 refresh_token 或 active 状态
+                # 已存在，检查是否需要同步更新 refresh_token 或基于时间戳单调双向同步 access_token
                 existing = accounts[detected_email]
                 updated = False
+                kd_exp = 0
+                exp_str = kd.get("token", {}).get("expiry") or kd.get("expiry") or ""
+                if exp_str:
+                    try:
+                        kd_exp = int(datetime.datetime.fromisoformat(exp_str.replace("Z", "+00:00")).timestamp())
+                    except Exception:
+                        pass
+
+                hub_exp = int(existing.get("expires_at", 0) or existing.get("expiry_timestamp", 0))
                 if existing.get("refresh_token") != rt:
                     existing["refresh_token"] = rt
                     existing["access_token"] = at
-                    existing["expires_at"] = now_ts + 3600
+                    existing["expires_at"] = kd_exp if kd_exp > now_ts else (now_ts + 3600)
+                    existing["expiry_timestamp"] = existing["expires_at"]
                     updated = True
-                else:
-                    # refresh_token 相同，检查系统钥匙串中的 Token 是否滞后于 Hub 账本
-                    hub_exp = existing.get("expires_at", 0) or existing.get("expiry_timestamp", 0)
+                elif kd_exp > 0 and kd_exp > hub_exp + 60:
+                    # 系统钥匙串中的 Token 更新（例如 IDE 自身续签），反向同步回 Hub 账本
+                    existing["access_token"] = at
+                    existing["expires_at"] = kd_exp
+                    existing["expiry_timestamp"] = kd_exp
+                    updated = True
+                elif kd_exp > 0 and hub_exp > kd_exp + 60 and hub_exp > now_ts + 300:
+                    # 严格判定系统钥匙串中的 Token 过期时间戳滞后于 Hub 账本，主动回补同步
                     hub_at = existing.get("access_token", "")
-                    if hub_exp > now_ts + 300 and hub_at and hub_at != at:
-                        logger.info(f"🛡️ [钥匙串滞后自愈] 系统密钥环凭据滞后于 Hub 账本，主动反向同步最新 Token 至系统...")
+                    if hub_at and hub_at != at:
+                        logger.info(f"🛡️ [钥匙串滞后自愈] 系统密钥环凭据时间戳滞后 ({kd_exp} < {hub_exp})，主动同步最新 Token 至系统...")
                         self.sync_active_credentials_to_system(detected_email, hub_at, rt, hub_exp)
                 if data.get("active_email") != detected_email:
                     # 人工干预保护优先门禁：若当前处于有效锁定保护期，杜绝被意外覆盖
@@ -6370,87 +6385,12 @@ def start_background_workers():
                 logger.error(f"后台预热调度异常: {e}")
                 time.sleep(30)
 
-    def token_guardian_worker():
-        """
-        【全池与活跃账号 Token 临期主动保鲜看门狗 · 100% 对齐 Mac 定时保鲜机制】
-        周期: 30 秒
-        契约：
-        1. 活跃账号绝对保鲜：实时检查 active 账号在 accounts_hub、secret-tool 与 oauth_creds.json 中的剩余有效期；
-           若剩余 <= 15 分钟 (900s) 或已失效，立即触发 ensure_fresh_token(force=True) 并在 0 进程中断下原子同步至全系统！
-        2. 全池 11 账号预刷新：后台遍历账号池，若任一账号 Token 剩余 <= 15 分钟，主动换取新 access_token 并持久化；
-        3. 彻底根除用户工作期间“模型失效/授权过期/掉登录页”等偶发恶性事故。
-        """
-        logger.info("🛡️ 后台 Token 临期主动保鲜看门狗已启动 (周期: 30 秒高频巡检)")
-        time.sleep(3)
-        while True:
-            try:
-                now_ts = int(time.time())
-                data = ENGINE.load_accounts()
-                accounts = data.get("accounts", {})
-                active_email = data.get("active_email", "")
-
-                updated_hub = False
-
-                # 1. 活跃账号高优先保鲜检查
-                if active_email and active_email in accounts:
-                    active_acc = accounts[active_email]
-                    at = active_acc.get("access_token", "")
-                    exp = int(active_acc.get("expires_at", 0) or active_acc.get("expiry_timestamp", 0))
-                    rt = active_acc.get("refresh_token", "")
-
-                    needs_active_refresh = False
-                    # 检查 Hub 记录的有效期
-                    if not at or exp <= (now_ts + TOKEN_REFRESH_SKEW_SECONDS):
-                        needs_active_refresh = True
-                    else:
-                        # 双重自检：检查本地 ~/.gemini/oauth_creds.json 是否临期或缺失
-                        if os.path.exists(OAUTH_CREDS_PATH):
-                            try:
-                                with open(OAUTH_CREDS_PATH, "r", encoding="utf-8") as f:
-                                    creds_j = json.load(f)
-                                exp_ms = creds_j.get("expiry_date", 0)
-                                if exp_ms <= (now_ts + TOKEN_REFRESH_SKEW_SECONDS) * 1000:
-                                    needs_active_refresh = True
-                            except Exception:
-                                needs_active_refresh = True
-                        else:
-                            needs_active_refresh = True
-
-                    if needs_active_refresh and rt:
-                        logger.info(f"🔄 [Token保鲜守卫] 发现活跃账号 {active_email} Token 临期或文件滞后，立即主动续签...")
-                        new_at, ok = ENGINE.ensure_fresh_token(active_acc, force=True)
-                        if ok and new_at:
-                            updated_hub = True
-                            logger.info(f"✅ [Token保鲜守卫] 活跃账号 {active_email} 已成功提前续签并原子推送到系统钥匙串！")
-
-                # 2. 全池所有待命账号轮巡保鲜
-                for email, acc in list(accounts.items()):
-                    if email == active_email:
-                        continue
-                    exp = int(acc.get("expires_at", 0) or acc.get("expiry_timestamp", 0))
-                    rt = acc.get("refresh_token", "")
-                    if rt and exp <= (now_ts + TOKEN_REFRESH_SKEW_SECONDS):
-                        logger.info(f"⏰ [全池Token保鲜] 备用账号 {email} Token 临期 (剩余 {exp - now_ts}s)，提前续签...")
-                        new_at, ok = ENGINE.ensure_fresh_token(acc, force=True)
-                        if ok and new_at:
-                            updated_hub = True
-
-                if updated_hub:
-                    ENGINE.save_accounts(data)
-
-            except Exception as e:
-                logger.error(f"后台 Token 临期保鲜看门狗异常: {e}")
-
-            time.sleep(30)
-
     t_ingest = threading.Thread(target=auto_ingest_worker, daemon=True)
     t_quota = threading.Thread(target=quota_worker, daemon=True)
     t_warmup = threading.Thread(target=warmup_worker, daemon=True)
-    t_token = threading.Thread(target=token_guardian_worker, daemon=True)
     t_ingest.start()
     t_quota.start()
     t_warmup.start()
-    t_token.start()
 
 
 def run_server(port: int = SERVER_PORT):

@@ -9,7 +9,7 @@ test_token_guardian.py — 验证 Token 临期保鲜与系统全端凭据强一�
 3. 活跃账号凭据全端原子同步 (secret-tool + oauth_creds.json + jetski-standalone-oauth-token)；
 4. 401 Unauthorized 端点探测自动续签自愈；
 5. auto_ingest 系统密钥环滞后自愈反向写回；
-6. token_guardian_worker 后台无感平滑保鲜循环。
+6. refresh_all_quotas 与 ensure_fresh_token 嵌入式自然保鲜 (Mac 原版纯粹架构，零额外线程)。
 """
 
 import os
