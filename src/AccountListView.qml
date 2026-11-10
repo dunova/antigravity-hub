@@ -1237,7 +1237,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 60
+                                    Layout.preferredWidth: 64
                                     text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") : (model.gemini38Reset5h || "—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
@@ -1305,7 +1305,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 60
+                                    Layout.preferredWidth: 64
                                     text: model.gemini38ResetW || "—"
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
@@ -1408,7 +1408,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 60
+                                    Layout.preferredWidth: 64
                                     text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") : (model.claudeReset5h || "—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
@@ -1476,7 +1476,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 60
+                                    Layout.preferredWidth: 64
                                     text: model.claudeResetW || "—"
                                     font.family: theme.monoFont
                                     font.pixelSize: 11

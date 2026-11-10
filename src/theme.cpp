@@ -363,14 +363,18 @@ void Theme::reload() {
         canvas = QStringLiteral("#08080c");
         surfaceTop = QStringLiteral("#13141c");
         surfaceBottom = QStringLiteral("#1a1b26");
+    } else if (!isDark) {
+        canvas = QStringLiteral("#F8FAFC");
+        surfaceTop = QStringLiteral("#FFFFFF");
+        surfaceBottom = QStringLiteral("#F1F5F9");
     } else {
-        canvas = mix(isDark ? mix(window, deep, 0.55) : window, accent, 0.02);
-        surfaceTop = mix(canvas, isDark ? foreground : QStringLiteral("#ffffff"), isDark ? 0.055 : 0.55);
-        surfaceBottom = mix(canvas, isDark ? foreground : QStringLiteral("#ffffff"), isDark ? 0.025 : 0.4);
+        canvas = mix(mix(window, deep, 0.55), accent, 0.02);
+        surfaceTop = mix(canvas, foreground, 0.055);
+        surfaceBottom = mix(canvas, foreground, 0.025);
     }
-    QString hairline = withAlpha(text1, isDark ? 0.12 : 0.16);
-    QString controlBorder = withAlpha(text1, isDark ? 0.24 : 0.32);
-    QString border = withAlpha(text1, 0.08);
+    QString hairline = withAlpha(text1, isDark ? 0.12 : 0.14);
+    QString controlBorder = withAlpha(text1, isDark ? 0.24 : 0.28);
+    QString border = withAlpha(text1, isDark ? 0.08 : 0.12);
 
     // Dynamic WCAG 4.5:1 Contrast Adaptation for Semantic Status Colors
     const QStringList surfaces = { canvas, surfaceTop, window, sidebar };
@@ -381,9 +385,9 @@ void Theme::reload() {
 
     // Zebra Striping & Component Slots
     QString rowEven = isDark ? mix(deep, window, 0.35) : window;
-    QString rowOdd = isDark ? mix(window, foreground, 0.085) : mix(sidebar, foreground, 0.075);
-    QString trackBg = withAlpha(foreground, 0.16);
-    QString pillBg = withAlpha(foreground, 0.07);
+    QString rowOdd = isDark ? mix(window, foreground, 0.085) : mix(sidebar, foreground, 0.085);
+    QString trackBg = withAlpha(foreground, isDark ? 0.16 : 0.12);
+    QString pillBg = withAlpha(foreground, isDark ? 0.07 : 0.06);
 
     bool hasChanged = (mode != m_mode || accent != m_accent || selection != m_selection || muted != m_muted ||
                        window != m_background || sidebar != m_surface1 || window != m_surface2 || raised != m_surface3 ||

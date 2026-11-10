@@ -18,6 +18,10 @@ Rectangle {
     signal openSettings()
     signal openAddAccount()
 
+    readonly property string currentActiveEmail: (accountModel && accountModel.activeEmail && accountModel.activeEmail.length > 0) ?
+                                                 accountModel.activeEmail :
+                                                 (backend ? backend.activeEmail : "")
+
     AddAccountDialog {
         id: addAccountDialog
     }
@@ -106,7 +110,7 @@ Rectangle {
                             var mins = Math.ceil(backend.manualLockRemaining / 60);
                             return qsTr("Manual Protection") + (mins > 0 ? (" " + mins + "m") : "");
                         }
-                        if (backend && backend.activeEmail && backend.activeEmail.length > 0) {
+                        if (headerBarRoot.currentActiveEmail && headerBarRoot.currentActiveEmail.length > 0) {
                             return qsTr("ACTIVE");
                         }
                         return qsTr("Not Active");
@@ -123,7 +127,7 @@ Rectangle {
                 Text {
                     text: {
                         var isM = (accountModel && accountModel.isMasked);
-                        var rawEmail = backend ? backend.activeEmail : "";
+                        var rawEmail = headerBarRoot.currentActiveEmail;
                         if (!rawEmail || rawEmail.length === 0) return qsTr("None");
                         var atIdx = rawEmail.indexOf('@');
                         var uname = (atIdx > 0) ? rawEmail.substring(0, atIdx) : rawEmail;
@@ -151,7 +155,7 @@ Rectangle {
                     if (backend && backend.isManualLocked) {
                         return qsTr("Unlock Protection");
                     }
-                    return qsTr("Current active account") + (backend ? (": " + backend.activeEmail) : "");
+                    return qsTr("Current active account") + (headerBarRoot.currentActiveEmail ? (": " + headerBarRoot.currentActiveEmail) : "");
                 }
                 onClicked: {
                     if (backend && backend.isManualLocked) {
@@ -175,7 +179,7 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.51.1")
+                text: qsTr("v%1").arg("2.51.2")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 renderType: Text.NativeRendering

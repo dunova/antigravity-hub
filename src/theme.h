@@ -77,7 +77,7 @@ public:
     QString muted() const { return m_muted; }
 
     QString themeMode() const { return m_themeMode; }
-    void setThemeMode(const QString &mode);
+    Q_INVOKABLE void setThemeMode(const QString &mode);
 
     // Omarchy Standard Getters
     QString uiFont() const { return m_uiFont; }

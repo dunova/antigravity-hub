@@ -104,6 +104,15 @@ void BackendController::setThemeMode(const QString &mode)
     }
 }
 
+void BackendController::setActiveEmail(const QString &email)
+{
+    const QString trimmed = email.trimmed();
+    if (m_activeEmail != trimmed) {
+        m_activeEmail = trimmed;
+        emit activeEmailChanged();
+    }
+}
+
 QNetworkRequest BackendController::createRequest(const QString &path) const
 {
     QUrl url(m_baseUrl + path);
@@ -634,6 +643,16 @@ void BackendController::checkManualLockState()
             if (lockUntil > now) {
                 m_lockUntilTs = lockUntil;
                 m_manualLockRemaining = static_cast<int>(lockUntil - now);
+
+                QString lockedAccount = obj.value(QStringLiteral("manual_account")).toString();
+                if (lockedAccount.isEmpty()) {
+                    lockedAccount = obj.value(QStringLiteral("account")).toString();
+                }
+                if (!lockedAccount.isEmpty() && m_activeEmail != lockedAccount) {
+                    m_activeEmail = lockedAccount;
+                    emit activeEmailChanged();
+                }
+
                 if (!m_isManualLocked) {
                     m_isManualLocked = true;
                     emit manualLockedChanged();

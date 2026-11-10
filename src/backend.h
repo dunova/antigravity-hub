@@ -61,6 +61,7 @@ public:
     // 属性写入器
     Q_INVOKABLE void setMasked(bool masked);
     Q_INVOKABLE void setThemeMode(const QString &mode);
+    Q_INVOKABLE void setActiveEmail(const QString &email);
     Q_INVOKABLE void setAccountModel(AccountModel *model);
 
     // QML 调用的核心业务控制方法 (Q_INVOKABLE)

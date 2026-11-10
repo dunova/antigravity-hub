@@ -214,7 +214,8 @@ ApplicationWindow {
             ColumnLayout {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: Math.max(12, Math.round((parent.width - width) / 2))
                 anchors.topMargin: 12
                 anchors.bottomMargin: 12
                 width: appWindow.contentWidth

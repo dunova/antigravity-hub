@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     // 1. Initialize GUI Application
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("antigravity-hub"));
-    app.setApplicationVersion(QStringLiteral("2.51.1"));
+    app.setApplicationVersion(QStringLiteral("2.51.2"));
     app.setOrganizationName(QStringLiteral("Omarchy"));
     app.setOrganizationDomain(QStringLiteral("omarchy.org"));
 
@@ -78,6 +78,10 @@ int main(int argc, char *argv[])
             backend.setMasked(masked);
         }
     });
+
+    // Synchronize activeEmail between AccountModel and BackendController
+    QObject::connect(&accountModel, &AccountModel::activeEmailChanged,
+                     &backend, &BackendController::setActiveEmail);
 
     // Synchronize themeMode between BackendController and Theme
     QObject::connect(&backend, &BackendController::themeModeChanged,

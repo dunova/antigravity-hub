@@ -14,7 +14,7 @@ Dialog {
     dim: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
     anchors.centerIn: Overlay.overlay
-    width: 500
+    width: 440
     padding: 0
     topPadding: 0
     bottomPadding: 0
@@ -92,9 +92,12 @@ Dialog {
     }
 
     function saveAndApply() {
-        var selectedStrat = strategyCombo.model[strategyCombo.currentIndex].value;
-        var selectedTheme = themeModeCombo.model[themeModeCombo.currentIndex].value;
-        var selectedLang = languageCombo.model[languageCombo.currentIndex].value;
+        var selectedStrat = (strategyCombo.currentIndex >= 0 && strategyCombo.currentIndex < strategyCombo.model.length) ?
+                            strategyCombo.model[strategyCombo.currentIndex].value : "highest-quota";
+        var selectedTheme = (themeModeCombo.currentIndex >= 0 && themeModeCombo.currentIndex < themeModeCombo.model.length) ?
+                            themeModeCombo.model[themeModeCombo.currentIndex].value : "system";
+        var selectedLang = (languageCombo.currentIndex >= 0 && languageCombo.currentIndex < languageCombo.model.length) ?
+                           languageCombo.model[languageCombo.currentIndex].value : "system";
         var isMasked = maskSwitch.checked;
         var isPrewarm = prewarmSwitch.checked;
         var isNotify = notificationSwitch.checked;
@@ -254,6 +257,7 @@ Dialog {
                         delegate: ItemDelegate {
                             width: strategyCombo.width
                             height: 32
+                            highlighted: strategyCombo.highlightedIndex === index
                             contentItem: Text {
                                 text: modelData.text
                                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
@@ -265,6 +269,11 @@ Dialog {
                                 color: highlighted ? ((theme && theme.selection && theme.selection.charAt(0) === '#') ? theme.selection : "#264f78") :
                                        ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
                                 radius: 0
+                            }
+                            onClicked: {
+                                strategyCombo.currentIndex = index;
+                                strategyCombo.activated(index);
+                                strategyCombo.popup.close();
                             }
                         }
 
@@ -651,6 +660,7 @@ Dialog {
                         delegate: ItemDelegate {
                             width: themeModeCombo.width
                             height: 32
+                            highlighted: themeModeCombo.highlightedIndex === index
                             contentItem: Text {
                                 text: modelData.text
                                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
@@ -662,6 +672,11 @@ Dialog {
                                 color: highlighted ? ((theme && theme.selection && theme.selection.charAt(0) === '#') ? theme.selection : "#264f78") :
                                        ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
                                 radius: 0
+                            }
+                            onClicked: {
+                                themeModeCombo.currentIndex = index;
+                                themeModeCombo.activated(index);
+                                themeModeCombo.popup.close();
                             }
                         }
 
@@ -747,6 +762,7 @@ Dialog {
                         delegate: ItemDelegate {
                             width: languageCombo.width
                             height: 32
+                            highlighted: languageCombo.highlightedIndex === index
                             contentItem: Text {
                                 text: modelData.text
                                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
@@ -758,6 +774,11 @@ Dialog {
                                 color: highlighted ? ((theme && theme.selection && theme.selection.charAt(0) === '#') ? theme.selection : "#264f78") :
                                        ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
                                 radius: 0
+                            }
+                            onClicked: {
+                                languageCombo.currentIndex = index;
+                                languageCombo.activated(index);
+                                languageCombo.popup.close();
                             }
                         }
 
