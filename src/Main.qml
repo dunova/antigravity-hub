@@ -256,7 +256,6 @@ ApplicationWindow {
         SettingsDialog {
             id: settingsDialog
             objectName: "settingsDialog"
-            anchors.centerIn: parent
         }
 
         // Shortcut Help Overlay

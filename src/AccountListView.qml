@@ -1139,9 +1139,9 @@ Item {
                                 text: model.gemini4Reset || "—"
                                 font.family: theme.monoFont
                                 font.pixelSize: 11
-                                font.weight: Font.Medium
+                                font.weight: Font.DemiBold
                                 renderType: Text.NativeRendering
-                                color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
+                                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
                                 horizontalAlignment: Text.AlignRight
                                 elide: Text.ElideNone
                             }
@@ -1241,10 +1241,10 @@ Item {
                                     text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") : (model.gemini38Reset5h || "—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
-                                    font.weight: (model.gemini38QuotaW <= 0.0001) ? Font.Bold : Font.Medium
+                                    font.weight: (model.gemini38QuotaW <= 0.0001) ? Font.Bold : Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
-                                           ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6"))
+                                           ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF"))
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideNone
                                 }
@@ -1309,9 +1309,9 @@ Item {
                                     text: model.gemini38ResetW || "—"
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
-                                    font.weight: Font.Medium
+                                    font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
-                                    color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
+                                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideNone
                                 }
@@ -1412,10 +1412,10 @@ Item {
                                     text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") : (model.claudeReset5h || "—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
-                                    font.weight: (model.claudeQuotaW <= 0.0001) ? Font.Bold : Font.Medium
+                                    font.weight: (model.claudeQuotaW <= 0.0001) ? Font.Bold : Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
-                                           ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6"))
+                                           ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF"))
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideNone
                                 }
@@ -1480,9 +1480,9 @@ Item {
                                     text: model.claudeResetW || "—"
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
-                                    font.weight: Font.Medium
+                                    font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
-                                    color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
+                                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideNone
                                 }

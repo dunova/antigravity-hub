@@ -8,7 +8,7 @@ QT += core gui qml quick quickcontrols2 dbus network svg
 CONFIG += c++17 release
 CONFIG -= debug
 TARGET = antigravity-hub
-VERSION = 2.51.0
+VERSION = 2.51.1
 TEMPLATE = app
 
 # Strict compiler hygiene & warning flags

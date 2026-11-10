@@ -220,6 +220,7 @@ void Theme::setThemeMode(const QString &mode) {
         m_themeMode = normalized;
         emit themeModeChanged();
         reload();
+        emit changed();
     }
 }
 

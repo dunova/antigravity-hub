@@ -175,7 +175,7 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.51.0")
+                text: qsTr("v%1").arg("2.51.1")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 renderType: Text.NativeRendering

@@ -1245,6 +1245,10 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
         QVERIFY2(obj != nullptr, "SettingsDialog failed to instantiate offscreen");
         QCOMPARE(obj->property("modal").toBool(), true);
         QVERIFY(obj->metaObject()->indexOfMethod("saveAndApply()") != -1);
+        QVERIFY(QMetaObject::invokeMethod(obj.data(), "open"));
+        QCoreApplication::processEvents();
+        QVERIFY(QMetaObject::invokeMethod(obj.data(), "close"));
+        QCoreApplication::processEvents();
     }
 
     // 4. Verify HelpOverlay.qml
@@ -1296,7 +1300,7 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
         QVERIFY(obj->metaObject()->indexOfMethod("activateCurrent()") != -1);
     }
 
-    // 8. Verify Main.qml
+    // 8. Verify Main.qml and live modal interactions
     {
         QQmlComponent comp(&engine, QUrl(QStringLiteral("qrc:/Main.qml")));
         QVERIFY2(!comp.isError(), qPrintable(comp.errorString()));
@@ -1305,6 +1309,15 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
         if (auto *win = qobject_cast<QQuickWindow*>(obj.data())) {
             win->show();
             QCoreApplication::processEvents();
+
+            // Verify settingsDialog opens and closes cleanly without CPU hang or freeze
+            auto *settingsDlg = obj->findChild<QObject*>(QStringLiteral("settingsDialog"));
+            QVERIFY2(settingsDlg != nullptr, "settingsDialog not found in Main.qml");
+            QVERIFY(QMetaObject::invokeMethod(settingsDlg, "open"));
+            QTRY_COMPARE_WITH_TIMEOUT(settingsDlg->property("visible").toBool(), true, 1000);
+            QVERIFY(QMetaObject::invokeMethod(settingsDlg, "close"));
+            QTRY_COMPARE_WITH_TIMEOUT(settingsDlg->property("visible").toBool(), false, 1000);
+
             const QImage snapshot = win->grabWindow();
             if (!snapshot.isNull()) {
                 snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/hub_pure_offscreen.png"));

@@ -154,11 +154,23 @@ class AntigravityQuotaRotator:
             rot_cfg = get_auto_rotation_config()
             rot_mode = rot_cfg.get("mode", "gemini")
 
+        # 动态联动控制台设置告急阈值
+        depletion_thresh = self.depletion_threshold
+        try:
+            from hub.server import get_hub_settings
+            hub_cfg = get_hub_settings()
+            if rot_mode == "claude":
+                depletion_thresh = _safe_float(hub_cfg.get("claude_threshold", self.depletion_threshold), self.depletion_threshold)
+            else:
+                depletion_thresh = _safe_float(hub_cfg.get("gemini_threshold", self.depletion_threshold), self.depletion_threshold)
+        except Exception:
+            pass
+
         check_5h = c_5h if rot_mode == "claude" else g_5h
         check_wk = c_wk if rot_mode == "claude" else g_wk
 
         # 2. 检查配额是否耗尽
-        is_depleted = (check_5h < self.depletion_threshold or check_wk < 0.005)
+        is_depleted = (check_5h < depletion_thresh or check_wk < 0.005)
         if not is_depleted and not active_acc.get("validation_blocked"):
             return False
 

@@ -13,10 +13,13 @@ Dialog {
     focus: true
     dim: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-    x: Math.round(((parent ? parent.width : 480) - width) / 2)
-    y: Math.round(((parent ? parent.height : 540) - height) / 2)
-    width: Math.min(parent ? parent.width - 32 : 480, 480)
+    anchors.centerIn: Overlay.overlay
+    width: 500
+    padding: 0
+    topPadding: 0
+    bottomPadding: 0
+    leftPadding: 0
+    rightPadding: 0
 
     signal settingsSaved(var settings)
 
@@ -55,8 +58,8 @@ Dialog {
         }
 
         // 2. Thresholds
-        geminiSlider.value = (s.gemini_threshold !== undefined) ? s.gemini_threshold : 0.15;
-        claudeSlider.value = (s.claude_threshold !== undefined) ? s.claude_threshold : 0.15;
+        geminiSlider.value = (s.gemini_threshold !== undefined) ? s.gemini_threshold : 0.05;
+        claudeSlider.value = (s.claude_threshold !== undefined) ? s.claude_threshold : 0.05;
 
         // 3. Switches
         prewarmSwitch.checked = (s.hourly_warmup !== undefined) ? s.hourly_warmup : true;
@@ -65,7 +68,7 @@ Dialog {
         // 4. Language
         var curLang = (translator && translator.overrideLanguage && translator.overrideLanguage !== "") ?
                       translator.overrideLanguage :
-                      (s.language || "system");
+                      ((s.language && s.language !== "") ? s.language : "system");
         for (var j = 0; j < languageCombo.model.length; ++j) {
             if (languageCombo.model[j].value === curLang) {
                 languageCombo.currentIndex = j;
@@ -85,20 +88,25 @@ Dialog {
         }
 
         // 6. Account Mask
-        maskSwitch.checked = (backend ? backend.masked : (s.account_mask || false));
+        maskSwitch.checked = (backend ? Boolean(backend.masked) : Boolean(s.account_mask || false));
     }
 
     function saveAndApply() {
+        var selectedStrat = strategyCombo.model[strategyCombo.currentIndex].value;
         var selectedTheme = themeModeCombo.model[themeModeCombo.currentIndex].value;
         var selectedLang = languageCombo.model[languageCombo.currentIndex].value;
         var isMasked = maskSwitch.checked;
+        var isPrewarm = prewarmSwitch.checked;
+        var isNotify = notificationSwitch.checked;
+        var gemThresh = Number(geminiSlider.value.toFixed(2));
+        var claudeThresh = Number(claudeSlider.value.toFixed(2));
 
         var payload = {
-            "rotation_strategy": strategyCombo.model[strategyCombo.currentIndex].value,
-            "gemini_threshold": Number(geminiSlider.value.toFixed(2)),
-            "claude_threshold": Number(claudeSlider.value.toFixed(2)),
-            "hourly_warmup": prewarmSwitch.checked,
-            "notifications_enabled": notificationSwitch.checked,
+            "rotation_strategy": selectedStrat,
+            "gemini_threshold": gemThresh,
+            "claude_threshold": claudeThresh,
+            "hourly_warmup": isPrewarm,
+            "notifications_enabled": isNotify,
             "account_mask": isMasked,
             "theme_mode": selectedTheme,
             "language": selectedLang
@@ -117,11 +125,12 @@ Dialog {
         // 3. Immediately apply Mask live
         if (backend) {
             backend.setMasked(isMasked);
+            backend.setThemeMode(selectedTheme);
             backend.saveSettings(payload);
         }
 
         settingsSaved(payload);
-        root.accept();
+        root.close();
     }
 
     contentItem: ColumnLayout {
@@ -158,7 +167,7 @@ Dialog {
                         size: 13
                         tint: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                     }
-                    onClicked: root.reject()
+                    onClicked: root.close()
                 }
             }
 
@@ -175,14 +184,17 @@ Dialog {
         ScrollView {
             id: formScrollView
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(formLayout.implicitHeight + 20, (parent ? parent.height - 120 : 580))
+            Layout.preferredHeight: 510
+            Layout.maximumHeight: 530
             contentWidth: availableWidth
             clip: true
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
             ColumnLayout {
                 id: formLayout
                 width: formScrollView.availableWidth - 36
-                x: 18
+                anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 16
 
                 Item { Layout.preferredHeight: 4 }
@@ -257,15 +269,17 @@ Dialog {
                         }
 
                         popup: Popup {
-                            y: strategyCombo.height
+                            y: strategyCombo.height + 2
                             width: strategyCombo.width
-                            implicitHeight: contentItem.implicitHeight + 4
+                            implicitHeight: Math.min(180, contentItem.contentHeight + 4)
                             padding: 2
                             contentItem: ListView {
                                 clip: true
                                 implicitHeight: contentHeight
-                                model: strategyCombo.popup.visible ? strategyCombo.delegateModel : null
+                                model: strategyCombo.delegateModel
                                 currentIndex: strategyCombo.highlightedIndex
+                                highlightMoveDuration: 0
+                                boundsBehavior: Flickable.StopAtBounds
                             }
                             background: Rectangle {
                                 color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
@@ -315,7 +329,7 @@ Dialog {
                         from: 0.01
                         to: 0.50
                         stepSize: 0.01
-                        value: 0.15
+                        value: 0.05
 
                         background: Rectangle {
                             x: geminiSlider.leftPadding
@@ -384,7 +398,7 @@ Dialog {
                         from: 0.01
                         to: 0.50
                         stepSize: 0.01
-                        value: 0.15
+                        value: 0.05
 
                         background: Rectangle {
                             x: claudeSlider.leftPadding
@@ -521,7 +535,7 @@ Dialog {
                     }
                 }
 
-                // 6. Mask Account Identifiers Switch (账号脱敏选项，默认关闭)
+                // 6. Mask Account Identifiers Switch (账号脱敏选项)
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -547,7 +561,7 @@ Dialog {
                     Switch {
                         id: maskSwitch
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        checked: backend ? backend.masked : false
+                        checked: backend ? Boolean(backend.masked) : false
                         onToggled: {
                             if (backend) backend.setMasked(checked);
                         }
@@ -604,6 +618,7 @@ Dialog {
                         onActivated: {
                             var val = model[currentIndex].value;
                             if (theme) theme.setThemeMode(val);
+                            if (backend) backend.setThemeMode(val);
                         }
 
                         indicator: Text {
@@ -651,15 +666,17 @@ Dialog {
                         }
 
                         popup: Popup {
-                            y: themeModeCombo.height
+                            y: themeModeCombo.height + 2
                             width: themeModeCombo.width
-                            implicitHeight: contentItem.implicitHeight + 4
+                            implicitHeight: Math.min(180, contentItem.contentHeight + 4)
                             padding: 2
                             contentItem: ListView {
                                 clip: true
                                 implicitHeight: contentHeight
-                                model: themeModeCombo.popup.visible ? themeModeCombo.delegateModel : null
+                                model: themeModeCombo.delegateModel
                                 currentIndex: themeModeCombo.highlightedIndex
+                                highlightMoveDuration: 0
+                                boundsBehavior: Flickable.StopAtBounds
                             }
                             background: Rectangle {
                                 color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
@@ -745,15 +762,17 @@ Dialog {
                         }
 
                         popup: Popup {
-                            y: languageCombo.height
+                            y: languageCombo.height + 2
                             width: languageCombo.width
-                            implicitHeight: contentItem.implicitHeight + 4
+                            implicitHeight: Math.min(180, contentItem.contentHeight + 4)
                             padding: 2
                             contentItem: ListView {
                                 clip: true
                                 implicitHeight: contentHeight
-                                model: languageCombo.popup.visible ? languageCombo.delegateModel : null
+                                model: languageCombo.delegateModel
                                 currentIndex: languageCombo.highlightedIndex
+                                highlightMoveDuration: 0
+                                boundsBehavior: Flickable.StopAtBounds
                             }
                             background: Rectangle {
                                 color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
@@ -807,7 +826,7 @@ Dialog {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
-                    onClicked: root.reject()
+                    onClicked: root.close()
                 }
 
                 Button {
