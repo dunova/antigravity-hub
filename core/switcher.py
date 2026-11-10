@@ -410,7 +410,11 @@ class AntigravityPhysicalManager:
                             success_count += 1
                             break
                         else:
-                            logger.warning(f"⚠️ 写入 secret-tool [{col_name}] 失败 (尝试 {attempt}/3): {err}")
+                            err_s = (err or "").strip()
+                            if col_name == "login" and ("不存在" in err_s or "does not exist" in err_s.lower() or "no such object" in err_s.lower()):
+                                logger.debug(f"跳过不存在的 secret-tool [login] 集合，回落默认集合: {err_s}")
+                                break
+                            logger.warning(f"⚠️ 写入 secret-tool [{col_name}] 失败 (尝试 {attempt}/3): {err_s}")
                             time.sleep(0.1 * attempt)
                     except Exception as e:
                         logger.error(f"❌ 执行 secret-tool [{col_name}] 异常: {e}")

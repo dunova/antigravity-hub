@@ -164,6 +164,68 @@ class TestTokenGuardian(unittest.TestCase):
                     self.assertEqual(call_count["probe"], 2)  # 1次401失败 + 1次自愈重试
                     self.assertEqual(acc["gemini"]["quota_5h"], 0.85)
 
+    def test_refresh_clears_poisoned_gemini4_for_46(self):
+        """测试：4.6 账号即使存在跨账号串台残留的 gemini4，刷新配额后必须强制归零清空"""
+        email = "super46@example.com"
+        acc = {
+            "id": "acc_46",
+            "email": email,
+            "access_token": "valid_at_46",
+            "refresh_token": "rt_46",
+            "expires_at": time.time() + 2500,
+            "gemini": {},
+            "claude": {},
+            "gemini4": {"quota_weekly": 0.2757, "reset_time_weekly": "2026-11-17T01:38:57Z"}
+        }
+        with patch.object(self.engine, "fetch_live_quota", return_value=({"gemini-5h": 0.4, "gemini-weekly": 0.5, "3p-5h": 1.0, "3p-weekly": 1.0}, {}, None)):
+            with patch.object(self.engine, "fetch_available_models", return_value=("4.6", ["claude-sonnet-4-6", "claude-opus-4-6-thinking"])):
+                with patch.object(self.engine, "_sync_antigravity_tools_cache"):
+                    ok = self.engine.refresh_single_account_quota(email, acc)
+                    self.assertTrue(ok)
+                    self.assertEqual(acc["claude_version"], "4.6")
+                    self.assertIsNone(acc["gemini4"])
+
+    def test_auto_ingest_syncs_local_creds_on_newer_secret(self):
+        """测试：IDE 自行续签 secret-tool 后，auto_ingest_system_account 同步更新 Hub 与本地 oauth_creds/jetski"""
+        import datetime, subprocess
+        email = "ide_renew@example.com"
+        now = int(time.time())
+        newer_exp = now + 3400
+        newer_iso = datetime.datetime.fromtimestamp(newer_exp, tz=datetime.timezone.utc).isoformat()
+        fake_kd = json.dumps({
+            "token": {"access_token": "ide_fresh_at", "refresh_token": "rt_same", "expiry": newer_iso},
+            "id_token_email": email
+        })
+        fake_hub = {
+            "active_email": email,
+            "accounts": {
+                email: {
+                    "id": "acc_ide_1",
+                    "email": email,
+                    "access_token": "old_hub_at",
+                    "refresh_token": "rt_same",
+                    "expires_at": now + 1000,
+                    "gemini": {},
+                    "claude": {}
+                }
+            }
+        }
+        mock_proc = MagicMock(returncode=0, stdout=fake_kd)
+        with patch("subprocess.run", return_value=mock_proc):
+            with patch.object(self.engine, "load_accounts", return_value=fake_hub):
+                with patch.object(self.engine, "save_accounts") as mock_save:
+                    with patch.object(self.engine, "sync_from_local_language_server", return_value=False):
+                        with patch("core.switcher.AntigravityPhysicalManager.sync_local_credentials") as mock_local_sync:
+                            em, is_new = self.engine.auto_ingest_system_account()
+                            self.assertEqual(em, email)
+                            self.assertFalse(is_new)
+                            self.assertEqual(fake_hub["accounts"][email]["access_token"], "ide_fresh_at")
+                            mock_local_sync.assert_called_once()
+                            args = mock_local_sync.call_args[0]
+                            self.assertEqual(args[0], email)
+                            self.assertEqual(args[1], "ide_fresh_at")
+                            mock_save.assert_called()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

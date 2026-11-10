@@ -238,6 +238,7 @@ void AccountModel::loadFromDisk() {
 
         // Claude 版本与模型矩阵探测
         const QJsonArray cModels = a.value(QStringLiteral("claude_models")).toArray();
+        const QString explicitVer = a.value(QStringLiteral("claude_version")).toString();
         bool has55 = false;
         for (const QJsonValue &v : cModels) {
             const QString mStr = v.toString();
@@ -246,17 +247,19 @@ void AccountModel::loadFromDisk() {
                 break;
             }
         }
-        if (!has55 && a.value(QStringLiteral("claude_version")).toString() == QStringLiteral("5.5")) {
+        if (cModels.isEmpty() && explicitVer == QStringLiteral("5.5")) {
             has55 = true;
         }
         item.hasClaude55 = has55;
 
-        // Gemini 4 专享解析
+        // Gemini 4 专享解析 (严格防 4.6 账号被跨账号污染显示)
+        const bool hasExplicitVer = !cModels.isEmpty() || !explicitVer.isEmpty();
+        const bool allowGemini4 = item.hasClaude55 || !hasExplicitVer;
         QJsonObject g4Obj = a.value(QStringLiteral("gemini4")).toObject();
         if (g4Obj.isEmpty()) {
             g4Obj = a.value(QStringLiteral("gemini_4")).toObject();
         }
-        if (!g4Obj.isEmpty() && g4Obj.contains(QStringLiteral("quota_weekly"))) {
+        if (allowGemini4 && !g4Obj.isEmpty() && g4Obj.contains(QStringLiteral("quota_weekly"))) {
             item.gemini4Quota = g4Obj.value(QStringLiteral("quota_weekly")).toDouble();
             const QString g4ResetIso = g4Obj.value(QStringLiteral("reset_time_weekly")).toString();
             item.gemini4ResetTs = parseIsoTimestamp(g4ResetIso);

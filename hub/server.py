@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.2"
-__canonical_version_tag__ = "20261110-v3.0.2-MAC_CANONICAL_TOKEN_REFRESH_RELEASE"
-__last_updated__ = "2026-11-10 19:30:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.2：严格对齐 Mac 原版架构，剔除冗余 30s 巡检线程，纯粹依托 ensure_fresh_token 临期自愈与活跃凭据全端原子同步"
+__version__ = "3.0.3"
+__canonical_version_tag__ = "20261110-v3.0.3-ZERO_G4_LEAK_AND_FULL_TOKEN_LOCKSTEP"
+__last_updated__ = "2026-11-10 20:40:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.3：根除跨账号 Gemini 4 串台污染（4.6/disabled 强制归零）、闭合 secret-tool ↔ oauth_creds/jetski/app_storage 全端同步缺口"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -455,6 +455,7 @@ class KeychainFileLock:
 class HubEngine:
     def __init__(self):
         self.lock = threading.Lock()
+        self._token_lock = threading.Lock()
         self.refreshing_now = False
         self._cached_accounts_data: Dict[str, Any] = {}
         self._ensure_storage()
@@ -609,6 +610,8 @@ class HubEngine:
                     acc_obj["claude_version"] = "4.6"
                     if not c_mods:
                         acc_obj["claude_models"] = ["claude-sonnet-4-6", "claude-opus-4-6-thinking"]
+                    if acc_obj.get("gemini4") is not None:
+                        acc_obj["gemini4"] = None
                 else:
                     acc_obj["claude_version"] = "5.5"
                     # 5.5 账号必然开通并可使用 Gemini 4
@@ -803,6 +806,7 @@ class HubEngine:
                     continue
 
                 old_active = data.get("active_email", "")
+                prev_active_g4 = accounts.get(old_active, {}).get("gemini4") if (old_active and old_active != email and old_active in accounts) else None
                 if old_active != email:
                     data["active_email"] = email
                     updated_any = True
@@ -822,6 +826,7 @@ class HubEngine:
                     continue
 
                 g4_found = None
+                g4_disabled = False
                 g38_found = None
                 claude_found = None
                 c_models = []
@@ -835,7 +840,9 @@ class HubEngine:
                     m_lbl_low = m_lbl.lower()
 
                     if "gemini-4" in m_id_low or "argon" in m_id_low or "gemini 4" in m_lbl_low:
-                        if rem is not None and g4_found is None:
+                        if "disabled" in m_id_low or rem is None:
+                            g4_disabled = True
+                        elif g4_found is None:
                             g4_found = {
                                 "quota_weekly": float(rem),
                                 "reset_time_weekly": reset
@@ -854,11 +861,20 @@ class HubEngine:
                                 "reset_time_5h": reset
                             }
 
-                if g4_found is not None:
-                    prev_g4 = acc.get("gemini4")
-                    if prev_g4 != g4_found:
-                        acc["gemini4"] = g4_found
+                ls_has_55 = any(("5-5" in cm or "5.5" in cm) for cm in c_models)
+                if g4_disabled or (c_models and not ls_has_55):
+                    # 明确未开通 Gemini 4 (如 gemini-4-argon-disabled 或 4.6 账号)，必须彻底清空残留/串台数据
+                    if acc.get("gemini4") is not None:
+                        acc["gemini4"] = None
                         updated_any = True
+                elif g4_found is not None and (ls_has_55 or not c_models):
+                    # 防切号瞬间串台门禁：切号首拍若 g4_found 与前活跃账号完全一致且当前账号此前为 4.6，禁止跨号污染
+                    is_bleed = (old_active != email and prev_active_g4 == g4_found and acc.get("claude_version") == "4.6")
+                    if not is_bleed:
+                        prev_g4 = acc.get("gemini4")
+                        if prev_g4 != g4_found:
+                            acc["gemini4"] = g4_found
+                            updated_any = True
 
                 if g38_found is not None:
                     g_dict = acc.setdefault("gemini", {})
@@ -1029,24 +1045,29 @@ class HubEngine:
                         pass
 
                 hub_exp = int(existing.get("expires_at", 0) or existing.get("expiry_timestamp", 0))
+                sync_local_needed = False
+                hub_pushed_to_system = False
                 if existing.get("refresh_token") != rt:
                     existing["refresh_token"] = rt
                     existing["access_token"] = at
                     existing["expires_at"] = kd_exp if kd_exp > now_ts else (now_ts + 3600)
                     existing["expiry_timestamp"] = existing["expires_at"]
                     updated = True
+                    sync_local_needed = True
                 elif kd_exp > 0 and kd_exp > hub_exp + 60:
                     # 系统钥匙串中的 Token 更新（例如 IDE 自身续签），反向同步回 Hub 账本
                     existing["access_token"] = at
                     existing["expires_at"] = kd_exp
                     existing["expiry_timestamp"] = kd_exp
                     updated = True
+                    sync_local_needed = True
                 elif kd_exp > 0 and hub_exp > kd_exp + 60 and hub_exp > now_ts + 300:
                     # 严格判定系统钥匙串中的 Token 过期时间戳滞后于 Hub 账本，主动回补同步
                     hub_at = existing.get("access_token", "")
                     if hub_at and hub_at != at:
                         logger.info(f"🛡️ [钥匙串滞后自愈] 系统密钥环凭据时间戳滞后 ({kd_exp} < {hub_exp})，主动同步最新 Token 至系统...")
                         self.sync_active_credentials_to_system(detected_email, hub_at, rt, hub_exp)
+                        hub_pushed_to_system = True
                 if data.get("active_email") != detected_email:
                     # 人工干预保护优先门禁：若当前处于有效锁定保护期，杜绝被意外覆盖
                     lock_info = get_manual_override_lock()
@@ -1060,6 +1081,7 @@ class HubEngine:
                             return locked_acc, False
                     old_active = data.get("active_email", "")
                     data["active_email"] = detected_email
+                    sync_local_needed = True
                     # 发生活跃账号切换时，立即刷新原账号与新账号的真实配额，防止刚用完的账号滞留显示 100%
                     if old_active and old_active in accounts and old_active != detected_email:
                         try:
@@ -1071,6 +1093,38 @@ class HubEngine:
                     except Exception as ex:
                         logger.warning(f"切换后刷新新账号 {detected_email} 配额异常: {ex}")
                     updated = True
+
+                # 若系统钥匙串 Token 有效且未由 Hub 回补过，核验 ~/.gemini/oauth_creds.json / app_storage.json 是否滞后脱节
+                if not hub_pushed_to_system and (kd_exp == 0 or kd_exp > now_ts + 60):
+                    if not sync_local_needed:
+                        try:
+                            if not os.path.exists(OAUTH_CREDS_PATH) or not os.path.exists(GOOGLE_ACCOUNTS_PATH):
+                                sync_local_needed = True
+                            else:
+                                with open(OAUTH_CREDS_PATH, "r", encoding="utf-8") as cf:
+                                    if json.load(cf).get("access_token") != at:
+                                        sync_local_needed = True
+                                if not sync_local_needed:
+                                    with open(GOOGLE_ACCOUNTS_PATH, "r", encoding="utf-8") as gf:
+                                        if json.load(gf).get("active") != detected_email:
+                                            sync_local_needed = True
+                                if not sync_local_needed:
+                                    app_st_p = os.path.expanduser("~/.config/Antigravity/app_storage.json")
+                                    if os.path.isfile(app_st_p):
+                                        with open(app_st_p, "r", encoding="utf-8") as af:
+                                            if json.load(af).get("agy.onboarding.lastLoginUsername") != detected_email:
+                                                sync_local_needed = True
+                        except Exception:
+                            sync_local_needed = True
+
+                    if sync_local_needed:
+                        try:
+                            from core.switcher import AntigravityPhysicalManager
+                            sync_exp = kd_exp if kd_exp > now_ts else (int(existing.get("expires_at", 0) or existing.get("expiry_timestamp", 0)) or (now_ts + 3600))
+                            AntigravityPhysicalManager().sync_local_credentials(detected_email, at, rt, sync_exp)
+                        except Exception as se:
+                            logger.warning(f"同步本地凭据文件至系统钥匙串当前状态异常: {se}")
+
                 if self.sync_from_local_language_server(data):
                     updated = True
                 if updated:
@@ -1300,30 +1354,53 @@ class HubEngine:
             logger.warning(f"账号 {email} 缺少 refresh_token，无法刷新")
             return None, False
 
-        refreshed = self.refresh_google_token(rt)
-        if not refreshed or "access_token" not in refreshed:
-            logger.error(f"账号 {email} 刷新 Google Token 失败")
-            return None, False
+        with self._token_lock:
+            # 锁内二次检查（防止多线程并发同时重复触发 Google OAuth 续签）
+            now = int(time.time())
+            cur_at = acc.get("access_token")
+            cur_exp = acc.get("expires_at", 0) or acc.get("expiry_timestamp", 0)
+            if not force and cur_at and cur_exp > (now + TOKEN_REFRESH_SKEW_SECONDS):
+                return cur_at, False
+            if not force and email and self._cached_accounts_data:
+                cached_acc = self._cached_accounts_data.get("accounts", {}).get(email)
+                if cached_acc:
+                    c_at = cached_acc.get("access_token")
+                    c_exp = cached_acc.get("expires_at", 0) or cached_acc.get("expiry_timestamp", 0)
+                    if c_at and c_exp > (now + TOKEN_REFRESH_SKEW_SECONDS):
+                        acc["access_token"] = c_at
+                        acc["expires_at"] = c_exp
+                        acc["expiry_timestamp"] = c_exp
+                        return c_at, False
 
-        at = refreshed.get("access_token")
-        expires_in = refreshed.get("expires_in", 3600)
-        exp = now + expires_in
-        acc["access_token"] = at
-        acc["expires_at"] = exp
-        acc["expiry_timestamp"] = exp
-        if acc_id:
-            self._sync_antigravity_tools_cache(acc_id, access_token=at, refresh_token=rt, expiry_ts=exp)
+            refreshed = self.refresh_google_token(rt)
+            if not refreshed or "access_token" not in refreshed:
+                logger.error(f"账号 {email} 刷新 Google Token 失败")
+                return None, False
 
-        # 核心契约：若当前被刷新的账号是活跃账号，必须立即无感同步至底层钥匙串与所有凭据真源！
-        try:
-            data = self.load_accounts()
-            active_email = data.get("active_email", "")
-            if email and email == active_email:
-                self.sync_active_credentials_to_system(email, at, rt, exp)
-        except Exception as se:
-            logger.warning(f"同步活跃账号凭据至系统异常: {se}")
+            at = refreshed.get("access_token")
+            expires_in = refreshed.get("expires_in", 3600)
+            exp = now + expires_in
+            acc["access_token"] = at
+            acc["expires_at"] = exp
+            acc["expiry_timestamp"] = exp
+            if email and self._cached_accounts_data and email in self._cached_accounts_data.get("accounts", {}):
+                ca = self._cached_accounts_data["accounts"][email]
+                ca["access_token"] = at
+                ca["expires_at"] = exp
+                ca["expiry_timestamp"] = exp
+            if acc_id:
+                self._sync_antigravity_tools_cache(acc_id, access_token=at, refresh_token=rt, expiry_ts=exp)
 
-        return at, True
+            # 核心契约：若当前被刷新的账号是活跃账号，必须立即无感同步至底层钥匙串与所有凭据真源！
+            try:
+                data = self.load_accounts()
+                active_email = data.get("active_email", "")
+                if email and email == active_email:
+                    self.sync_active_credentials_to_system(email, at, rt, exp)
+            except Exception as se:
+                logger.warning(f"同步活跃账号凭据至系统异常: {se}")
+
+            return at, True
 
     def refresh_single_account_quota(self, email: str, acc: Dict[str, Any]) -> bool:
         acc_id = acc.get("id", "")
@@ -1342,7 +1419,8 @@ class HubEngine:
             logger.warning(f"⚠️ 账号 {email} 探测配额返回空或 401，立即启动强制 Token 续签自愈...")
             new_at, ok = self.ensure_fresh_token(acc, force=True)
             if ok and new_at:
-                quotas, resets, val_url = self.fetch_live_quota(new_at)
+                at = new_at
+                quotas, resets, val_url = self.fetch_live_quota(at)
         if val_url is not None:
             # 捕获到 Google 风控拦截，立即熔断
             acc["validation_blocked"] = True
@@ -1418,11 +1496,12 @@ class HubEngine:
 
         # 3. 探测模型矩阵 (确定 Claude 5.5 付费Pro 徽章与可用模型)
         try:
+            g4_from_summary = (quotas.get("gemini4-weekly") is not None) if quotas else False
             c_ver, c_mods = self.fetch_available_models(at)
             if c_mods:
                 acc["claude_models"] = c_mods
                 acc["claude_version"] = c_ver
-            # 业务真理门禁：5.5 账号必然开通并可使用 Gemini 4
+            # 业务真理门禁：5.5 账号必然开通并可使用 Gemini 4；非 5.5 (4.6) 且无官方 gemini4-weekly 返回时强制清零防串台
             is_pro_55 = (c_ver == "5.5" or any(("5-5" in m or "5.5" in m) for m in c_mods))
             if is_pro_55:
                 if not acc.get("gemini4") or not isinstance(acc.get("gemini4"), dict) or acc["gemini4"].get("quota_weekly") is None:
@@ -1430,6 +1509,8 @@ class HubEngine:
                         "quota_weekly": _safe_float(acc.get("gemini", {}).get("quota_weekly", 1.0), 1.0),
                         "reset_time_weekly": acc.get("gemini", {}).get("reset_time_weekly", "")
                     }
+            elif c_mods and not g4_from_summary:
+                acc["gemini4"] = None
         except Exception:
             pass
 
@@ -1886,13 +1967,13 @@ def render_table_rows(include_oob: bool = False) -> str:
 
         # Claude 配额与真实模型版本 (依全局实测模型矩阵精准判定，彻底杜绝虚假 5.5)
         c_models = acc.get("claude_models") or []
-        has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_models) or acc.get("claude_version") == "5.5"
+        has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_models) if c_models else (acc.get("claude_version") == "5.5")
         claude_ver = "5.5" if has_real_55 else "4.6"
         is_pro_55 = (claude_ver == "5.5")
 
-        # Gemini 4 配额 (业务真理: 5.5 账号必然具备并可以使用 Gemini 4)
+        # Gemini 4 配额 (业务真理: 仅 5.5 账号具备 Gemini 4；4.6 账号即使存在历史残留也强制显示 —)
         g4_info = acc.get("gemini4") or acc.get("gemini_4")
-        if g4_info and isinstance(g4_info, dict) and "quota_weekly" in g4_info and g4_info.get("quota_weekly") is not None:
+        if is_pro_55 and g4_info and isinstance(g4_info, dict) and "quota_weekly" in g4_info and g4_info.get("quota_weekly") is not None:
             g4_w = _safe_float(g4_info.get("quota_weekly"))
             g4_reset_raw = g4_info.get("reset_time_weekly", "")
             g4_reset_w = format_reset_time(g4_reset_raw)

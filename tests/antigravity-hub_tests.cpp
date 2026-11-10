@@ -745,6 +745,17 @@ void AntigravityHubTests::accountModelJsonParsingAndRoles() {
     a3["claude"] = a3Cla;
     accountsObj["blocked@gmail.com"] = a3;
 
+    // Account 4: explicit Claude 4.6 account with stale poisoned gemini4 object (must ignore gemini4!)
+    QJsonObject a4;
+    a4["email"] = "super46@gmail.com";
+    a4["name"] = "super46";
+    a4["claude_version"] = "4.6";
+    a4["claude_models"] = QJsonArray({QStringLiteral("claude-sonnet-4-6")});
+    QJsonObject a4Gem; a4Gem["quota_5h"] = 0.5; a4Gem["quota_weekly"] = 0.5; a4["gemini"] = a4Gem;
+    QJsonObject a4Cla; a4Cla["quota_5h"] = 1.0; a4Cla["quota_weekly"] = 1.0; a4["claude"] = a4Cla;
+    QJsonObject a4Gem4; a4Gem4["quota_weekly"] = 0.2757; a4["gemini4"] = a4Gem4;
+    accountsObj["super46@gmail.com"] = a4;
+
     QJsonObject rootDoc;
     rootDoc["active_email"] = "cakeai66@gmail.com";
     rootDoc["accounts"] = accountsObj;
@@ -756,7 +767,7 @@ void AntigravityHubTests::accountModelJsonParsingAndRoles() {
 
     // Instantiate AccountModel
     AccountModel model;
-    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.rowCount(), 4);
     QCOMPARE(model.activeEmail(), QString("cakeai66@gmail.com"));
 
     // Find row index for cakeai66@gmail.com
@@ -787,6 +798,13 @@ void AntigravityHubTests::accountModelJsonParsingAndRoles() {
     QCOMPARE(model.data(idxBlocked, AccountModel::Gemini38Quota5hRole).toDouble(), 0.0);
     QCOMPARE(model.data(idxBlocked, AccountModel::ClaudeQuota5hRole).toDouble(), 0.0);
     QCOMPARE(model.data(idxBlocked, AccountModel::StatusRole).toString(), QString("EXHAUSTED"));
+
+    // Verify Row for super46@gmail.com (Explicit 4.6 must suppress poisoned gemini4!)
+    int rowSuper46 = model.findIndexByEmail("super46@gmail.com");
+    QVERIFY(rowSuper46 >= 0);
+    QModelIndex idxSuper46 = model.index(rowSuper46, 0);
+    QCOMPARE(model.data(idxSuper46, AccountModel::HasClaude55Role).toBool(), false);
+    QCOMPARE(model.data(idxSuper46, AccountModel::Gemini4ValidRole).toBool(), false);
 }
 
 void AntigravityHubTests::accountModelMaskingAndStatus() {
