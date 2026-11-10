@@ -648,21 +648,29 @@ void BackendController::checkManualLockState()
                 if (lockedAccount.isEmpty()) {
                     lockedAccount = obj.value(QStringLiteral("account")).toString();
                 }
-                if (!lockedAccount.isEmpty() && m_activeEmail != lockedAccount) {
+
+                // Only treat as manually locked if lockedAccount matches the current active account
+                // (or if active account was not yet initialized). Never overwrite a known active account with a stale lock!
+                if (m_activeEmail.isEmpty() && !lockedAccount.isEmpty()) {
                     m_activeEmail = lockedAccount;
                     emit activeEmailChanged();
                 }
 
-                if (!m_isManualLocked) {
-                    m_isManualLocked = true;
-                    emit manualLockedChanged();
-                }
-                emit manualLockRemainingChanged();
+                const bool lockMatchesActive = (!m_activeEmail.isEmpty() && !lockedAccount.isEmpty() &&
+                                                m_activeEmail.compare(lockedAccount, Qt::CaseInsensitive) == 0);
 
-                if (!m_countdownTimer->isActive()) {
-                    m_countdownTimer->start(1000);
+                if (lockMatchesActive) {
+                    if (!m_isManualLocked) {
+                        m_isManualLocked = true;
+                        emit manualLockedChanged();
+                    }
+                    emit manualLockRemainingChanged();
+
+                    if (!m_countdownTimer->isActive()) {
+                        m_countdownTimer->start(1000);
+                    }
+                    return;
                 }
-                return;
             }
         }
     }

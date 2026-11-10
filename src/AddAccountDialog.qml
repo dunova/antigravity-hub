@@ -77,7 +77,7 @@ Dialog {
         // 2. 选项 1: 一键吸纳当前系统凭据
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 56
+            implicitHeight: Math.max(56, opt1Row.implicitHeight + 20)
             radius: 0
             color: opt1Mouse.containsMouse ?
                    ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26") :
@@ -88,6 +88,7 @@ Dialog {
                           ((theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff")
 
             RowLayout {
+                id: opt1Row
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 12
@@ -102,12 +103,16 @@ Dialog {
                     Layout.fillWidth: true
                     spacing: 2
                     Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
                         text: qsTr("一键吸纳当前系统凭据")
                         font.pixelSize: 12
                         font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                     Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
                         text: qsTr("从系统钥匙串/IDE 现存登录缓存中直接导入活跃 Google 凭据")
                         font.pixelSize: 11
                         color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
@@ -132,7 +137,7 @@ Dialog {
         // 3. 选项 2: 浏览器授权登录添加
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 56
+            implicitHeight: Math.max(56, opt2Row.implicitHeight + 20)
             radius: 0
             color: opt2Mouse.containsMouse ?
                    ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26") :
@@ -143,6 +148,7 @@ Dialog {
                           ((theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff")
 
             RowLayout {
+                id: opt2Row
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 12
@@ -157,12 +163,16 @@ Dialog {
                     Layout.fillWidth: true
                     spacing: 2
                     Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
                         text: qsTr("浏览器授权登录添加")
                         font.pixelSize: 12
                         font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                     Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
                         text: qsTr("启动系统默认浏览器完成 Google OAuth 授权接管")
                         font.pixelSize: 11
                         color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
@@ -187,7 +197,7 @@ Dialog {
         // 4. 选项 3: 导入 JSON 凭据备份
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 56
+            implicitHeight: Math.max(56, opt3Row.implicitHeight + 20)
             radius: 0
             color: opt3Mouse.containsMouse ?
                    ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26") :
@@ -198,6 +208,7 @@ Dialog {
                           ((theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff")
 
             RowLayout {
+                id: opt3Row
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 12
@@ -212,12 +223,16 @@ Dialog {
                     Layout.fillWidth: true
                     spacing: 2
                     Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
                         text: qsTr("导入 JSON 凭据备份")
                         font.pixelSize: 12
                         font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                     Text {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
                         text: qsTr("粘贴来自其他 Hub 实例或备份文件的 JSON 凭据文本")
                         font.pixelSize: 11
                         color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
@@ -296,7 +311,7 @@ Dialog {
                         text: qsTr("确认导入")
                         font.pixelSize: 11
                         font.weight: Font.DemiBold
-                        color: (theme && theme.accentForeground) ? theme.accentForeground : "#000000"
+                        color: (theme && theme.accentForeground && theme.accentForeground.length > 0) ? theme.accentForeground : "#FFFFFF"
                     }
 
                     MouseArea {

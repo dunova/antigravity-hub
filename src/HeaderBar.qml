@@ -24,13 +24,14 @@ Rectangle {
 
     AddAccountDialog {
         id: addAccountDialog
+        objectName: "addAccountDialog"
     }
 
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 12
         anchors.rightMargin: 12
-        spacing: 10
+        spacing: 7
 
         // =====================================================================
         // LEFT GROUP: Logo + Title + ACTIVE Account Badge + Version Tag
@@ -74,23 +75,24 @@ Rectangle {
         Rectangle {
             id: activeBadge
             height: 28
-            implicitWidth: activeContentRow.implicitWidth + 16
+            implicitWidth: activeContentRow.implicitWidth + 14
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
-            // Adaptive coloring based on manual protection lock
+            readonly property color lockColor: (theme && theme.mode === "light") ? "#D97706" : "#F59E0B"
+            readonly property color activeColor: (theme && theme.accent) ? theme.accent : "#7daea3"
+
+            // Adaptive coloring: warm amber for manual lock, crisp accent for active
             color: (backend && backend.isManualLocked) ?
-                   Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#ff5f4a", 0.15) :
-                   Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15)
-            border.color: (backend && backend.isManualLocked) ?
-                          ((theme && theme.dangerText) ? theme.dangerText : "#ff5f4a") :
-                          ((theme && theme.accent) ? theme.accent : "#7daea3")
+                   Qt.alpha(lockColor, 0.15) :
+                   Qt.alpha(activeColor, 0.15)
+            border.color: (backend && backend.isManualLocked) ? lockColor : activeColor
             border.width: 1
 
             RowLayout {
                 id: activeContentRow
                 anchors.centerIn: parent
-                spacing: 6
+                spacing: 5
 
                 // Static Solid Indicator Dot (No blinking/breathing)
                 Rectangle {
@@ -98,9 +100,7 @@ Rectangle {
                     width: 6
                     height: 6
                     radius: 0
-                    color: (backend && backend.isManualLocked) ?
-                           ((theme && theme.dangerText) ? theme.dangerText : "#ff5f4a") :
-                           ((theme && theme.accent) ? theme.accent : "#7daea3")
+                    color: (backend && backend.isManualLocked) ? activeBadge.lockColor : activeBadge.activeColor
                 }
 
                 // Badge Status Tag
@@ -108,7 +108,7 @@ Rectangle {
                     text: {
                         if (backend && backend.isManualLocked) {
                             var mins = Math.ceil(backend.manualLockRemaining / 60);
-                            return qsTr("Manual Protection") + (mins > 0 ? (" " + mins + "m") : "");
+                            return qsTr("🔒 %1m").arg(mins > 0 ? mins : 1);
                         }
                         if (headerBarRoot.currentActiveEmail && headerBarRoot.currentActiveEmail.length > 0) {
                             return qsTr("ACTIVE");
@@ -119,8 +119,8 @@ Rectangle {
                     font.pixelSize: 11
                     renderType: Text.NativeRendering
                     color: (backend && backend.isManualLocked) ?
-                           ((theme && theme.dangerText) ? theme.dangerText : "#ff5f4a") :
-                           ((theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3"))
+                           activeBadge.lockColor :
+                           ((theme && theme.accentText) ? theme.accentText : activeBadge.activeColor)
                 }
 
                 // Active Account Handle (Masked if masking enabled)
@@ -142,7 +142,7 @@ Rectangle {
                     renderType: Text.NativeRendering
                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     elide: Text.ElideRight
-                    Layout.maximumWidth: 180
+                    Layout.maximumWidth: 130
                 }
             }
 
@@ -171,7 +171,7 @@ Rectangle {
             height: 22
             implicitWidth: verText.implicitWidth + 12
             radius: 0
-            color: "#0dffffff"
+            color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : ((theme && theme.surface2) ? theme.surface2 : "#1a2c26")
             border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
             border.width: 1
             Layout.alignment: Qt.AlignVCenter
@@ -179,11 +179,11 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.51.3")
+                text: qsTr("v%1").arg("2.51.4")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 renderType: Text.NativeRendering
-                color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#64887b"
+                color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#64887b"
             }
         }
 
@@ -200,7 +200,7 @@ Rectangle {
         Rectangle {
             id: addAccountCapsule
             height: 30
-            implicitWidth: addAccountRow.implicitWidth + 24
+            implicitWidth: addAccountRow.implicitWidth + 14
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -244,7 +244,7 @@ Rectangle {
         Rectangle {
             id: maskCapsule
             height: 30
-            implicitWidth: maskText.implicitWidth + 22
+            implicitWidth: maskText.implicitWidth + 16
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -286,7 +286,7 @@ Rectangle {
         Rectangle {
             id: settingsCapsule
             height: 30
-            implicitWidth: settText.implicitWidth + 24
+            implicitWidth: settText.implicitWidth + 14
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -324,7 +324,7 @@ Rectangle {
         Rectangle {
             id: topgCapsule
             height: 30
-            implicitWidth: topgText.implicitWidth + 24
+            implicitWidth: topgText.implicitWidth + 14
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -364,7 +364,7 @@ Rectangle {
         Rectangle {
             id: rotationCapsule
             height: 30
-            implicitWidth: geminiText.implicitWidth + 22
+            implicitWidth: geminiText.implicitWidth + 14
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -414,7 +414,7 @@ Rectangle {
         Rectangle {
             id: prewarmCapsule
             height: 30
-            implicitWidth: prewarmRow.implicitWidth + 24
+            implicitWidth: prewarmRow.implicitWidth + 14
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 

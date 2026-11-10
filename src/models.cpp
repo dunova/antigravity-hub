@@ -423,18 +423,28 @@ void AccountModel::loadManualLockState() {
     if (!doc.isObject()) return;
 
     const QJsonObject obj = doc.object();
-    const QString lockedAccount = obj.value(QStringLiteral("manual_account")).toString();
+    QString lockedAccount = obj.value(QStringLiteral("manual_account")).toString();
+    if (lockedAccount.isEmpty()) {
+        lockedAccount = obj.value(QStringLiteral("account")).toString();
+    }
     const qint64 lockedUntil = obj.value(QStringLiteral("locked_until")).toVariant().toLongLong();
     const qint64 nowEpoch = QDateTime::currentSecsSinceEpoch();
 
     for (int i = 0; i < m_accounts.size(); ++i) {
-        if (m_accounts[i].email.compare(lockedAccount, Qt::CaseInsensitive) == 0 && lockedUntil > nowEpoch) {
+        if (!lockedAccount.isEmpty() &&
+            m_accounts[i].email.compare(lockedAccount, Qt::CaseInsensitive) == 0 &&
+            lockedUntil > nowEpoch) {
             m_accounts[i].manualLockUntilTs = lockedUntil;
             m_accounts[i].manualLockRemaining = static_cast<int>(lockedUntil - nowEpoch);
         } else {
             m_accounts[i].manualLockUntilTs = 0;
             m_accounts[i].manualLockRemaining = 0;
         }
+    }
+    if (!m_accounts.isEmpty()) {
+        emit dataChanged(index(0), index(m_accounts.size() - 1), {
+            ManualLockRemainingRole, ManualLockRemainingStrRole
+        });
     }
 }
 
@@ -459,14 +469,21 @@ void AccountModel::onSecondTick() {
         const QString g38R5 = formatCountdown(acc.gemini38Reset5hTs, nowEpoch);
         if (g38R5 != acc.gemini38Reset5h) { acc.gemini38Reset5h = g38R5; anyChanged = true; }
 
+        const QString g38RW = formatCountdown(acc.gemini38ResetWTs, nowEpoch);
+        if (g38RW != acc.gemini38ResetW) { acc.gemini38ResetW = g38RW; anyChanged = true; }
+
         const QString cR5 = formatCountdown(acc.claudeReset5hTs, nowEpoch);
         if (cR5 != acc.claudeReset5h) { acc.claudeReset5h = cR5; anyChanged = true; }
+
+        const QString cRW = formatCountdown(acc.claudeResetWTs, nowEpoch);
+        if (cRW != acc.claudeResetW) { acc.claudeResetW = cRW; anyChanged = true; }
     }
 
     if (anyChanged && !m_accounts.isEmpty()) {
         emit dataChanged(index(0), index(m_accounts.size() - 1), {
             ManualLockRemainingRole, ManualLockRemainingStrRole,
-            Gemini4ResetRole, Gemini38Reset5hRole, ClaudeReset5hRole
+            Gemini4ResetRole, Gemini38Reset5hRole, Gemini38ResetWRole,
+            ClaudeReset5hRole, ClaudeResetWRole
         });
     }
 }

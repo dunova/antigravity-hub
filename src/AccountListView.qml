@@ -6,16 +6,26 @@ Item {
     id: accountListView
 
     // =========================================================================
-    // 0. 共享列几何常数 (Strict Header-Data Row Synchronization - Tiled 896px Geometry)
+    // 0. 响应式共享列几何常数 (Strict Header-Data Row Synchronization)
+    //    20px 固定开销 = 左边距 8 + 右边距 8 + 4 条 1px 竖向分割线
+    //    876px 最小列总宽 + 20px = 896px (920px 最小窗口 / 941px 半屏 / 1896px 全屏自适应)
     // =========================================================================
+    readonly property int availColsWidth: Math.max(876, Math.floor(width) - 20)
+    readonly property int extraColsWidth: Math.max(0, availColsWidth - 876)
+    readonly property int extraAccWidth: Math.round(extraColsWidth * 0.16)
+    readonly property int extraG4Width: Math.round(extraColsWidth * 0.20)
+    readonly property int extraG38Width: Math.round(extraColsWidth * 0.32)
+    readonly property int extraClaudeWidth: Math.max(0, extraColsWidth - extraAccWidth - extraG4Width - extraG38Width)
+
     readonly property int colCheckWidth: 24
-    readonly property int colIndexWidth: 26
+    readonly property int colIndexWidth: 24
     readonly property int colStatusWidth: 66
-    readonly property int colAccountWidth: 106
-    readonly property int colG4Width: 150
-    readonly property int colG38Width: 218
-    readonly property int colClaudeWidth: 218
-    readonly property int rowHeight: 40
+    readonly property int colAccountWidth: 108 + extraAccWidth
+    readonly property int colG4Width: 152 + extraG4Width
+    readonly property int colG38Width: 219 + extraG38Width
+    readonly property int colClaudeWidth: 219 + extraClaudeWidth
+    readonly property int colActionWidth: 64
+    readonly property int rowHeight: 42
     readonly property int pageSize: 15
     readonly property int pageCount: Math.max(1, Math.ceil(listView.count / pageSize))
     readonly property int currentPage: Math.min(pageCount - 1, Math.floor((listView.contentY + 1) / (rowHeight * pageSize)))
@@ -23,7 +33,51 @@ Item {
         var pg = Math.max(0, Math.min(pageCount - 1, p));
         listView.positionViewAtIndex(pg * pageSize, ListView.Beginning);
     }
-    readonly property int colActionWidth: 65
+
+    property int dragFromIndex: -1
+    property int dragTargetIndex: -1
+
+    function reorderVisibleRow(fromIdx, toIdx) {
+        if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx || !proxyModel) return;
+        var visibleCount = (typeof proxyModel.count !== "undefined") ? proxyModel.count : proxyModel.rowCount();
+        if (fromIdx >= visibleCount || toIdx >= visibleCount) return;
+
+        var visibleEmails = [];
+        for (var i = 0; i < visibleCount; ++i) {
+            var acc = proxyModel.getFilteredAccount(i);
+            if (acc && acc.email) visibleEmails.push(acc.email);
+        }
+        if (fromIdx >= visibleEmails.length || toIdx >= visibleEmails.length) return;
+
+        var movedEmail = visibleEmails.splice(fromIdx, 1)[0];
+        visibleEmails.splice(toIdx, 0, movedEmail);
+
+        var visibleSet = {};
+        for (var j = 0; j < visibleEmails.length; ++j) visibleSet[visibleEmails[j]] = true;
+
+        var fullOrder = [];
+        var total = (accountModel && typeof accountModel.count !== "undefined") ? accountModel.count :
+                    (accountModel ? (typeof accountModel.rowCount === "function" ? accountModel.rowCount() : accountModel.totalAccounts) : 0);
+        var visPtr = 0;
+        for (var k = 0; k < total; ++k) {
+            var fullAcc = accountModel.getAccount(k);
+            var e = fullAcc ? fullAcc.email : "";
+            if (!e) continue;
+            if (visibleSet[e]) {
+                fullOrder.push(visibleEmails[visPtr++]);
+            } else {
+                fullOrder.push(e);
+            }
+        }
+        if (proxyModel.sortField !== "default") {
+            proxyModel.setSortRule("default", Qt.DescendingOrder);
+        }
+        if (typeof backendController !== "undefined" && backendController) {
+            backendController.reorderAccounts(fullOrder);
+        } else if (typeof backend !== "undefined" && backend) {
+            backend.reorderAccounts(fullOrder);
+        }
+    }
 
     // 账号配额统计计数 (供底部状态栏与筛选器消费)
     readonly property int availableCount: {
@@ -48,9 +102,13 @@ Item {
         var total = (accountModel && typeof accountModel.count !== "undefined") ? accountModel.count :
                     (accountModel ? (typeof accountModel.rowCount === "function" ? accountModel.rowCount() : accountModel.totalAccounts) : 0);
         for (var i = 0; i < total; ++i) {
-            var acc = (typeof accountModel.get === "function") ? accountModel.get(i) : accountModel.getAccount(i);
+            var acc = (typeof accountModel.getAccount === "function") ? accountModel.getAccount(i) :
+                      (typeof accountModel.get === "function" ? accountModel.get(i) : null);
             var e = acc ? acc.email : "";
             if (e && e !== email) emails.push(e);
+        }
+        if (proxyModel && proxyModel.sortField !== "default") {
+            proxyModel.setSortRule("default", Qt.DescendingOrder);
         }
         if (typeof backendController !== "undefined" && backendController) {
             backendController.reorderAccounts(emails);
@@ -166,6 +224,9 @@ Item {
                     Layout.fillHeight: true
                     CheckBox {
                         anchors.centerIn: parent
+                        implicitWidth: 20
+                        implicitHeight: 20
+                        padding: 0
                         checked: accountListView.selectedCount > 0 &&
                                  proxyModel && (accountListView.selectedCount === proxyModel.rowCount())
                         onToggled: {
@@ -274,7 +335,7 @@ Item {
                     }
                 }
 
-                // Col 4: 账号 (支持点击按账号字母序排序)
+                // Col 4: 账号 (支持点击按账号字母序排序，与数据行用户名左边缘 16px 对齐)
                 Rectangle {
                     Layout.preferredWidth: colAccountWidth
                     Layout.minimumWidth: colAccountWidth
@@ -284,7 +345,8 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 4
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 8
                         spacing: 2
 
                         Text {
@@ -293,6 +355,7 @@ Item {
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
                             color: (proxyModel && (proxyModel.sortField === "account" || proxyModel.sortField === "username")) ?
                                    ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
@@ -345,7 +408,8 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 10
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 10
                         spacing: 4
 
                         Text {
@@ -354,6 +418,7 @@ Item {
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
                             color: (proxyModel && proxyModel.sortField === "gemini4") ?
                                    ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
@@ -407,6 +472,7 @@ Item {
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 10
+                        anchors.rightMargin: 8
                         spacing: 4
 
                         Text {
@@ -415,6 +481,7 @@ Item {
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
                             color: (proxyModel && proxyModel.sortField === "gemini38_w") ?
                                    ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
@@ -468,6 +535,7 @@ Item {
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 10
+                        anchors.rightMargin: 8
                         spacing: 4
 
                         Text {
@@ -476,6 +544,7 @@ Item {
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
+                            elide: Text.ElideRight
                             color: (proxyModel && proxyModel.sortField === "claude_w") ?
                                    ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
@@ -716,13 +785,33 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             snapMode: ListView.SnapToItem
 
+            // 拖拽重排目标分割线指示器
+            Rectangle {
+                id: dropIndicator
+                visible: accountListView.dragFromIndex >= 0 && accountListView.dragTargetIndex >= 0 && accountListView.dragTargetIndex !== accountListView.dragFromIndex
+                x: 0
+                width: listView.width
+                height: 2
+                radius: 0
+                z: 20
+                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3"
+                y: {
+                    if (!visible) return 0;
+                    var idx = accountListView.dragTargetIndex;
+                    var baseY = (idx > accountListView.dragFromIndex) ? (idx + 1) * accountListView.rowHeight : idx * accountListView.rowHeight;
+                    return Math.max(0, Math.min(listView.height - 2, baseY - listView.contentY - 1));
+                }
+            }
+
             ScrollBar.vertical: ScrollBar {
                 id: listScrollBar
                 policy: ScrollBar.AsNeeded
+                visible: size < 0.999
                 width: 6
                 contentItem: Rectangle {
                     implicitWidth: 6
                     radius: 0
+                    visible: listScrollBar.size < 0.999
                     color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
                 }
                 background: Item {}
@@ -763,12 +852,24 @@ Item {
                 width: listView.width
                 height: accountListView.rowHeight
                 radius: 0
+                opacity: (accountListView.dragFromIndex === index) ? 0.65 : 1.0
 
                 // 25 项 QML Role 绑定的直接消费
                 property bool isRowActive: model.isActive || false
                 property bool isRowBlocked: model.isBlocked || false
                 property bool isRowSelected: listView.currentIndex === index
                 property bool isRowChecked: accountListView.selectedEmails[model.email] === true
+                readonly property bool isManualLockedRow: (model.isActive || false) && ((model.manualLockRemaining || 0) > 0)
+                readonly property bool isRowHovered: rowMouse.containsMouse ||
+                    statusPillMouse.containsMouse ||
+                    dragMouse.containsMouse ||
+                    nameMouse.containsMouse ||
+                    pinTopMouse.containsMouse ||
+                    rowCheckBox.hovered ||
+                    g4EmptyMouse.containsMouse ||
+                    btnSwitchMouse.containsMouse ||
+                    btnUnblockMouse.containsMouse ||
+                    btnInUseMouse.containsMouse
 
                 // Marker 7: 严格固定屏幕行交替斑马律 (index % 2 永恒交替，不受排序或激活行位置干扰)
                 readonly property color rowBgColor: (index % 2 === 0) ?
@@ -777,7 +878,7 @@ Item {
 
                 color: isRowSelected ?
                     Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.24) :
-                    (rowMouse.containsMouse ?
+                    (rowDelegate.isRowHovered ?
                         ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
                         (isRowActive ? Qt.tint(rowBgColor, Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.10)) : rowBgColor))
 
@@ -829,7 +930,12 @@ Item {
                         Layout.maximumWidth: colCheckWidth
                         Layout.fillHeight: true
                         CheckBox {
+                            id: rowCheckBox
                             anchors.centerIn: parent
+                            implicitWidth: 20
+                            implicitHeight: 20
+                            padding: 0
+                            hoverEnabled: true
                             checked: rowDelegate.isRowChecked
                             onToggled: accountListView.toggleSelectRow(model.email)
                         }
@@ -855,7 +961,7 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 3: 状态胶囊 (全直角长方形 74x20)
+                    // Col 3: 状态胶囊 (全直角长方形 60x20，人工锁定时切换为紧凑 [🔒 15m])
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colStatusWidth
@@ -865,46 +971,54 @@ Item {
 
                         Rectangle {
                             anchors.centerIn: parent
-                            width: 58
+                            width: 60
                             height: 20
                             radius: 0
+                            clip: true
 
-                            // Marker 5: 行内 ACTIVE 状态徽章定锚 theme.accent，严禁 goodText 绿色
-                            color: model.isActive ?
-                                   Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15) :
-                                   (model.isBlocked ?
-                                       Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.18) :
-                                       (model.status === "EXHAUSTED" ?
-                                           Qt.alpha((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280", 0.15) :
-                                           ((theme && theme.mode === "light") ? "#0a000000" : "#14ffffff")))
+                            // Marker 5: 行内 ACTIVE 状态徽章定锚 theme.accent，严禁 goodText 绿色；人工保护锁定时使用琥珀警示框
+                            color: rowDelegate.isManualLockedRow ?
+                                   Qt.alpha("#F59E0B", 0.16) :
+                                   (model.isActive ?
+                                       Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15) :
+                                       (model.isBlocked ?
+                                           Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.18) :
+                                           (model.status === "EXHAUSTED" ?
+                                               Qt.alpha((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280", 0.15) :
+                                               ((theme && theme.mode === "light") ? "#0a000000" : "#14ffffff"))))
 
                             border.width: 1
-                            border.color: model.isActive ? ((theme && theme.accent) ? theme.accent : "#7daea3") :
-                                          (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
-                                              (model.status === "EXHAUSTED" ? ((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280") :
-                                                  ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")))
+                            border.color: rowDelegate.isManualLockedRow ? "#F59E0B" :
+                                          (model.isActive ? ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                                              (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                                  (model.status === "EXHAUSTED" ? ((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280") :
+                                                      ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff"))))
 
                             RowLayout {
                                 anchors.centerIn: parent
+                                width: Math.min(implicitWidth, parent.width - 6)
                                 spacing: 3
 
-                                // Marker 5: 呼吸指示方块 (breathing dot) 定锚 theme.accent
+                                // Marker 5: 指示方块 (dot) 定锚 theme.accent
                                 Rectangle {
                                     width: 5
                                     height: 5
                                     radius: 0
-                                    visible: model.isActive
+                                    visible: model.isActive && !rowDelegate.isManualLockedRow
                                     color: (theme && theme.accent) ? theme.accent : "#7daea3"
                                 }
 
                                 Text {
+                                    id: statusPillText
+                                    visible: !rowDelegate.isManualLockedRow
                                     text: model.isActive ? qsTr("ACTIVE") :
                                           (model.isBlocked ? qsTr("Blocked") :
                                               (model.status === "EXHAUSTED" ? qsTr("Exhausted") : qsTr("STANDBY")))
                                     font.family: theme.monoFont
-                                    font.pixelSize: 11
+                                    font.pixelSize: (text.length > 7) ? 10 : 11
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
+                                    elide: Text.ElideRight
                                     color: model.isActive ?
                                            ((theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3")) :
                                            (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
@@ -912,10 +1026,10 @@ Item {
                                                    ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6")))
                                 }
 
-                                // 人工保护倒计时标签
+                                // 人工保护锁定倒计时标签 (紧凑 10px 锁图标 + 时长，杜绝越界)
                                 RowLayout {
-                                    visible: model.isActive && (model.manualLockRemaining > 0)
-                                    spacing: 2
+                                    visible: rowDelegate.isManualLockedRow
+                                    spacing: 3
                                     AppIcon {
                                         name: "lock"
                                         size: 10
@@ -931,6 +1045,17 @@ Item {
                                     }
                                 }
                             }
+
+                            MouseArea {
+                                id: statusPillMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                ToolTip.visible: containsMouse && rowDelegate.isManualLockedRow
+                                ToolTip.text: qsTr("Manual protection locked: %1 left").arg(model.manualLockRemainingStr || "")
+                                onClicked: {
+                                    listView.currentIndex = index;
+                                }
+                            }
                         }
                     }
 
@@ -943,11 +1068,12 @@ Item {
                         Layout.minimumWidth: colAccountWidth
                         Layout.maximumWidth: colAccountWidth
                         Layout.fillHeight: true
+                        clip: true
 
-                        // 1. 拖拽手柄图标 (⠿)
+                        // 1. 拖拽手柄图标 (⠿) - 支持真实纵向拖拽排序
                         Item {
                             id: dragHandle
-                            width: 14
+                            width: 22
                             height: parent.height
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
@@ -958,14 +1084,45 @@ Item {
                                 font.family: theme.monoFont
                                 font.pixelSize: 13
                                 renderType: Text.NativeRendering
-                                color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#64887b"
+                                color: (dragMouse.containsMouse || accountListView.dragFromIndex === index) ?
+                                       ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3") :
+                                       ((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#64887b")
                             }
 
                             MouseArea {
                                 id: dragMouse
                                 anchors.fill: parent
-                                cursorShape: Qt.SizeVerCursor
+                                cursorShape: accountListView.dragFromIndex === index ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                 hoverEnabled: true
+                                preventStealing: true
+                                onPressed: function(mouse) {
+                                    accountListView.dragFromIndex = index;
+                                    accountListView.dragTargetIndex = index;
+                                    listView.interactive = false; // ★ 物理防 Flickable 抢夺拖拽手势
+                                    mouse.accepted = true;
+                                }
+                                onPositionChanged: function(mouse) {
+                                    if (accountListView.dragFromIndex !== index) return;
+                                    var pt = dragMouse.mapToItem(listView.contentItem, mouse.x, mouse.y);
+                                    var clampedY = Math.max(0, Math.min(listView.contentHeight - 1, pt.y));
+                                    var hoverIdx = Math.floor(clampedY / accountListView.rowHeight);
+                                    accountListView.dragTargetIndex = Math.max(0, Math.min(listView.count - 1, hoverIdx));
+                                }
+                                onReleased: {
+                                    listView.interactive = true;
+                                    var f = accountListView.dragFromIndex;
+                                    var t = accountListView.dragTargetIndex;
+                                    accountListView.dragFromIndex = -1;
+                                    accountListView.dragTargetIndex = -1;
+                                    if (f >= 0 && t >= 0 && f !== t) {
+                                        accountListView.reorderVisibleRow(f, t);
+                                    }
+                                }
+                                onCanceled: {
+                                    listView.interactive = true;
+                                    accountListView.dragFromIndex = -1;
+                                    accountListView.dragTargetIndex = -1;
+                                }
                             }
                         }
 
@@ -973,9 +1130,9 @@ Item {
                         Text {
                             id: accountNameText
                             anchors.left: dragHandle.right
-                            anchors.leftMargin: 2
+                            anchors.leftMargin: 4
                             anchors.right: (pinTopBtn.visible ? pinTopBtn.left : parent.right)
-                            anchors.rightMargin: pinTopBtn.visible ? 4 : 2
+                            anchors.rightMargin: pinTopBtn.visible ? 4 : 6
                             anchors.verticalCenter: parent.verticalCenter
                             text: model.displayUsername || ""
                             font.family: theme.uiFont
@@ -984,7 +1141,7 @@ Item {
                             renderType: Text.NativeRendering
                             elide: Text.ElideRight
                             color: model.isActive ?
-                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                                   ((theme && theme.mode === "light") ? theme.accent : ((theme && theme.accentText) ? theme.accentText : "#93C5FD")) :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
 
                             ToolTip.visible: nameMouse.containsMouse && !pinTopMouse.containsMouse && !dragMouse.containsMouse
@@ -1000,22 +1157,24 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
+                                listView.currentIndex = index;
                                 if (backend && typeof backend.copyToClipboard === "function") {
                                     backend.copyToClipboard(model.email);
                                 }
                             }
                         }
 
-                        // 3. 悬浮 [置顶] 按钮 (非在用且非首行悬浮显现)
+                        // 3. 悬浮 [置顶] 按钮 (非在用且非首行悬浮显现；由行联合悬停判定保障移入按钮不闪烁)
                         Rectangle {
                             id: pinTopBtn
                             anchors.right: parent.right
-                            anchors.rightMargin: 2
+                            anchors.rightMargin: 4
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 34
+                            implicitWidth: Math.max(28, pinTopText.implicitWidth + 10)
+                            width: implicitWidth
                             height: 18
                             radius: 0
-                            visible: rowMouse.containsMouse && !model.isActive && index > 0
+                            visible: rowDelegate.isRowHovered && !model.isActive && index > 0 && accountListView.dragFromIndex === -1
                             color: pinTopMouse.containsMouse ?
                                    ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
                                    ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
@@ -1025,6 +1184,7 @@ Item {
                                           ((theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#3c3836")
 
                             Text {
+                                id: pinTopText
                                 anchors.centerIn: parent
                                 text: qsTr("置顶")
                                 font.family: theme.uiFont
@@ -1032,7 +1192,7 @@ Item {
                                 font.weight: Font.DemiBold
                                 renderType: Text.NativeRendering
                                 color: pinTopMouse.containsMouse ?
-                                       ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                                       ((theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3")) :
                                        ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6")
                             }
 
@@ -1064,13 +1224,14 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 5: Gemini 4 配额单元格 (彻底移除 周 徽标，原生进度条、数值与倒计时)
+                    // Col 5: Gemini 4 配额单元格 (彻底移除 周 徽标，严格裁剪零溢出)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colG4Width
                         Layout.minimumWidth: colG4Width
                         Layout.maximumWidth: colG4Width
                         Layout.fillHeight: true
+                        clip: true
 
                         // 账号无 Gemini 4 权限：优雅呈现中线 —
                         Text {
@@ -1091,18 +1252,19 @@ Item {
                             }
                         }
 
-                        // 账号具备 Gemini 4 额度：单轨纯净进度条 (零 周 徽标)
+                        // 账号具备 Gemini 4 额度：单轨纯净进度条
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 10
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 10
                             visible: model.gemini4Valid
-                            spacing: 6
+                            spacing: 5
 
                             // 1. 原生平滑进度条 (高对比纯直角长方形)
                             Rectangle {
                                 Layout.fillWidth: true
-                                implicitWidth: 64
-                                Layout.minimumWidth: 48
+                                implicitWidth: 48
+                                Layout.minimumWidth: 16
                                 Layout.preferredHeight: 5
                                 height: 5
                                 radius: 0
@@ -1133,12 +1295,14 @@ Item {
                                 color: accountListView.getQuotaColor(model.gemini4Quota)
                             }
 
-                            // 3. 重置倒计时槽位 (54px 零截断)
+                            // 3. 重置倒计时槽位 (12px 统一字体字号 + 54px 右对齐，绝不越界)
                             Text {
                                 Layout.preferredWidth: 54
-                                text: model.gemini4Reset || "—"
+                                Layout.leftMargin: 2
+                                text: (model.gemini4Reset === "即将恢复") ? qsTr("即将恢复") :
+                                      ((model.gemini4Reset === "--" || !model.gemini4Reset) ? "—" : model.gemini4Reset)
                                 font.family: theme.monoFont
-                                font.pixelSize: 11
+                                font.pixelSize: 12
                                 font.weight: Font.DemiBold
                                 renderType: Text.NativeRendering
                                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
@@ -1162,22 +1326,24 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 6: Gemini 3.8 双维配额单元格 (带周耗尽 0.0% 熔断)
+                    // Col 6: Gemini 3.8 双维配额单元格 (带周耗尽 0.0% 熔断，严格裁剪+边距+呼吸感)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colG38Width
                         Layout.minimumWidth: colG38Width
                         Layout.maximumWidth: colG38Width
                         Layout.fillHeight: true
+                        clip: true
 
                         ColumnLayout {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.leftMargin: 10
+                            anchors.rightMargin: 8
                             anchors.topMargin: 2
                             anchors.bottomMargin: 2
-                            spacing: 1
+                            spacing: 3
 
                             // 上轨: 5小时滑动窗口
                             RowLayout {
@@ -1187,6 +1353,8 @@ Item {
                                 Rectangle {
                                     width: 20
                                     height: 14
+                                    Layout.preferredWidth: 20
+                                    Layout.preferredHeight: 14
                                     radius: 0
                                     color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
                                     border.width: 1
@@ -1204,8 +1372,8 @@ Item {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    implicitWidth: 64
-                                    Layout.minimumWidth: 48
+                                    implicitWidth: 60
+                                    Layout.minimumWidth: 24
                                     Layout.preferredHeight: 5
                                     height: 5
                                     radius: 0
@@ -1237,10 +1405,13 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 54
-                                    text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") : (model.gemini38Reset5h || "—")
+                                    Layout.preferredWidth: 62
+                                    Layout.leftMargin: 2
+                                    text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") :
+                                          ((model.gemini38Reset5h === "即将恢复") ? qsTr("即将恢复") :
+                                              ((model.gemini38Reset5h === "--" || !model.gemini38Reset5h) ? "—" : model.gemini38Reset5h))
                                     font.family: theme.monoFont
-                                    font.pixelSize: 11
+                                    font.pixelSize: (model.gemini38QuotaW <= 0.0001) ? 11 : 12
                                     font.weight: (model.gemini38QuotaW <= 0.0001) ? Font.Bold : Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
@@ -1258,6 +1429,8 @@ Item {
                                 Rectangle {
                                     width: 20
                                     height: 14
+                                    Layout.preferredWidth: 20
+                                    Layout.preferredHeight: 14
                                     radius: 0
                                     color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
                                     border.width: 1
@@ -1275,8 +1448,8 @@ Item {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    implicitWidth: 64
-                                    Layout.minimumWidth: 48
+                                    implicitWidth: 60
+                                    Layout.minimumWidth: 24
                                     Layout.preferredHeight: 5
                                     height: 5
                                     radius: 0
@@ -1305,10 +1478,12 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 54
-                                    text: model.gemini38ResetW || "—"
+                                    Layout.preferredWidth: 62
+                                    Layout.leftMargin: 2
+                                    text: (model.gemini38ResetW === "即将恢复") ? qsTr("即将恢复") :
+                                          ((model.gemini38ResetW === "--" || !model.gemini38ResetW) ? "—" : model.gemini38ResetW)
                                     font.family: theme.monoFont
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
@@ -1340,15 +1515,17 @@ Item {
                         Layout.minimumWidth: colClaudeWidth
                         Layout.maximumWidth: colClaudeWidth
                         Layout.fillHeight: true
+                        clip: true
 
                         ColumnLayout {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.leftMargin: 10
+                            anchors.rightMargin: 8
                             anchors.topMargin: 2
                             anchors.bottomMargin: 2
-                            spacing: 1
+                            spacing: 3
 
                             // 上轨: 5小时滑动窗口
                             RowLayout {
@@ -1358,6 +1535,8 @@ Item {
                                 Rectangle {
                                     width: 20
                                     height: 14
+                                    Layout.preferredWidth: 20
+                                    Layout.preferredHeight: 14
                                     radius: 0
                                     color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
                                     border.width: 1
@@ -1375,8 +1554,8 @@ Item {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    implicitWidth: 64
-                                    Layout.minimumWidth: 48
+                                    implicitWidth: 60
+                                    Layout.minimumWidth: 24
                                     Layout.preferredHeight: 5
                                     height: 5
                                     radius: 0
@@ -1408,10 +1587,13 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 54
-                                    text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") : (model.claudeReset5h || "—")
+                                    Layout.preferredWidth: 62
+                                    Layout.leftMargin: 2
+                                    text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") :
+                                          ((model.claudeReset5h === "即将恢复") ? qsTr("即将恢复") :
+                                              ((model.claudeReset5h === "--" || !model.claudeReset5h) ? "—" : model.claudeReset5h))
                                     font.family: theme.monoFont
-                                    font.pixelSize: 11
+                                    font.pixelSize: (model.claudeQuotaW <= 0.0001) ? 11 : 12
                                     font.weight: (model.claudeQuotaW <= 0.0001) ? Font.Bold : Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
@@ -1429,6 +1611,8 @@ Item {
                                 Rectangle {
                                     width: 20
                                     height: 14
+                                    Layout.preferredWidth: 20
+                                    Layout.preferredHeight: 14
                                     radius: 0
                                     color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
                                     border.width: 1
@@ -1446,8 +1630,8 @@ Item {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    implicitWidth: 64
-                                    Layout.minimumWidth: 48
+                                    implicitWidth: 60
+                                    Layout.minimumWidth: 24
                                     Layout.preferredHeight: 5
                                     height: 5
                                     radius: 0
@@ -1476,10 +1660,12 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 54
-                                    text: model.claudeResetW || "—"
+                                    Layout.preferredWidth: 62
+                                    Layout.leftMargin: 2
+                                    text: (model.claudeResetW === "即将恢复") ? qsTr("即将恢复") :
+                                          ((model.claudeResetW === "--" || !model.claudeResetW) ? "—" : model.claudeResetW)
                                     font.family: theme.monoFont
-                                    font.pixelSize: 11
+                                    font.pixelSize: 12
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
@@ -1504,7 +1690,7 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 8: 快速操作按钮组 (82px 纯直角长方形)
+                    // Col 8: 快速操作按钮组
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colActionWidth
@@ -1532,6 +1718,13 @@ Item {
                                 renderType: Text.NativeRendering
                                 color: (theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3")
                             }
+
+                            MouseArea {
+                                id: btnInUseMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.NoButton
+                            }
                         }
 
                         // 2. 解封按钮 (BLOCKED 状态)
@@ -1541,7 +1734,9 @@ Item {
                             width: 52
                             height: 24
                             radius: 0
-                            color: Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.15)
+                            color: btnUnblockMouse.containsMouse ?
+                                   Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.25) :
+                                   Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.15)
                             border.width: 1
                             border.color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
 
@@ -1556,7 +1751,9 @@ Item {
                             }
 
                             MouseArea {
+                                id: btnUnblockMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
                                     if (backend && typeof backend.unblockAccount === "function") {
@@ -1646,7 +1843,7 @@ Item {
 
                 // 右侧: 直角按键键帽组 ([J/K] 移动选择  [Enter] 快速切换  [/] 搜索账号  [?] 快捷键帮助)
                 RowLayout {
-                    spacing: 12
+                    spacing: 8
 
                     Repeater {
                         model: [

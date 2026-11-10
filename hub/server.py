@@ -5997,6 +5997,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
                         if email not in reordered:
                             reordered[email] = info
                     data["accounts"] = reordered
+                    data["accounts_order"] = list(reordered.keys())
                     ENGINE.save_accounts(data)
                     logger.info(f"✅ 账号顺序已持久化保存: {list(reordered.keys())}")
                 html = render_table_rows(include_oob=True)

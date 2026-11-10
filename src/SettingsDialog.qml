@@ -23,6 +23,11 @@ Dialog {
 
     signal settingsSaved(var settings)
 
+    property string initialThemeMode: "system"
+    property string initialLang: "system"
+    property bool initialMasked: false
+    property bool savedApplied: false
+
     background: Rectangle {
         color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c"
         radius: 0
@@ -33,7 +38,7 @@ Dialog {
             anchors.fill: parent
             radius: 0
             color: "transparent"
-            border.color: "#0affffff"
+            border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#0affffff"
             border.width: 1
         }
     }
@@ -43,7 +48,21 @@ Dialog {
         Behavior on opacity { NumberAnimation { duration: 150 } }
     }
 
-    onAboutToShow: loadCurrentSettings()
+    onAboutToShow: {
+        savedApplied = false;
+        loadCurrentSettings();
+    }
+
+    onClosed: {
+        if (!savedApplied) {
+            if (theme) theme.setThemeMode(initialThemeMode);
+            if (translator) translator.setLanguage(initialLang);
+            if (backend) {
+                backend.setThemeMode(initialThemeMode);
+                backend.setMasked(initialMasked);
+            }
+        }
+    }
 
     function loadCurrentSettings() {
         var s = (backend && backend.settings) ? backend.settings : {};
@@ -69,6 +88,7 @@ Dialog {
         var curLang = (translator && translator.overrideLanguage && translator.overrideLanguage !== "") ?
                       translator.overrideLanguage :
                       ((s.language && s.language !== "") ? s.language : "system");
+        initialLang = curLang;
         for (var j = 0; j < languageCombo.model.length; ++j) {
             if (languageCombo.model[j].value === curLang) {
                 languageCombo.currentIndex = j;
@@ -80,6 +100,7 @@ Dialog {
         var thMode = (theme && theme.themeMode && theme.themeMode !== "") ?
                      theme.themeMode :
                      (backend ? backend.themeMode : (s.theme_mode || "system"));
+        initialThemeMode = thMode;
         for (var k = 0; k < themeModeCombo.model.length; ++k) {
             if (themeModeCombo.model[k].value === thMode) {
                 themeModeCombo.currentIndex = k;
@@ -88,10 +109,12 @@ Dialog {
         }
 
         // 6. Account Mask
-        maskSwitch.checked = (backend ? Boolean(backend.masked) : Boolean(s.account_mask || false));
+        initialMasked = (backend ? Boolean(backend.masked) : Boolean(s.account_mask || false));
+        maskSwitch.checked = initialMasked;
     }
 
     function saveAndApply() {
+        savedApplied = true;
         var selectedStrat = (strategyCombo.currentIndex >= 0 && strategyCombo.currentIndex < strategyCombo.model.length) ?
                             strategyCombo.model[strategyCombo.currentIndex].value : "highest-quota";
         var selectedTheme = (themeModeCombo.currentIndex >= 0 && themeModeCombo.currentIndex < themeModeCombo.model.length) ?
@@ -162,7 +185,7 @@ Dialog {
                     Layout.preferredHeight: 28
                     flat: true
                     background: Rectangle {
-                        color: parent.hovered ? "#14ffffff" : "transparent"
+                        color: parent.hovered ? ((theme && theme.surface3) ? theme.surface3 : "#14ffffff") : "transparent"
                         radius: 0
                     }
                     contentItem: AppIcon {
@@ -187,18 +210,36 @@ Dialog {
         ScrollView {
             id: formScrollView
             Layout.fillWidth: true
-            Layout.preferredHeight: 510
-            Layout.maximumHeight: 530
+            Layout.preferredHeight: Math.min(580, Math.max(240, (Overlay.overlay ? Overlay.overlay.height : 800) - 130))
+            Layout.maximumHeight: 600
             contentWidth: availableWidth
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+            ScrollBar.vertical: ScrollBar {
+                id: settingsScrollBar
+                policy: ScrollBar.AsNeeded
+                visible: size < 0.999
+                width: 5
+                contentItem: Rectangle {
+                    implicitWidth: 5
+                    radius: 0
+                    visible: settingsScrollBar.size < 0.999
+                    color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
+                }
+                background: Item {}
+            }
 
-            ColumnLayout {
-                id: formLayout
-                width: formScrollView.availableWidth - 36
-                anchors.horizontalCenter: parent.horizontalCenter
-                spacing: 16
+            Item {
+                width: formScrollView.availableWidth
+                implicitHeight: formLayout.implicitHeight
+
+                ColumnLayout {
+                    id: formLayout
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    spacing: 12
 
                 Item { Layout.preferredHeight: 4 }
 
@@ -483,7 +524,7 @@ Dialog {
                                 height: 14
                                 radius: 0
                                 color: prewarmSwitch.checked ?
-                                       (theme ? theme.accentForeground : "#FFFFFF") :
+                                       ((theme && theme.accentForeground && theme.accentForeground.length > 0) ? theme.accentForeground : "#FFFFFF") :
                                        ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
@@ -536,7 +577,7 @@ Dialog {
                                 height: 14
                                 radius: 0
                                 color: notificationSwitch.checked ?
-                                       (theme ? theme.accentForeground : "#FFFFFF") :
+                                       ((theme && theme.accentForeground && theme.accentForeground.length > 0) ? theme.accentForeground : "#FFFFFF") :
                                        ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
@@ -592,7 +633,7 @@ Dialog {
                                 height: 14
                                 radius: 0
                                 color: maskSwitch.checked ?
-                                       (theme ? theme.accentForeground : "#FFFFFF") :
+                                       ((theme && theme.accentForeground && theme.accentForeground.length > 0) ? theme.accentForeground : "#FFFFFF") :
                                        ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
@@ -806,6 +847,7 @@ Dialog {
                 }
 
                 Item { Layout.preferredHeight: 4 }
+                }
             }
         }
 
@@ -833,11 +875,12 @@ Dialog {
                 Button {
                     text: qsTr("Cancel")
                     Layout.preferredHeight: 32
+                    Layout.preferredWidth: 84
                     flat: true
                     background: Rectangle {
-                        color: parent.hovered ? "#0fffffff" : "transparent"
+                        color: parent.hovered ? ((theme && theme.surface3) ? theme.surface3 : "#0fffffff") : "transparent"
                         radius: 0
-                        border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                        border.color: (theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#14ffffff"
                         border.width: 1
                     }
                     contentItem: Text {
@@ -853,6 +896,7 @@ Dialog {
                 Button {
                     text: qsTr("Save & Apply")
                     Layout.preferredHeight: 32
+                    Layout.minimumWidth: 100
                     background: Rectangle {
                         color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                         radius: 0
@@ -860,7 +904,7 @@ Dialog {
                     }
                     contentItem: Text {
                         text: parent.text
-                        color: (theme && theme.accentForeground && theme.accentForeground.charAt(0) === '#') ? theme.accentForeground : "#000000"
+                        color: (theme && theme.accentForeground && theme.accentForeground.length > 0) ? theme.accentForeground : "#FFFFFF"
                         font.pixelSize: 12
                         font.weight: Font.Medium
                         horizontalAlignment: Text.AlignHCenter

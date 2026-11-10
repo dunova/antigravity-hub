@@ -1447,20 +1447,25 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     const QString content = QString::fromUtf8(file.readAll());
     file.close();
 
-    // Verify column width constants and row height
+    // Verify responsive base column widths and row height
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolCheckWidth\s*:\s*24\b)"))), "colCheckWidth != 24");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolIndexWidth\s*:\s*26\b)"))), "colIndexWidth != 26");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolIndexWidth\s*:\s*24\b)"))), "colIndexWidth != 24");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolStatusWidth\s*:\s*66\b)"))), "colStatusWidth != 66");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*106\b)"))), "colAccountWidth != 106");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG4Width\s*:\s*150\b)"))), "colG4Width != 150");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG38Width\s*:\s*218\b)"))), "colG38Width != 218");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*218\b)"))), "colClaudeWidth != 218");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*65\b)"))), "colActionWidth != 65");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\browHeight\s*:\s*40\b)"))), "rowHeight != 40");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*108\b)"))), "colAccountWidth base != 108");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG4Width\s*:\s*152\b)"))), "colG4Width base != 152");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG38Width\s*:\s*219\b)"))), "colG38Width base != 219");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*219\b)"))), "colClaudeWidth base != 219");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*64\b)"))), "colActionWidth != 64");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\browHeight\s*:\s*42\b)"))), "rowHeight != 42");
 
-    // Exact arithmetic sum check: 24 + 26 + 66 + 106 + 150 + 218 + 218 + 65 == 873
-    const int totalColumnWidth = 24 + 26 + 66 + 106 + 150 + 218 + 218 + 65;
-    QCOMPARE(totalColumnWidth, 873);
+    // Exact arithmetic base sum check: 24 + 24 + 66 + 108 + 152 + 219 + 219 + 64 == 876 (+ 20px overhead = 896px)
+    const int baseColumnWidth = 24 + 24 + 66 + 108 + 152 + 219 + 219 + 64;
+    QCOMPARE(baseColumnWidth, 876);
+
+    // Verify interactive & collision-prevention guards in AccountListView.qml
+    QVERIFY2(content.contains(QStringLiteral("isRowHovered")), "Combined row hover guard isRowHovered missing");
+    QVERIFY2(content.contains(QStringLiteral("reorderVisibleRow")), "Drag reorder helper reorderVisibleRow missing");
+    QVERIFY2(content.contains(QStringLiteral("clip: true")), "Overflow clipping missing in AccountListView.qml");
 
     // Verify that NO direct column in Header RowLayout has Layout.fillWidth
     int headerRowPos = content.indexOf(QStringLiteral("id: headerRow"));
@@ -1499,12 +1504,64 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Delegate Col 7 missing preferredWidth");
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Delegate Col 8 missing preferredWidth");
 
-    // Verify spacing in Col 6 & 7 between 5h and weekly containers is 1px
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(spacing\s*:\s*1\b)"))), "spacing: 1 between 5h and weekly missing");
+    // Verify spacing in Col 6 & 7 between 5h and weekly containers is 3px
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(spacing\s*:\s*3\b)"))), "spacing: 3 between 5h and weekly missing");
 
     // Verify progress bar height 5px and label pill 20x14px
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(Layout\.preferredHeight\s*:\s*5\b)"))), "Progress bar preferredHeight 5 missing");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(width\s*:\s*20\b[\s\S]*?height\s*:\s*14\b)"))), "Label pill 20x14 missing");
+
+    // 2. Runtime instantiation: Verify base (896px) & fullscreen (1872px) column budget exact match
+    QQmlEngine engine;
+    engine.addImageProvider(QStringLiteral("icons"), new IconProvider());
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+    Theme theme(tempDir.path());
+    Translator translator(tempDir.filePath("lang"), ":/i18n");
+    BackendController backend;
+    AccountModel accountModel;
+    AccountFilterProxyModel proxyModel;
+    proxyModel.setSourceModel(&accountModel);
+
+    QQmlContext *ctx = engine.rootContext();
+    ctx->setContextProperty(QStringLiteral("theme"), &theme);
+    ctx->setContextProperty(QStringLiteral("translator"), &translator);
+    ctx->setContextProperty(QStringLiteral("backend"), &backend);
+    ctx->setContextProperty(QStringLiteral("backendController"), &backend);
+    ctx->setContextProperty(QStringLiteral("accountModel"), &accountModel);
+    ctx->setContextProperty(QStringLiteral("proxyModel"), &proxyModel);
+
+    QQmlComponent listComp(&engine, QUrl(QStringLiteral("qrc:/AccountListView.qml")));
+    QVERIFY2(!listComp.isError(), qPrintable(listComp.errorString()));
+    QScopedPointer<QObject> listObj(listComp.create());
+    QVERIFY(listObj != nullptr);
+
+    listObj->setProperty("width", 896);
+    QCoreApplication::processEvents();
+    const int sum896 = listObj->property("colCheckWidth").toInt() +
+                         listObj->property("colIndexWidth").toInt() +
+                         listObj->property("colStatusWidth").toInt() +
+                         listObj->property("colAccountWidth").toInt() +
+                         listObj->property("colG4Width").toInt() +
+                         listObj->property("colG38Width").toInt() +
+                         listObj->property("colClaudeWidth").toInt() +
+                         listObj->property("colActionWidth").toInt();
+    QCOMPARE(sum896, 876);
+
+    listObj->setProperty("width", 1872);
+    QCoreApplication::processEvents();
+    const int sum1872 = listObj->property("colCheckWidth").toInt() +
+                          listObj->property("colIndexWidth").toInt() +
+                          listObj->property("colStatusWidth").toInt() +
+                          listObj->property("colAccountWidth").toInt() +
+                          listObj->property("colG4Width").toInt() +
+                          listObj->property("colG38Width").toInt() +
+                          listObj->property("colClaudeWidth").toInt() +
+                          listObj->property("colActionWidth").toInt();
+    QCOMPARE(sum1872, 1852);
+    QVERIFY(listObj->property("colG4Width").toInt() > 300);
+    QVERIFY(listObj->property("colG38Width").toInt() > 450);
 }
 
 void AntigravityHubTests::v250ScreenFixedZebraRhythmInvariants() {

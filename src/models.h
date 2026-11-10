@@ -62,6 +62,7 @@ class AccountModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QString activeEmail READ activeEmail NOTIFY activeEmailChanged)
     Q_PROPERTY(int totalAccounts READ totalAccounts NOTIFY countChanged)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool isMasked READ isMasked WRITE setIsMasked NOTIFY isMaskedChanged)
 
 public:
@@ -101,6 +102,7 @@ public:
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int totalAccounts() const { return rowCount(); }
+    Q_INVOKABLE int count() const { return rowCount(); }
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
@@ -160,6 +162,7 @@ class AccountFilterProxyModel : public QSortFilterProxyModel {
     Q_PROPERTY(QString statusTab READ statusTab WRITE setStatusTab NOTIFY statusTabChanged)
     Q_PROPERTY(int totalCount READ totalCount NOTIFY countsChanged)
     Q_PROPERTY(int filteredCount READ filteredCount NOTIFY countsChanged)
+    Q_PROPERTY(int count READ filteredCount NOTIFY countsChanged)
     Q_PROPERTY(QString sortField READ sortField WRITE setSortField NOTIFY sortFieldChanged)
     Q_PROPERTY(Qt::SortOrder sortOrder READ sortOrder WRITE setSortOrder NOTIFY sortOrderChanged)
 
@@ -175,6 +178,7 @@ public:
 
     int totalCount() const;
     int filteredCount() const;
+    Q_INVOKABLE int count() const { return filteredCount(); }
 
     QString sortField() const { return m_sortField; }
     void setSortField(const QString &field);

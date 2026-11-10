@@ -205,27 +205,27 @@ ApplicationWindow {
         ScrollView {
             id: mainScrollView
             anchors.fill: parent
-            contentWidth: Math.max(parent.width, appWindow.contentWidth + 24)
-            contentHeight: parent.height
+            contentWidth: Math.max(rootContainer.width, appWindow.contentWidth + 24)
+            contentHeight: rootContainer.height
             clip: true
-            ScrollBar.horizontal.policy: (parent.width < appWindow.contentWidth + 24) ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+            ScrollBar.horizontal.policy: (rootContainer.width < appWindow.contentWidth + 24) ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
             ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
             ColumnLayout {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
-                anchors.leftMargin: Math.max(12, Math.round((parent.width - width) / 2))
+                anchors.leftMargin: Math.max(12, Math.round((mainScrollView.contentWidth - width) / 2))
                 anchors.topMargin: 12
                 anchors.bottomMargin: 12
-                width: appWindow.contentWidth
+                width: Math.max(appWindow.contentWidth, rootContainer.width - 24)
                 spacing: 8
 
                 // 1. Header Bar
                 HeaderBar {
                     id: headerBar
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 44
+                    Layout.preferredHeight: 48
                     onOpenSettings: {
                         if (settingsDialog && typeof settingsDialog.open === "function") {
                             settingsDialog.open();
@@ -274,7 +274,7 @@ ApplicationWindow {
             z: 999
             visible: opacity > 0
             opacity: 0.0
-            radius: Math.max((theme ? theme.radius : 0) - 2, 6)
+            radius: 0
             height: 38
             implicitWidth: toastContentRow.implicitWidth + 28
             color: isErrorToast ?

@@ -30,7 +30,7 @@ Popup {
             anchors.fill: parent
             radius: 0
             color: "transparent"
-            border.color: "#0affffff"
+            border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#0affffff"
             border.width: 1
         }
     }
@@ -70,7 +70,7 @@ Popup {
                 Layout.preferredHeight: 28
                 flat: true
                 background: Rectangle {
-                    color: parent.hovered ? "#14ffffff" : "transparent"
+                    color: parent.hovered ? ((theme && theme.surface3) ? theme.surface3 : "#14ffffff") : "transparent"
                     radius: 0
                 }
                 contentItem: AppIcon {
