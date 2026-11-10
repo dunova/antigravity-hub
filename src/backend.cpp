@@ -295,6 +295,15 @@ void BackendController::saveSettings(const QJsonObject &settings)
             m_rotationMode = m_settings.value(QStringLiteral("rotation_mode")).toString();
             emit rotationModeChanged();
         }
+        if (m_settings.contains(QStringLiteral("theme_mode"))) {
+            setThemeMode(m_settings.value(QStringLiteral("theme_mode")).toString());
+        }
+        if (m_settings.contains(QStringLiteral("account_mask"))) {
+            setMasked(m_settings.value(QStringLiteral("account_mask")).toBool());
+        }
+        if (m_settings.contains(QStringLiteral("language"))) {
+            emit languageChanged(m_settings.value(QStringLiteral("language")).toString());
+        }
         emit settingsChanged();
         emit notificationRequested(tr("Settings Saved"),
                                   tr("Hub preferences updated successfully"), false);
@@ -683,6 +692,9 @@ void BackendController::fetchSettings()
             }
             if (m_settings.contains(QStringLiteral("theme_mode"))) {
                 setThemeMode(m_settings.value(QStringLiteral("theme_mode")).toString());
+            }
+            if (m_settings.contains(QStringLiteral("language"))) {
+                emit languageChanged(m_settings.value(QStringLiteral("language")).toString());
             }
             if (m_settings.contains(QStringLiteral("rotation_mode"))) {
                 m_rotationMode = m_settings.value(QStringLiteral("rotation_mode")).toString();

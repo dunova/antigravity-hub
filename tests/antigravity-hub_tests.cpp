@@ -529,6 +529,20 @@ void AntigravityHubTests::translatorFollowsTheLanguageFile() {
     QTRY_COMPARE_WITH_TIMEOUT(translator.language(), QString("en"), 3000);
     QCOMPARE(translator.translate("Main", "Mask"), QString("Mask"));
     QVERIFY(spy.count() >= 1);
+
+    // Dynamic runtime language switching without restarting
+    translator.setLanguage("zh-CN");
+    QCOMPARE(translator.language(), QString("zh-CN"));
+    QCOMPARE(translator.overrideLanguage(), QString("zh-CN"));
+    QCOMPARE(translator.translate("Main", "Mask"), QString("打码"));
+
+    translator.setLanguage("en");
+    QCOMPARE(translator.language(), QString("en"));
+    QCOMPARE(translator.overrideLanguage(), QString("en"));
+    QCOMPARE(translator.translate("Main", "Mask"), QString("Mask"));
+
+    translator.setLanguage("system");
+    QCOMPARE(translator.overrideLanguage(), QString("system"));
 }
 
 void AntigravityHubTests::translatorPicksPluralForms() {
@@ -1359,10 +1373,10 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     mainFile.close();
 
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*1040\b)"))), "Main.qml width != 1040");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*1040\b)"))), "Main.qml minimumWidth != 1040");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bmaximumWidth\s*:\s*1040\b)"))), "Main.qml maximumWidth != 1040");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*880\b)"))), "Main.qml minimumWidth != 880");
+    QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth to allow Hyprland dynamic tiling");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*800\b)"))), "Main.qml height != 800");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*600\b)"))), "Main.qml minimumHeight != 600");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*540\b)"))), "Main.qml minimumHeight != 540");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*1016\b)"))), "Main.qml contentWidth != 1016");
 
     // 2. Offscreen Dynamic Instantiation of Main.qml
@@ -1400,9 +1414,8 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
 
     QCOMPARE(win->width(), 1040);
     QCOMPARE(win->height(), 800);
-    QCOMPARE(win->property("minimumWidth").toInt(), 1040);
-    QCOMPARE(win->property("maximumWidth").toInt(), 1040);
-    QCOMPARE(win->property("minimumHeight").toInt(), 600);
+    QCOMPARE(win->property("minimumWidth").toInt(), 880);
+    QCOMPARE(win->property("minimumHeight").toInt(), 540);
     QCOMPARE(win->property("contentWidth").toInt(), 1016);
 
     win->show();

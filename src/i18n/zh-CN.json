@@ -204,6 +204,7 @@
   "Select JSON backup file:": "选择 JSON 备份文件：",
   "Or paste JSON content here:": "或在此直接粘贴 JSON 文本：",
   "Parse & Merge Accounts": "解析合并入库",
+  "+ Add Account": "+ 添加账户",
   "添加新账户": "添加新账户",
   "一键吸纳当前系统凭据": "一键吸纳当前系统凭据",
   "从系统钥匙串/IDE 现存登录缓存中直接导入活跃 Google 凭据": "从系统钥匙串/IDE 现存登录缓存中直接导入活跃 Google 凭据",

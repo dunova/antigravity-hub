@@ -121,6 +121,15 @@ QString Translator::translate(const char *, const char *sourceText, const char *
     return {};
 }
 
+void Translator::setLanguage(const QString &language) {
+    const QString normalized = language.trimmed();
+    if (m_overrideLanguage != normalized) {
+        m_overrideLanguage = normalized;
+        m_language.clear();
+        reload();
+    }
+}
+
 void Translator::reload() {
     const auto paths = m_watcher.files() + m_watcher.directories();
     if (!paths.isEmpty())
@@ -132,7 +141,10 @@ void Translator::reload() {
     if (QFileInfo::exists(m_languageFile))
         m_watcher.addPath(m_languageFile);
 
-    const QString language = readLanguage(m_languageFile);
+    QString language = m_overrideLanguage;
+    if (language.isEmpty() || language == QStringLiteral("system")) {
+        language = readLanguage(m_languageFile);
+    }
     if (language == m_language && !m_strings.isEmpty())
         return;
 

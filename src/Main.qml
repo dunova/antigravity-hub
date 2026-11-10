@@ -6,13 +6,12 @@ import QtQuick.Layouts 1.15
 ApplicationWindow {
     id: appWindow
     visible: true
-    // 固定最佳宽度（内容 1016 + 外边距 24 = 1040），高度刚好放下 15 行账号
+    // 最佳默认宽度与内容锁定（内容 1016 + 外边距 24 = 1040），允许系统动态平铺分屏
     readonly property int contentWidth: 1016
     width: 1040
-    minimumWidth: 1040
-    maximumWidth: 1040
+    minimumWidth: 880
     height: 800
-    minimumHeight: 600
+    minimumHeight: 540
     title: qsTr("Antigravity Hub")
 
     // Dynamic Omarchy Design System & Typography
@@ -203,39 +202,49 @@ ApplicationWindow {
         LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
         LayoutMirroring.childrenInherit: true
 
-        ColumnLayout {
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.topMargin: 12
-            anchors.bottomMargin: 12
-            width: appWindow.contentWidth
-            spacing: 8
+        ScrollView {
+            id: mainScrollView
+            anchors.fill: parent
+            contentWidth: Math.max(parent.width, appWindow.contentWidth + 24)
+            contentHeight: parent.height
+            clip: true
+            ScrollBar.horizontal.policy: (parent.width < appWindow.contentWidth + 24) ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+            ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
-            // 1. Header Bar
-            HeaderBar {
-                id: headerBar
-                Layout.fillWidth: true
-                Layout.preferredHeight: 44
-                onOpenSettings: {
-                    if (settingsDialog && typeof settingsDialog.open === "function") {
-                        settingsDialog.open();
+            ColumnLayout {
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.topMargin: 12
+                anchors.bottomMargin: 12
+                width: appWindow.contentWidth
+                spacing: 8
+
+                // 1. Header Bar
+                HeaderBar {
+                    id: headerBar
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 44
+                    onOpenSettings: {
+                        if (settingsDialog && typeof settingsDialog.open === "function") {
+                            settingsDialog.open();
+                        }
                     }
                 }
-            }
 
-            // 2. Control & Filter Bar
-            FilterBar {
-                id: filterBar
-                Layout.fillWidth: true
-                Layout.preferredHeight: 34
-            }
+                // 2. Control & Filter Bar
+                FilterBar {
+                    id: filterBar
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                }
 
-            // 3. Account Quota Matrix Table View
-            AccountListView {
-                id: accountListView
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+                // 3. Account Quota Matrix Table View
+                AccountListView {
+                    id: accountListView
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                }
             }
         }
 
@@ -246,6 +255,7 @@ ApplicationWindow {
         // Settings Dialog Modal
         SettingsDialog {
             id: settingsDialog
+            objectName: "settingsDialog"
             anchors.centerIn: parent
         }
 

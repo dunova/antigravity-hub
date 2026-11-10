@@ -175,7 +175,7 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.50.0")
+                text: qsTr("v%1").arg("2.51.0")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 renderType: Text.NativeRendering
@@ -213,7 +213,7 @@ Rectangle {
 
                 Text {
                     id: addAccountLabel
-                    text: "+ 添加账户"
+                    text: qsTr("+ Add Account")
                     font.family: theme.uiFont
                     font.pixelSize: 12
                     font.weight: Font.DemiBold

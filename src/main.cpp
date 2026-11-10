@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     // 1. Initialize GUI Application
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("antigravity-hub"));
-    app.setApplicationVersion(QStringLiteral("2.50.0"));
+    app.setApplicationVersion(QStringLiteral("2.51.0"));
     app.setOrganizationName(QStringLiteral("Omarchy"));
     app.setOrganizationDomain(QStringLiteral("omarchy.org"));
 
@@ -83,6 +83,12 @@ int main(int argc, char *argv[])
     QObject::connect(&backend, &BackendController::themeModeChanged,
                      [&backend, &theme]() {
         theme.setThemeMode(backend.themeMode());
+    });
+
+    // Synchronize language between BackendController and Translator
+    QObject::connect(&backend, &BackendController::languageChanged,
+                     [&translator](const QString &lang) {
+        translator.setLanguage(lang);
     });
 
     // 5. Initialize QML Application Engine

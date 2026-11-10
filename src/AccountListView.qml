@@ -1133,14 +1133,15 @@ Item {
                                 color: accountListView.getQuotaColor(model.gemini4Quota)
                             }
 
-                            // 3. 重置倒计时槽位 (52px 零截断)
+                            // 3. 重置倒计时槽位 (60px 零截断)
                             Text {
-                                Layout.preferredWidth: 52
+                                Layout.preferredWidth: 60
                                 text: model.gemini4Reset || "—"
                                 font.family: theme.monoFont
                                 font.pixelSize: 11
+                                font.weight: Font.Medium
                                 renderType: Text.NativeRendering
-                                color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
+                                color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
                                 horizontalAlignment: Text.AlignRight
                                 elide: Text.ElideNone
                             }
@@ -1192,12 +1193,12 @@ Item {
                                     border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "5h"
+                                        text: "5H"
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        font.weight: Font.DemiBold
+                                        font.weight: Font.Bold
                                         renderType: Text.NativeRendering
-                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
+                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
                                     }
                                 }
 
@@ -1223,7 +1224,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 42
+                                    Layout.preferredWidth: 44
                                     text: (model.gemini38QuotaW <= 0.0001) ? "0.0%" :
                                           (((model.gemini38Quota5h || 0.0) * 100).toFixed(1) + "%")
                                     font.family: theme.monoFont
@@ -1236,15 +1237,16 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 54
+                                    Layout.preferredWidth: 60
                                     text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") : (model.gemini38Reset5h || "—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
+                                    font.weight: (model.gemini38QuotaW <= 0.0001) ? Font.Bold : Font.Medium
                                     renderType: Text.NativeRendering
                                     color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
-                                           ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
+                                           ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6"))
                                     horizontalAlignment: Text.AlignRight
-                                    elide: Text.ElideRight
+                                    elide: Text.ElideNone
                                 }
                             }
 
@@ -1262,12 +1264,12 @@ Item {
                                     border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     Text {
                                         anchors.centerIn: parent
-                                        text: qsTr("Weekly")
+                                        text: "W"
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        font.weight: Font.DemiBold
+                                        font.weight: Font.Bold
                                         renderType: Text.NativeRendering
-                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
+                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
                                     }
                                 }
 
@@ -1292,7 +1294,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 42
+                                    Layout.preferredWidth: 44
                                     text: ((model.gemini38QuotaW || 0.0) * 100).toFixed(1) + "%"
                                     font.family: theme.monoFont
                                     font.pixelSize: 12
@@ -1303,12 +1305,13 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 52
+                                    Layout.preferredWidth: 60
                                     text: model.gemini38ResetW || "—"
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
+                                    font.weight: Font.Medium
                                     renderType: Text.NativeRendering
-                                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
+                                    color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideNone
                                 }
@@ -1361,12 +1364,12 @@ Item {
                                     border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "5h"
+                                        text: "5H"
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        font.weight: Font.DemiBold
+                                        font.weight: Font.Bold
                                         renderType: Text.NativeRendering
-                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
+                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
                                     }
                                 }
 
@@ -1392,7 +1395,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 42
+                                    Layout.preferredWidth: 44
                                     text: (model.claudeQuotaW <= 0.0001) ? "0.0%" :
                                           (((model.claudeQuota5h || 0.0) * 100).toFixed(1) + "%")
                                     font.family: theme.monoFont
@@ -1405,15 +1408,16 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 54
+                                    Layout.preferredWidth: 60
                                     text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") : (model.claudeReset5h || "—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
+                                    font.weight: (model.claudeQuotaW <= 0.0001) ? Font.Bold : Font.Medium
                                     renderType: Text.NativeRendering
                                     color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
-                                           ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
+                                           ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6"))
                                     horizontalAlignment: Text.AlignRight
-                                    elide: Text.ElideRight
+                                    elide: Text.ElideNone
                                 }
                             }
 
@@ -1431,12 +1435,12 @@ Item {
                                     border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                                     Text {
                                         anchors.centerIn: parent
-                                        text: qsTr("Weekly")
+                                        text: "W"
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        font.weight: Font.DemiBold
+                                        font.weight: Font.Bold
                                         renderType: Text.NativeRendering
-                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
+                                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
                                     }
                                 }
 
@@ -1461,7 +1465,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 42
+                                    Layout.preferredWidth: 44
                                     text: ((model.claudeQuotaW || 0.0) * 100).toFixed(1) + "%"
                                     font.family: theme.monoFont
                                     font.pixelSize: 12
@@ -1472,12 +1476,13 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 52
+                                    Layout.preferredWidth: 60
                                     text: model.claudeResetW || "—"
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
+                                    font.weight: Font.Medium
                                     renderType: Text.NativeRendering
-                                    color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
+                                    color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : ((theme && theme.mode === "light") ? "#212121" : "#F3F4F6")
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideNone
                                 }

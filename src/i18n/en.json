@@ -206,6 +206,7 @@
   "Select JSON backup file:": "Select JSON backup file:",
   "Or paste JSON content here:": "Or paste JSON content here:",
   "Parse & Merge Accounts": "Parse & Merge Accounts",
+  "+ Add Account": "+ Add Account",
   "添加新账户": "Add New Account",
   "一键吸纳当前系统凭据": "Ingest Active Credentials",
   "从系统钥匙串/IDE 现存登录缓存中直接导入活跃 Google 凭据": "Import active Google credentials directly from system keychain / IDE login cache",

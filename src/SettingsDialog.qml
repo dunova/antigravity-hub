@@ -14,9 +14,9 @@ Dialog {
     dim: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-    x: Math.round(((parent ? parent.width : 540) - width) / 2)
+    x: Math.round(((parent ? parent.width : 480) - width) / 2)
     y: Math.round(((parent ? parent.height : 540) - height) / 2)
-    width: Math.min(parent ? parent.width - 32 : 540, 520)
+    width: Math.min(parent ? parent.width - 32 : 480, 480)
 
     signal settingsSaved(var settings)
 
@@ -46,7 +46,7 @@ Dialog {
         var s = (backend && backend.settings) ? backend.settings : {};
 
         // 1. Rotation Strategy
-        var strat = s.rotation_strategy || "highest-quota";
+        var strat = s.rotation_strategy || (backend ? backend.rotationMode : "highest-quota");
         for (var i = 0; i < strategyCombo.model.length; ++i) {
             if (strategyCombo.model[i].value === strat) {
                 strategyCombo.currentIndex = i;
@@ -63,16 +63,20 @@ Dialog {
         notificationSwitch.checked = (s.notifications_enabled !== undefined) ? s.notifications_enabled : true;
 
         // 4. Language
-        var lang = s.language || "system";
+        var curLang = (translator && translator.overrideLanguage && translator.overrideLanguage !== "") ?
+                      translator.overrideLanguage :
+                      (s.language || "system");
         for (var j = 0; j < languageCombo.model.length; ++j) {
-            if (languageCombo.model[j].value === lang) {
+            if (languageCombo.model[j].value === curLang) {
                 languageCombo.currentIndex = j;
                 break;
             }
         }
 
         // 5. Theme Mode
-        var thMode = s.theme_mode || (backend ? backend.themeMode : "system");
+        var thMode = (theme && theme.themeMode && theme.themeMode !== "") ?
+                     theme.themeMode :
+                     (backend ? backend.themeMode : (s.theme_mode || "system"));
         for (var k = 0; k < themeModeCombo.model.length; ++k) {
             if (themeModeCombo.model[k].value === thMode) {
                 themeModeCombo.currentIndex = k;
@@ -81,22 +85,38 @@ Dialog {
         }
 
         // 6. Account Mask
-        maskSwitch.checked = (backend ? backend.masked : false);
+        maskSwitch.checked = (backend ? backend.masked : (s.account_mask || false));
     }
 
     function saveAndApply() {
+        var selectedTheme = themeModeCombo.model[themeModeCombo.currentIndex].value;
+        var selectedLang = languageCombo.model[languageCombo.currentIndex].value;
+        var isMasked = maskSwitch.checked;
+
         var payload = {
             "rotation_strategy": strategyCombo.model[strategyCombo.currentIndex].value,
             "gemini_threshold": Number(geminiSlider.value.toFixed(2)),
             "claude_threshold": Number(claudeSlider.value.toFixed(2)),
             "hourly_warmup": prewarmSwitch.checked,
             "notifications_enabled": notificationSwitch.checked,
-            "account_mask": maskSwitch.checked,
-            "theme_mode": themeModeCombo.model[themeModeCombo.currentIndex].value,
-            "language": languageCombo.model[languageCombo.currentIndex].value
+            "account_mask": isMasked,
+            "theme_mode": selectedTheme,
+            "language": selectedLang
         };
 
+        // 1. Immediately apply Theme Mode live
+        if (theme) {
+            theme.setThemeMode(selectedTheme);
+        }
+
+        // 2. Immediately apply Language live
+        if (translator) {
+            translator.setLanguage(selectedLang);
+        }
+
+        // 3. Immediately apply Mask live
         if (backend) {
+            backend.setMasked(isMasked);
             backend.saveSettings(payload);
         }
 
@@ -114,8 +134,8 @@ Dialog {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 12
+                anchors.leftMargin: 18
+                anchors.rightMargin: 14
 
                 Text {
                     text: qsTr("Preferences")
@@ -153,14 +173,16 @@ Dialog {
 
         // Form Body
         ScrollView {
+            id: formScrollView
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(formLayout.implicitHeight + 24, 460)
+            Layout.preferredHeight: Math.min(formLayout.implicitHeight + 20, (parent ? parent.height - 120 : 580))
+            contentWidth: availableWidth
             clip: true
 
             ColumnLayout {
                 id: formLayout
-                width: parent.width - 24
-                anchors.horizontalCenter: parent.horizontalCenter
+                width: formScrollView.availableWidth - 36
+                x: 18
                 spacing: 16
 
                 Item { Layout.preferredHeight: 4 }
@@ -190,6 +212,14 @@ Dialog {
                             { text: qsTr("Sticky Current"), value: "sticky" }
                         ]
 
+                        indicator: Text {
+                            x: strategyCombo.width - width - 10
+                            y: strategyCombo.topPadding + (strategyCombo.availableHeight - height) / 2
+                            text: "▼"
+                            font.pixelSize: 8
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#888888"
+                        }
+
                         background: Rectangle {
                             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
                             radius: 0
@@ -207,6 +237,42 @@ Dialog {
                             color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
+                        }
+
+                        delegate: ItemDelegate {
+                            width: strategyCombo.width
+                            height: 32
+                            contentItem: Text {
+                                text: modelData.text
+                                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                                font.pixelSize: 12
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 8
+                            }
+                            background: Rectangle {
+                                color: highlighted ? ((theme && theme.selection && theme.selection.charAt(0) === '#') ? theme.selection : "#264f78") :
+                                       ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
+                                radius: 0
+                            }
+                        }
+
+                        popup: Popup {
+                            y: strategyCombo.height
+                            width: strategyCombo.width
+                            implicitHeight: contentItem.implicitHeight + 4
+                            padding: 2
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: strategyCombo.popup.visible ? strategyCombo.delegateModel : null
+                                currentIndex: strategyCombo.highlightedIndex
+                            }
+                            background: Rectangle {
+                                color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
+                                border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                                border.width: 1
+                                radius: 0
+                            }
                         }
                     }
                 }
@@ -374,6 +440,7 @@ Dialog {
 
                     Switch {
                         id: prewarmSwitch
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         checked: true
 
                         indicator: Rectangle {
@@ -393,7 +460,7 @@ Dialog {
                                 height: 14
                                 radius: 0
                                 color: prewarmSwitch.checked ?
-                                       ((theme && theme.accentForeground && theme.accentForeground.charAt(0) === '#') ? theme.accentForeground : "#000000") :
+                                       (theme ? theme.accentForeground : "#FFFFFF") :
                                        ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
@@ -426,6 +493,7 @@ Dialog {
 
                     Switch {
                         id: notificationSwitch
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         checked: true
 
                         indicator: Rectangle {
@@ -445,7 +513,7 @@ Dialog {
                                 height: 14
                                 radius: 0
                                 color: notificationSwitch.checked ?
-                                       ((theme && theme.accentForeground && theme.accentForeground.charAt(0) === '#') ? theme.accentForeground : "#000000") :
+                                       (theme ? theme.accentForeground : "#FFFFFF") :
                                        ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
@@ -478,6 +546,7 @@ Dialog {
 
                     Switch {
                         id: maskSwitch
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         checked: backend ? backend.masked : false
                         onToggled: {
                             if (backend) backend.setMasked(checked);
@@ -500,7 +569,7 @@ Dialog {
                                 height: 14
                                 radius: 0
                                 color: maskSwitch.checked ?
-                                       ((theme && theme.accentForeground && theme.accentForeground.charAt(0) === '#') ? theme.accentForeground : "#000000") :
+                                       (theme ? theme.accentForeground : "#FFFFFF") :
                                        ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
@@ -532,16 +601,17 @@ Dialog {
                             { text: qsTr("Light Mode (White Theme)"), value: "light" }
                         ]
 
-                        currentIndex: {
-                            var m = backend ? backend.themeMode : "system";
-                            if (m === "dark") return 1;
-                            if (m === "light") return 2;
-                            return 0;
-                        }
-
                         onActivated: {
                             var val = model[currentIndex].value;
                             if (theme) theme.setThemeMode(val);
+                        }
+
+                        indicator: Text {
+                            x: themeModeCombo.width - width - 10
+                            y: themeModeCombo.topPadding + (themeModeCombo.availableHeight - height) / 2
+                            text: "▼"
+                            font.pixelSize: 8
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#888888"
                         }
 
                         background: Rectangle {
@@ -561,6 +631,42 @@ Dialog {
                             color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
+                        }
+
+                        delegate: ItemDelegate {
+                            width: themeModeCombo.width
+                            height: 32
+                            contentItem: Text {
+                                text: modelData.text
+                                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                                font.pixelSize: 12
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 8
+                            }
+                            background: Rectangle {
+                                color: highlighted ? ((theme && theme.selection && theme.selection.charAt(0) === '#') ? theme.selection : "#264f78") :
+                                       ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
+                                radius: 0
+                            }
+                        }
+
+                        popup: Popup {
+                            y: themeModeCombo.height
+                            width: themeModeCombo.width
+                            implicitHeight: contentItem.implicitHeight + 4
+                            padding: 2
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: themeModeCombo.popup.visible ? themeModeCombo.delegateModel : null
+                                currentIndex: themeModeCombo.highlightedIndex
+                            }
+                            background: Rectangle {
+                                color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
+                                border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                                border.width: 1
+                                radius: 0
+                            }
                         }
                     }
                 }
@@ -589,6 +695,19 @@ Dialog {
                             { text: "简体中文", value: "zh-CN" }
                         ]
 
+                        onActivated: {
+                            var val = model[currentIndex].value;
+                            if (translator) translator.setLanguage(val);
+                        }
+
+                        indicator: Text {
+                            x: languageCombo.width - width - 10
+                            y: languageCombo.topPadding + (languageCombo.availableHeight - height) / 2
+                            text: "▼"
+                            font.pixelSize: 8
+                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#888888"
+                        }
+
                         background: Rectangle {
                             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
                             radius: 0
@@ -606,6 +725,42 @@ Dialog {
                             color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
+                        }
+
+                        delegate: ItemDelegate {
+                            width: languageCombo.width
+                            height: 32
+                            contentItem: Text {
+                                text: modelData.text
+                                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                                font.pixelSize: 12
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 8
+                            }
+                            background: Rectangle {
+                                color: highlighted ? ((theme && theme.selection && theme.selection.charAt(0) === '#') ? theme.selection : "#264f78") :
+                                       ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
+                                radius: 0
+                            }
+                        }
+
+                        popup: Popup {
+                            y: languageCombo.height
+                            width: languageCombo.width
+                            implicitHeight: contentItem.implicitHeight + 4
+                            padding: 2
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: languageCombo.popup.visible ? languageCombo.delegateModel : null
+                                currentIndex: languageCombo.highlightedIndex
+                            }
+                            background: Rectangle {
+                                color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
+                                border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
+                                border.width: 1
+                                radius: 0
+                            }
                         }
                     }
                 }

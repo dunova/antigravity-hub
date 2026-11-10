@@ -20,16 +20,20 @@
  */
 class Translator : public QTranslator {
     Q_OBJECT
-    Q_PROPERTY(QString language READ language NOTIFY changed)
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY changed)
+    Q_PROPERTY(QString overrideLanguage READ overrideLanguage WRITE setLanguage NOTIFY changed)
 
 public:
     explicit Translator(const QString &languageFile = {}, const QString &catalogDirectory = ":/i18n",
                         QObject *parent = nullptr);
 
     QString language() const { return m_language; }
+    QString overrideLanguage() const { return m_overrideLanguage; }
     bool isEmpty() const override { return m_strings.isEmpty(); }
     QString translate(const char *context, const char *sourceText, const char *disambiguation = nullptr,
                       int n = -1) const override;
+
+    Q_INVOKABLE void setLanguage(const QString &language);
 
     static QString readLanguage(const QString &path);
     static QString pluralCategory(const QString &language, long long count);
@@ -44,6 +48,7 @@ private:
     QString m_languageFile;
     QString m_catalogDirectory;
     QString m_language;
+    QString m_overrideLanguage;
     QHash<QString, QJsonValue> m_strings;
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;

@@ -95,6 +95,7 @@ signals:
     void busyChanged();
     void maskedChanged();
     void themeModeChanged();
+    void languageChanged(const QString &lang);
     void activeEmailChanged();
     void rotationModeChanged();
     void daemonActiveChanged();
