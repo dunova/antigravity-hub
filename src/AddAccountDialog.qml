@@ -13,6 +13,11 @@ Dialog {
     width: 480
     header: null
     footer: null
+    padding: 20
+    topPadding: 20
+    bottomPadding: 20
+    leftPadding: 20
+    rightPadding: 20
 
     property bool isJsonInputExpanded: false
 

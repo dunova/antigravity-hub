@@ -1,17 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <title>Antigravity Hub</title>
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#242428"/>
-      <stop offset="100%" stop-color="#1c1c1e"/>
-    </linearGradient>
-  </defs>
+  <!-- Omarchy dark squircle container (#1c1c1e flat surface, ZERO gradients) -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="#1c1c1e" stroke="#323238" stroke-width="4"/>
 
-  <!-- Omarchy dark squircle container (#1c1c1e rounded surface with subtle border) -->
-  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)" stroke="#323238" stroke-width="4"/>
-
-  <!-- Antigravity Hub vector emblem centered and scaled in canonical Omarchy accent (#FFD60A) -->
-  <g transform="translate(112, 112) scale(12)" fill="#FFD60A">
-    <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.2L3 19h5.2l3.8-7.8 3.8 7.8H21L12 2.2zm0 6.6L9.6 14.2h4.8L12 8.8z M12 18.2a1.6 1.6 0 100 3.2 1.6 1.6 0 000-3.2z"/>
+  <!-- Antigravity sweeping arch silhouette mark (#f2f2f7 light monochrome) -->
+  <g transform="translate(76, 76) scale(15)" fill="#f2f2f7">
+    <path d="M 11.63 3.27 L 12.43 3.27 L 12.49 3.33 L 12.99 3.39 L 13.60 3.64 L 14.53 4.38 L 14.84 4.75 L 15.45 5.74 L 16.13 7.28 L 16.69 8.95 L 16.69 9.13 L 16.81 9.38 L 16.81 9.56 L 17.31 11.11 L 17.31 11.29 L 17.74 12.65 L 17.74 12.83 L 18.60 15.42 L 18.91 16.04 L 18.91 16.16 L 19.65 17.58 L 20.14 18.32 L 21.13 19.37 L 21.38 19.74 L 21.50 20.05 L 21.50 20.30 L 21.38 20.54 L 21.01 20.73 L 20.51 20.73 L 20.08 20.61 L 19.40 20.17 L 18.66 19.56 L 17.74 18.57 L 17.18 17.83 L 16.26 16.35 L 15.70 15.30 L 14.90 14.13 L 14.10 13.33 L 13.73 13.08 L 12.99 12.77 L 12.31 12.71 L 12.25 12.65 L 11.07 12.77 L 10.70 12.89 L 9.96 13.33 L 8.98 14.38 L 8.11 15.73 L 7.37 17.09 L 6.57 18.26 L 5.95 19.00 L 4.97 19.93 L 4.10 20.54 L 3.98 20.54 L 3.61 20.73 L 2.87 20.73 L 2.56 20.48 L 2.50 20.17 L 2.62 19.80 L 2.93 19.37 L 3.92 18.32 L 4.66 17.15 L 5.28 15.86 L 6.14 13.45 L 6.14 13.26 L 6.32 12.83 L 6.32 12.65 L 6.82 11.11 L 6.88 10.67 L 7.00 10.43 L 7.00 10.24 L 7.13 10.00 L 7.37 8.95 L 7.93 7.28 L 8.67 5.62 L 9.22 4.75 L 9.53 4.38 L 10.09 3.89 L 10.89 3.46 L 11.32 3.33 L 11.57 3.33 Z" />
   </g>
 </svg>

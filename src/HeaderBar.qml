@@ -21,6 +21,12 @@ Rectangle {
                                                  accountModel.activeEmail :
                                                  (backend ? backend.activeEmail : "")
 
+    // Modal guard & dismissal for Main.qml
+    readonly property bool isModalOpen: addAccountDialog.visible
+    function closeModals() {
+        if (addAccountDialog.visible) addAccountDialog.close();
+    }
+
     AddAccountDialog {
         id: addAccountDialog
         objectName: "addAccountDialog"
@@ -36,11 +42,11 @@ Rectangle {
         // LEFT GROUP: Logo + Title + ACTIVE Account Badge + Version Tag
         // =====================================================================
 
-        // 1. Dynamic Accent Monochrome Logo
+        // 1. Omarchy Monochrome Silhouette Logo (High-contrast, zero blue, zero gradients)
         IconImage {
             id: logoIcon
             source: "qrc:/assets/logo.svg"
-            color: (theme && theme.accent) ? theme.accent : "#7daea3"
+            color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#0F172A"
             width: 24
             height: 24
             sourceSize: Qt.size(24, 24)
@@ -178,7 +184,7 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.51.6")
+                text: qsTr("v%1").arg(Qt.application.version || "3.0.0")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 renderType: Text.NativeRendering
@@ -374,7 +380,7 @@ Rectangle {
                    ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
             border.color: {
                 if (currentMode === "gemini") return (theme && theme.accent) ? theme.accent : "#7daea3";
-                if (currentMode === "claude") return "#bb9af7";
+                if (currentMode === "claude") return (theme && theme.warningText && theme.warningText.charAt(0) === '#') ? theme.warningText : ((theme && theme.accent) ? theme.accent : "#d19a66");
                 return (theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff";
             }
             border.width: 1

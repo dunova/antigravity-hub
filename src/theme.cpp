@@ -355,6 +355,14 @@ void Theme::reload() {
         }
     }
 
+    // Contrast guard for selection background (prevents light selection bleeding into forcedDark mode)
+    if (contrast(text1, selection) < 4.5) {
+        selection = isDark ? mix(window, accent, 0.24) : mix(window, accent, 0.14);
+        if (contrast(text1, selection) < 4.5) {
+            selection = isDark ? QStringLiteral("#292e42") : QStringLiteral("#E2E8F0");
+        }
+    }
+
     // Surfaces computation
     QString canvas;
     QString surfaceTop;

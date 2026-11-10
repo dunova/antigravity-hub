@@ -67,6 +67,9 @@ private slots:
     void v250AccountReorderPersistenceInvariants();
     void v250ThemeMonoFontAndAccentTextInvariants();
 
+    // v3.0.0 Omarchy Silhouette Logo & QA Invariants
+    void v300OmarchySilhouetteLogoAndModalGuardInvariants();
+
     void cleanupTestCase();
 };
 
@@ -416,6 +419,11 @@ void AntigravityHubTests::themeTriStateMatrixAndContrastInvariants() {
             QVERIFY2(cText1Canvas >= 4.5,
                      qPrintable(QStringLiteral("[%1 / %2] text1 vs canvas contrast (%3) < 4.5:1")
                                 .arg(themeName, modeSetting).arg(cText1Canvas)));
+
+            const double cText1Selection = Theme::contrast(t1, theme.selection());
+            QVERIFY2(cText1Selection >= 4.5,
+                     qPrintable(QStringLiteral("[%1 / %2] text1 (%3) vs selection (%4) contrast (%5) < 4.5:1")
+                                .arg(themeName, modeSetting, t1, theme.selection()).arg(cText1Selection)));
 
             // 2. Forced Dark Mode on Light Themes: Invariant Verification
             if (modeSetting == QLatin1String("dark") && detectedMode == QLatin1String("light")) {
@@ -1835,6 +1843,55 @@ void AntigravityHubTests::v250ThemeMonoFontAndAccentTextInvariants() {
     // Markers 5 & 6 in AccountListView.qml
     QVERIFY2(listContent.contains(QStringLiteral("theme.accentText")), "AccountListView.qml missing theme.accentText");
     QVERIFY2(!listContent.contains(QStringLiteral("#8bcbb1")), "Hardcoded #8bcbb1 found in AccountListView.qml");
+}
+
+void AntigravityHubTests::v300OmarchySilhouetteLogoAndModalGuardInvariants() {
+    // 1. Logo SVG Invariants: Must exist, use currentColor, zero gradients, zero hardcoded blue
+    QFile logoFile(QStringLiteral(":/assets/logo.svg"));
+    QVERIFY2(logoFile.open(QIODevice::ReadOnly | QIODevice::Text), "assets/logo.svg must exist in resources");
+    const QString logoContent = QString::fromUtf8(logoFile.readAll());
+    logoFile.close();
+
+    QVERIFY2(logoContent.contains(QStringLiteral("fill=\"currentColor\"")), "logo.svg must use fill=\"currentColor\"");
+    QVERIFY2(!logoContent.contains(QStringLiteral("gradient"), Qt::CaseInsensitive), "logo.svg must NOT contain gradients");
+    QVERIFY2(!logoContent.contains(QStringLiteral("#2563EB")), "logo.svg must NOT contain hardcoded blue #2563EB");
+    QVERIFY2(!logoContent.contains(QStringLiteral("#4285F4")), "logo.svg must NOT contain hardcoded blue #4285F4");
+
+    // 2. HeaderBar Logo Binding: must bind to theme.text1 (monochrome silhouette), NOT theme.accent
+    QFile headerFile(QStringLiteral(":/HeaderBar.qml"));
+    QVERIFY(headerFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString headerContent = QString::fromUtf8(headerFile.readAll());
+    headerFile.close();
+
+    QVERIFY2(headerContent.contains(QStringLiteral("theme.text1")), "HeaderBar logoIcon must bind color to theme.text1");
+    QVERIFY2(headerContent.contains(QStringLiteral("isModalOpen")), "HeaderBar must expose isModalOpen");
+    QVERIFY2(headerContent.contains(QStringLiteral("closeModals")), "HeaderBar must expose closeModals()");
+
+    // 3. Main.qml Modal Guard & Toast Invariants
+    QFile mainFile(QStringLiteral(":/Main.qml"));
+    QVERIFY(mainFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString mainContent = QString::fromUtf8(mainFile.readAll());
+    mainFile.close();
+
+    QVERIFY2(mainContent.contains(QStringLiteral("headerBar.isModalOpen")), "Main.qml isModalOpen must include headerBar.isModalOpen");
+    QVERIFY2(mainContent.contains(QStringLiteral("accountListView.isModalOpen")), "Main.qml isModalOpen must include accountListView.isModalOpen");
+    QVERIFY2(mainContent.contains(QStringLiteral("headerBar.closeModals()")), "Main.qml Escape handler must call headerBar.closeModals()");
+    QVERIFY2(mainContent.contains(QStringLiteral("accountListView.closeModals()")), "Main.qml Escape handler must call accountListView.closeModals()");
+    QVERIFY2(!mainContent.contains(QStringLiteral("roundedScale: theme ? theme.controlRadius : 4")), "Main.qml must NOT fall back to roundedScale 4");
+
+    // 4. Dialog Padding Invariants
+    QFile addAccountFile(QStringLiteral(":/AddAccountDialog.qml"));
+    QVERIFY(addAccountFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString addAccountContent = QString::fromUtf8(addAccountFile.readAll());
+    addAccountFile.close();
+    QVERIFY2(addAccountContent.contains(QStringLiteral("padding: 20")), "AddAccountDialog must set padding: 20");
+
+    QFile helpFile(QStringLiteral(":/HelpOverlay.qml"));
+    QVERIFY(helpFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString helpContent = QString::fromUtf8(helpFile.readAll());
+    helpFile.close();
+    QVERIFY2(helpContent.contains(QStringLiteral("padding: 24")), "HelpOverlay must set padding: 24");
+    QVERIFY2(helpContent.contains(QStringLiteral("PgUp")), "HelpOverlay must list PgUp navigation shortcut");
 }
 
 void AntigravityHubTests::cleanupTestCase() {

@@ -34,6 +34,12 @@ Item {
         listView.positionViewAtIndex(pg * pageSize, ListView.Beginning);
     }
 
+    // Modal guard & dismissal for Main.qml
+    readonly property bool isModalOpen: deleteConfirmDialog.visible
+    function closeModals() {
+        if (deleteConfirmDialog.visible) deleteConfirmDialog.close();
+    }
+
     property int dragFromIndex: -1
     property int dragTargetRow: -1
     property bool dragInsertBefore: true
@@ -1576,7 +1582,7 @@ Item {
                                     color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF"))
                                     horizontalAlignment: Text.AlignRight
-                                    elide: Text.ElideNone
+                                    elide: Text.ElideRight
                                 }
                             }
 
@@ -1647,7 +1653,7 @@ Item {
                                     renderType: Text.NativeRendering
                                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
                                     horizontalAlignment: Text.AlignRight
-                                    elide: Text.ElideNone
+                                    elide: Text.ElideRight
                                 }
                             }
                         }
@@ -1758,7 +1764,7 @@ Item {
                                     color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF"))
                                     horizontalAlignment: Text.AlignRight
-                                    elide: Text.ElideNone
+                                    elide: Text.ElideRight
                                 }
                             }
 
@@ -1829,7 +1835,7 @@ Item {
                                     renderType: Text.NativeRendering
                                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
                                     horizontalAlignment: Text.AlignRight
-                                    elide: Text.ElideNone
+                                    elide: Text.ElideRight
                                 }
                             }
                         }
@@ -2104,6 +2110,11 @@ Item {
         width: 400
         header: null
         footer: null
+        padding: 20
+        topPadding: 20
+        bottomPadding: 20
+        leftPadding: 20
+        rightPadding: 20
 
         background: Rectangle {
             color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#142620"

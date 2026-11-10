@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "2.45.13"
-__canonical_version_tag__ = "20261109-v2.45.13-FIX_ACTIVE_SESSION_SUBAGENT_TREE_DETECTION"
-__last_updated__ = "2026-11-09 15:05:00"
-__canonical_doctrine__ = "修复多会话与子代理执行树活跃判定缺陷+根除等待型子代理误杀+全自动多端接力覆盖"
+__version__ = "3.0.0"
+__canonical_version_tag__ = "20261110-v3.0.0-OMARCHY_SILHOUETTE_FULL_QA_RELEASE"
+__last_updated__ = "2026-11-10 16:30:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.0 全栈发布：正统 Antigravity 拱门 Omarchy 单色剪影 Logo、零渐变、防穿透、六层全矩阵测试通过"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub

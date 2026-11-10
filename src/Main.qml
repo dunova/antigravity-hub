@@ -21,7 +21,7 @@ ApplicationWindow {
     Material.accent: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3"
     Material.background: (theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#142620"
     Material.foreground: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
-    Material.roundedScale: theme ? theme.controlRadius : 4
+    Material.roundedScale: theme ? theme.controlRadius : Material.NotRounded
 
     // Focus guard: prevents single-character shortcuts from intercepting text input
     property bool isInputFocused: {
@@ -33,7 +33,9 @@ ApplicationWindow {
 
     // Modal guard: suppresses background shortcuts when a modal dialog or popup is active
     property bool isModalOpen: (helpOverlay && helpOverlay.visible) ||
-                               (settingsDialog && settingsDialog.visible)
+                               (settingsDialog && settingsDialog.visible) ||
+                               (headerBar && headerBar.isModalOpen) ||
+                               (accountListView && accountListView.isModalOpen)
 
     // =========================================================================
     // GLOBAL KEYBOARD SHORTCUT DISPATCH
@@ -178,7 +180,7 @@ ApplicationWindow {
         onActivated: accountListView.gotoPage(accountListView.currentPage - 1)
     }
 
-    // Esc -> Unfocus Search / Dismiss Dialogs
+    // Esc -> Unfocus Search / Dismiss Dialogs in Hierarchical Order
     Shortcut {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
@@ -187,6 +189,10 @@ ApplicationWindow {
                 helpOverlay.close();
             } else if (settingsDialog && settingsDialog.visible && typeof settingsDialog.close === "function") {
                 settingsDialog.close();
+            } else if (headerBar && headerBar.isModalOpen && typeof headerBar.closeModals === "function") {
+                headerBar.closeModals();
+            } else if (accountListView && accountListView.isModalOpen && typeof accountListView.closeModals === "function") {
+                accountListView.closeModals();
             } else if (filterBar && typeof filterBar.clearOrUnfocus === "function") {
                 filterBar.clearOrUnfocus();
             }
@@ -265,7 +271,7 @@ ApplicationWindow {
             anchors.centerIn: parent
         }
 
-        // Floating Toast Notification
+        // Floating Toast Notification (Solid Omarchy Surface, Zero Bleed-Through)
         Rectangle {
             id: toastNotification
             anchors.horizontalCenter: parent.horizontalCenter
@@ -276,10 +282,8 @@ ApplicationWindow {
             opacity: 0.0
             radius: 0
             height: 38
-            implicitWidth: toastContentRow.implicitWidth + 28
-            color: isErrorToast ?
-                   Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B", 0.15) :
-                   Qt.alpha((theme && theme.goodText) ? theme.goodText : "#4ADE80", 0.15)
+            implicitWidth: toastContentRow.implicitWidth + 36
+            color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : ((theme && theme.surface2) ? theme.surface2 : "#1a1b26")
             border.color: isErrorToast ?
                           ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
                           ((theme && theme.goodText) ? theme.goodText : "#4ADE80")
@@ -289,9 +293,22 @@ ApplicationWindow {
             property string toastTitle: ""
             property string toastMessage: ""
 
+            // Left semantic status indicator bar (3px)
+            Rectangle {
+                width: 3
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                radius: 0
+                color: toastNotification.isErrorToast ?
+                       ((theme && theme.dangerText) ? theme.dangerText : "#FF6B6B") :
+                       ((theme && theme.goodText) ? theme.goodText : "#4ADE80")
+            }
+
             RowLayout {
                 id: toastContentRow
                 anchors.centerIn: parent
+                anchors.leftMargin: 8
                 spacing: 8
 
                 AppIcon {

@@ -14,6 +14,11 @@ Popup {
     x: Math.round(((parent ? parent.width : 640) - width) / 2)
     y: Math.round(((parent ? parent.height : 640) - height) / 2)
     width: Math.min(parent ? parent.width - 40 : 640, 620)
+    padding: 24
+    topPadding: 24
+    bottomPadding: 24
+    leftPadding: 24
+    rightPadding: 24
 
     function toggle() {
         if (visible) close();
@@ -114,6 +119,7 @@ Popup {
                     model: [
                         { keys: ["j", "↓"], desc: qsTr("Next account") },
                         { keys: ["k", "↑"], desc: qsTr("Previous account") },
+                        { keys: ["PgUp", "PgDn"], desc: qsTr("Previous / Next page") },
                         { keys: ["Enter"], desc: qsTr("Switch to account") },
                         { keys: ["/"], desc: qsTr("Focus search") },
                         { keys: ["Esc"], desc: qsTr("Close / Cancel") }
@@ -189,6 +195,7 @@ Popup {
                         { keys: ["s"], desc: qsTr("Open settings") },
                         { keys: ["g"], desc: qsTr("Switch to TopG") },
                         { keys: ["w"], desc: qsTr("Fleet prewarm") },
+                        { keys: [qsTr("拖拽"), qsTr("置顶")], desc: qsTr("Reorder accounts") },
                         { keys: ["?", "F1"], desc: qsTr("Help overlay") }
                     ]
                     delegate: RowLayout {
