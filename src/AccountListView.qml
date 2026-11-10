@@ -9,13 +9,55 @@ Item {
     // 0. 共享列几何常数 (Strict Header-Data Row Synchronization)
     // =========================================================================
     readonly property int colCheckWidth: 28
-    readonly property int colIndexWidth: 30
-    readonly property int colStatusWidth: 80
-    readonly property int colAccountWidth: 112
-    readonly property real colG4Weight: 1.05
-    readonly property real colG38Weight: 1.35
-    readonly property real colClaudeWeight: 1.35
-    readonly property int colActionWidth: 74
+    readonly property int colIndexWidth: 32
+    readonly property int colStatusWidth: 76
+    readonly property int colAccountWidth: 120
+    readonly property int colG4Width: 176
+    readonly property int colG38Width: 238
+    readonly property int colClaudeWidth: 238
+    readonly property int rowHeight: 40
+    readonly property int pageSize: 15
+    readonly property int pageCount: Math.max(1, Math.ceil(listView.count / pageSize))
+    readonly property int currentPage: Math.min(pageCount - 1, Math.floor((listView.contentY + 1) / (rowHeight * pageSize)))
+    function gotoPage(p) {
+        var pg = Math.max(0, Math.min(pageCount - 1, p));
+        listView.positionViewAtIndex(pg * pageSize, ListView.Beginning);
+    }
+    readonly property int colActionWidth: 82
+
+    // 账号配额统计计数 (供底部状态栏与筛选器消费)
+    readonly property int availableCount: {
+        if (!accountModel) return 0;
+        var count = 0;
+        var total = (typeof accountModel.rowCount === "function") ? accountModel.rowCount() : (accountModel.count || 0);
+        for (var i = 0; i < total; ++i) {
+            var acc = (typeof accountModel.getAccount === "function") ? accountModel.getAccount(i) : (accountModel.get ? accountModel.get(i) : null);
+            if (acc && !acc.isBlocked && (acc.gemini38QuotaW > 0.0001 || acc.claudeQuotaW > 0.0001 || acc.gemini4Quota > 0.0001)) {
+                count++;
+            }
+        }
+        return count;
+    }
+    readonly property int displayedCount: proxyModel ? proxyModel.filteredCount : listView.count
+
+    // 自定义账号排序: 一键置顶操作
+    function moveAccountToTop(email) {
+        if (!email) return;
+        var emails = [];
+        emails.push(email);
+        var total = (accountModel && typeof accountModel.count !== "undefined") ? accountModel.count :
+                    (accountModel ? (typeof accountModel.rowCount === "function" ? accountModel.rowCount() : accountModel.totalAccounts) : 0);
+        for (var i = 0; i < total; ++i) {
+            var acc = (typeof accountModel.get === "function") ? accountModel.get(i) : accountModel.getAccount(i);
+            var e = acc ? acc.email : "";
+            if (e && e !== email) emails.push(e);
+        }
+        if (typeof backendController !== "undefined" && backendController) {
+            backendController.reorderAccounts(emails);
+        } else if (typeof backend !== "undefined" && backend) {
+            backend.reorderAccounts(emails);
+        }
+    }
 
     // 选中的账号集合 (维护当前勾选账号列表)
     property var selectedEmails: ({})
@@ -101,7 +143,7 @@ Item {
         Rectangle {
             id: headerRow
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
+            Layout.preferredHeight: 30
             radius: 0
             gradient: Gradient {
                 GradientStop { position: 0; color: (theme && theme.surfaceTop && theme.surfaceTop.charAt(0) === '#') ? theme.surfaceTop : "#172c25" }
@@ -114,11 +156,13 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                spacing: 6
+                spacing: 0
 
                 // Col 1: 全选复选框
                 Item {
                     Layout.preferredWidth: colCheckWidth
+                    Layout.minimumWidth: colCheckWidth
+                    Layout.maximumWidth: colCheckWidth
                     Layout.fillHeight: true
                     CheckBox {
                         anchors.centerIn: parent
@@ -137,6 +181,8 @@ Item {
                 // Col 2: # 序号 (支持点击按序号排序)
                 Rectangle {
                     Layout.preferredWidth: colIndexWidth
+                    Layout.minimumWidth: colIndexWidth
+                    Layout.maximumWidth: colIndexWidth
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -146,19 +192,21 @@ Item {
 
                         Text {
                             text: "#"
-                            font.family: "Monospace"
+                            font.family: theme.monoFont
                             font.pixelSize: 12
-                            font.bold: true
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                             color: (proxyModel && proxyModel.sortField === "index") ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
                         Text {
                             visible: proxyModel ? (proxyModel.sortField === "index") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
-                            font.pixelSize: 10
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                            font.pixelSize: 11
+                            renderType: Text.NativeRendering
+                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
                         }
                     }
 
@@ -181,6 +229,8 @@ Item {
                 // Col 3: 状态 (支持点击按状态排序)
                 Rectangle {
                     Layout.preferredWidth: colStatusWidth
+                    Layout.minimumWidth: colStatusWidth
+                    Layout.maximumWidth: colStatusWidth
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -190,18 +240,21 @@ Item {
 
                         Text {
                             text: qsTr("Status")
+                            font.family: theme.uiFont
                             font.pixelSize: 12
-                            font.bold: true
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                             color: (proxyModel && proxyModel.sortField === "status") ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
                         Text {
                             visible: proxyModel ? (proxyModel.sortField === "status") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
-                            font.pixelSize: 10
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                            font.pixelSize: 11
+                            renderType: Text.NativeRendering
+                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
                         }
                     }
 
@@ -224,6 +277,8 @@ Item {
                 // Col 4: 账号 (支持点击按账号字母序排序)
                 Rectangle {
                     Layout.preferredWidth: colAccountWidth
+                    Layout.minimumWidth: colAccountWidth
+                    Layout.maximumWidth: colAccountWidth
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -234,18 +289,21 @@ Item {
 
                         Text {
                             text: qsTr("Account")
+                            font.family: theme.uiFont
                             font.pixelSize: 12
-                            font.bold: true
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                             color: (proxyModel && (proxyModel.sortField === "account" || proxyModel.sortField === "username")) ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
                         Text {
                             visible: proxyModel ? (proxyModel.sortField === "account" || proxyModel.sortField === "username") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
-                            font.pixelSize: 10
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                            font.pixelSize: 11
+                            renderType: Text.NativeRendering
+                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
                         }
                     }
 
@@ -269,16 +327,19 @@ Item {
                 Rectangle {
                     width: 1
                     Layout.preferredWidth: 1
+                    Layout.minimumWidth: 1
+                    Layout.maximumWidth: 1
                     Layout.fillHeight: true
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 4
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 6
                     color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                 }
 
                 // Col 5: Gemini 4 (用户最高铁律门禁：严格命名为 Gemini 4，彻底切除周标签)
                 Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: Math.round(100 * colG4Weight)
+                    Layout.preferredWidth: colG4Width
+                    Layout.minimumWidth: colG4Width
+                    Layout.maximumWidth: colG4Width
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -289,10 +350,12 @@ Item {
 
                         Text {
                             text: qsTr("Gemini 4") // MANDATORY: STRICTLY "Gemini 4"
+                            font.family: theme.uiFont
                             font.pixelSize: 12
-                            font.bold: true
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                             color: (proxyModel && proxyModel.sortField === "gemini4") ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
@@ -300,7 +363,8 @@ Item {
                             visible: proxyModel ? (proxyModel.sortField === "gemini4") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
                             font.pixelSize: 11
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                            renderType: Text.NativeRendering
+                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
                         }
                     }
 
@@ -324,16 +388,19 @@ Item {
                 Rectangle {
                     width: 1
                     Layout.preferredWidth: 1
+                    Layout.minimumWidth: 1
+                    Layout.maximumWidth: 1
                     Layout.fillHeight: true
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 4
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 6
                     color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                 }
 
                 // Col 6: Gemini 3.8 双维配额表头
                 Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: Math.round(100 * colG38Weight)
+                    Layout.preferredWidth: colG38Width
+                    Layout.minimumWidth: colG38Width
+                    Layout.maximumWidth: colG38Width
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -344,10 +411,12 @@ Item {
 
                         Text {
                             text: qsTr("Gemini 3.8")
+                            font.family: theme.uiFont
                             font.pixelSize: 12
-                            font.bold: true
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                             color: (proxyModel && proxyModel.sortField === "gemini38_w") ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
@@ -355,7 +424,8 @@ Item {
                             visible: proxyModel ? (proxyModel.sortField === "gemini38_w") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
                             font.pixelSize: 11
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                            renderType: Text.NativeRendering
+                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
                         }
                     }
 
@@ -379,16 +449,19 @@ Item {
                 Rectangle {
                     width: 1
                     Layout.preferredWidth: 1
+                    Layout.minimumWidth: 1
+                    Layout.maximumWidth: 1
                     Layout.fillHeight: true
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 4
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 6
                     color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                 }
 
                 // Col 7: Claude 双维配额表头
                 Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: Math.round(100 * colClaudeWeight)
+                    Layout.preferredWidth: colClaudeWidth
+                    Layout.minimumWidth: colClaudeWidth
+                    Layout.maximumWidth: colClaudeWidth
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -399,10 +472,12 @@ Item {
 
                         Text {
                             text: qsTr("Claude")
+                            font.family: theme.uiFont
                             font.pixelSize: 12
-                            font.bold: true
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                             color: (proxyModel && proxyModel.sortField === "claude_w") ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
@@ -410,7 +485,8 @@ Item {
                             visible: proxyModel ? (proxyModel.sortField === "claude_w") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
                             font.pixelSize: 11
-                            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                            renderType: Text.NativeRendering
+                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
                         }
                     }
 
@@ -434,21 +510,27 @@ Item {
                 Rectangle {
                     width: 1
                     Layout.preferredWidth: 1
+                    Layout.minimumWidth: 1
+                    Layout.maximumWidth: 1
                     Layout.fillHeight: true
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 4
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 6
                     color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                 }
 
                 // Col 8: 操作
                 Item {
                     Layout.preferredWidth: colActionWidth
+                    Layout.minimumWidth: colActionWidth
+                    Layout.maximumWidth: colActionWidth
                     Layout.fillHeight: true
                     Text {
                         anchors.centerIn: parent
                         text: qsTr("Actions")
+                        font.family: theme.uiFont
                         font.pixelSize: 12
-                        font.bold: true
+                        font.weight: Font.DemiBold
+                        renderType: Text.NativeRendering
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                 }
@@ -466,7 +548,7 @@ Item {
             radius: 0
             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26"
             border.width: 1
-            border.color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+            border.color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3"
             clip: true
 
             Behavior on Layout.preferredHeight { NumberAnimation { duration: 120 } }
@@ -484,12 +566,12 @@ Item {
                         width: 6
                         height: 6
                         radius: 0
-                        color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                        color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3"
                     }
                     Text {
                         text: qsTr("%n account(s) selected", "", accountListView.selectedCount)
                         font.pixelSize: 12
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                 }
@@ -512,7 +594,7 @@ Item {
                         anchors.centerIn: parent
                         text: qsTr("Prewarm")
                         font.pixelSize: 11
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                     MouseArea {
@@ -547,7 +629,7 @@ Item {
                         anchors.centerIn: parent
                         text: qsTr("Export Selected")
                         font.pixelSize: 11
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                     MouseArea {
@@ -582,7 +664,7 @@ Item {
                         anchors.centerIn: parent
                         text: qsTr("Delete Selected")
                         font.pixelSize: 11
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
                     }
                     MouseArea {
@@ -632,6 +714,7 @@ Item {
             clip: true
             model: proxyModel
             boundsBehavior: Flickable.StopAtBounds
+            snapMode: ListView.SnapToItem
 
             ScrollBar.vertical: ScrollBar {
                 id: listScrollBar
@@ -678,7 +761,7 @@ Item {
             delegate: Rectangle {
                 id: rowDelegate
                 width: listView.width
-                height: 56
+                height: accountListView.rowHeight
                 radius: 0
 
                 // 25 项 QML Role 绑定的直接消费
@@ -687,19 +770,31 @@ Item {
                 property bool isRowSelected: listView.currentIndex === index
                 property bool isRowChecked: accountListView.selectedEmails[model.email] === true
 
-                // 行背景与高亮逻辑 (通过 theme.rowEven / theme.rowOdd 计算带主题色的斑马纹)
-                color: isRowActive ?
-                       Qt.alpha((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f", 0.18) :
-                       (isRowSelected ?
-                           Qt.alpha((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1", 0.22) :
-                           (rowMouse.containsMouse ?
-                               ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") :
-                               (index % 2 === 0 ?
-                                   ((theme && theme.rowEven && theme.rowEven.charAt(0) === '#') ? theme.rowEven : "#0a0a0f") :
-                                   ((theme && theme.rowOdd && theme.rowOdd.charAt(0) === '#') ? theme.rowOdd : "#1a1b26"))))
+                // Marker 7: 严格固定屏幕行交替斑马律 (index % 2 永恒交替，不受排序或激活行位置干扰)
+                readonly property color rowBgColor: (index % 2 === 0) ?
+                    ((theme && theme.rowEven) ? theme.rowEven : "#1c1c1c") :
+                    ((theme && theme.rowOdd) ? theme.rowOdd : "#32302f")
+
+                color: isRowSelected ?
+                    Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.24) :
+                    (rowMouse.containsMouse ?
+                        ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                        (isRowActive ? Qt.tint(rowBgColor, Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.10)) : rowBgColor))
 
                 border.width: isRowSelected ? 1 : 0
-                border.color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                border.color: (theme && theme.accent) ? theme.accent : "#7daea3"
+
+                // Marker 7: 激活行左侧 3px 主题色指示竖条
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 3
+                    radius: 0
+                    visible: isRowActive
+                    color: (theme && theme.accent) ? theme.accent : "#7daea3"
+                    z: 2
+                }
 
                 Rectangle {
                     anchors.bottom: parent.bottom
@@ -723,13 +818,15 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     anchors.rightMargin: 8
-                    spacing: 6
+                    spacing: 0
 
                     // -------------------------------------------------
                     // Col 1: 行复选框
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colCheckWidth
+                        Layout.minimumWidth: colCheckWidth
+                        Layout.maximumWidth: colCheckWidth
                         Layout.fillHeight: true
                         CheckBox {
                             anchors.centerIn: parent
@@ -743,32 +840,38 @@ Item {
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colIndexWidth
+                        Layout.minimumWidth: colIndexWidth
+                        Layout.maximumWidth: colIndexWidth
                         Layout.fillHeight: true
                         Text {
                             anchors.centerIn: parent
                             text: model.index
-                            font.family: "Monospace"
+                            font.family: theme.monoFont
                             font.pixelSize: 12
-                            font.bold: true
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                             color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                         }
                     }
 
                     // -------------------------------------------------
-                    // Col 3: 状态胶囊 (全直角长方形)
+                    // Col 3: 状态胶囊 (全直角长方形 74x20)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colStatusWidth
+                        Layout.minimumWidth: colStatusWidth
+                        Layout.maximumWidth: colStatusWidth
                         Layout.fillHeight: true
 
                         Rectangle {
                             anchors.centerIn: parent
                             width: 74
-                            height: 24
+                            height: 20
                             radius: 0
 
+                            // Marker 5: 行内 ACTIVE 状态徽章定锚 theme.accent，严禁 goodText 绿色
                             color: model.isActive ?
-                                   Qt.alpha((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f", 0.18) :
+                                   Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15) :
                                    (model.isBlocked ?
                                        Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.18) :
                                        (model.status === "EXHAUSTED" ?
@@ -776,7 +879,7 @@ Item {
                                            ((theme && theme.mode === "light") ? "#0a000000" : "#14ffffff")))
 
                             border.width: 1
-                            border.color: model.isActive ? ((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f") :
+                            border.color: model.isActive ? ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                           (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                               (model.status === "EXHAUSTED" ? ((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280") :
                                                   ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")))
@@ -785,14 +888,25 @@ Item {
                                 anchors.centerIn: parent
                                 spacing: 3
 
+                                // Marker 5: 呼吸指示方块 (breathing dot) 定锚 theme.accent
+                                Rectangle {
+                                    width: 5
+                                    height: 5
+                                    radius: 0
+                                    visible: model.isActive
+                                    color: (theme && theme.accent) ? theme.accent : "#7daea3"
+                                }
+
                                 Text {
                                     text: model.isActive ? qsTr("ACTIVE") :
                                           (model.isBlocked ? qsTr("Blocked") :
                                               (model.status === "EXHAUSTED" ? qsTr("Exhausted") : qsTr("STANDBY")))
-                                    font.family: "Monospace"
+                                    font.family: theme.monoFont
                                     font.pixelSize: 11
-                                    font.bold: true
-                                    color: model.isActive ? ((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f") :
+                                    font.weight: Font.DemiBold
+                                    renderType: Text.NativeRendering
+                                    color: model.isActive ?
+                                           ((theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3")) :
                                            (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                                (model.status === "EXHAUSTED" ? ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1") :
                                                    ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6")))
@@ -809,9 +923,10 @@ Item {
                                     }
                                     Text {
                                         text: model.manualLockRemainingStr || ""
-                                        font.family: "Monospace"
-                                        font.pixelSize: 10
-                                        font.bold: true
+                                        font.family: theme.monoFont
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                        renderType: Text.NativeRendering
                                         color: "#F59E0B"
                                     }
                                 }
@@ -820,37 +935,116 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 4: 账号名称 (纯净用户名，剥离 @gmail.com，默认不脱敏)
+                    // Col 4: 账号名称 (纯净用户名，拖拽手柄 ⠿ + 悬浮[置顶]按钮 + 点击复制邮箱)
                     // -------------------------------------------------
                     Item {
+                        id: col4AccountItem
                         Layout.preferredWidth: colAccountWidth
+                        Layout.minimumWidth: colAccountWidth
+                        Layout.maximumWidth: colAccountWidth
                         Layout.fillHeight: true
 
-                        Text {
+                        // 1. 拖拽手柄图标 (⠿)
+                        Item {
+                            id: dragHandle
+                            width: 14
+                            height: parent.height
                             anchors.left: parent.left
-                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "⠿"
+                                font.family: theme.monoFont
+                                font.pixelSize: 13
+                                renderType: Text.NativeRendering
+                                color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#64887b"
+                            }
+
+                            MouseArea {
+                                id: dragMouse
+                                anchors.fill: parent
+                                cursorShape: Qt.SizeVerCursor
+                                hoverEnabled: true
+                            }
+                        }
+
+                        // 2. 账号纯净用户名 (截断与复制)
+                        Text {
+                            id: accountNameText
+                            anchors.left: dragHandle.right
+                            anchors.leftMargin: 2
+                            anchors.right: (pinTopBtn.visible ? pinTopBtn.left : parent.right)
+                            anchors.rightMargin: pinTopBtn.visible ? 4 : 2
                             anchors.verticalCenter: parent.verticalCenter
                             text: model.displayUsername || ""
-                            font.family: (theme && theme.uiFont) ? theme.uiFont : "sans-serif"
+                            font.family: theme.uiFont
                             font.pixelSize: 13
-                            font.bold: true
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
                             elide: Text.ElideRight
                             color: model.isActive ?
-                                   ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
 
-                            ToolTip.visible: nameMouse.containsMouse
+                            ToolTip.visible: nameMouse.containsMouse && !pinTopMouse.containsMouse && !dragMouse.containsMouse
                             ToolTip.text: (model.email || "") + " (" + qsTr("Click to copy") + ")"
                         }
 
                         MouseArea {
                             id: nameMouse
-                            anchors.fill: parent
+                            anchors.left: dragHandle.right
+                            anchors.right: (pinTopBtn.visible ? pinTopBtn.left : parent.right)
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (backend && typeof backend.copyToClipboard === "function") {
                                     backend.copyToClipboard(model.email);
+                                }
+                            }
+                        }
+
+                        // 3. 悬浮 [置顶] 按钮 (非在用且非首行悬浮显现)
+                        Rectangle {
+                            id: pinTopBtn
+                            anchors.right: parent.right
+                            anchors.rightMargin: 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 34
+                            height: 18
+                            radius: 0
+                            visible: rowMouse.containsMouse && !model.isActive && index > 0
+                            color: pinTopMouse.containsMouse ?
+                                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                                   ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
+                            border.width: 1
+                            border.color: pinTopMouse.containsMouse ?
+                                          ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                                          ((theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#3c3836")
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("置顶")
+                                font.family: theme.uiFont
+                                font.pixelSize: 10
+                                font.weight: Font.DemiBold
+                                renderType: Text.NativeRendering
+                                color: pinTopMouse.containsMouse ?
+                                       ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                                       ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6")
+                            }
+
+                            MouseArea {
+                                id: pinTopMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                ToolTip.visible: containsMouse
+                                ToolTip.text: qsTr("Pin to top")
+                                onClicked: {
+                                    accountListView.moveAccountToTop(model.email);
                                 }
                             }
                         }
@@ -860,9 +1054,11 @@ Item {
                     Rectangle {
                         width: 1
                         Layout.preferredWidth: 1
+                        Layout.minimumWidth: 1
+                        Layout.maximumWidth: 1
                         Layout.fillHeight: true
-                        Layout.topMargin: 4
-                        Layout.bottomMargin: 4
+                        Layout.topMargin: 6
+                        Layout.bottomMargin: 6
                         radius: 0
                         color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                     }
@@ -871,8 +1067,9 @@ Item {
                     // Col 5: Gemini 4 配额单元格 (彻底移除 周 徽标，原生进度条、数值与倒计时)
                     // -------------------------------------------------
                     Item {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: Math.round(100 * colG4Weight)
+                        Layout.preferredWidth: colG4Width
+                        Layout.minimumWidth: colG4Width
+                        Layout.maximumWidth: colG4Width
                         Layout.fillHeight: true
 
                         // 账号无 Gemini 4 权限：优雅呈现中线 —
@@ -880,8 +1077,9 @@ Item {
                             anchors.centerIn: parent
                             visible: !model.gemini4Valid
                             text: "—"
-                            font.family: "Monospace"
+                            font.family: theme.monoFont
                             font.pixelSize: 14
+                            renderType: Text.NativeRendering
                             color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
                             ToolTip.visible: g4EmptyMouse.containsMouse
                             ToolTip.text: qsTr("No Gemini 4 access")
@@ -905,8 +1103,8 @@ Item {
                                 Layout.fillWidth: true
                                 implicitWidth: 64
                                 Layout.minimumWidth: 48
-                                Layout.preferredHeight: 6
-                                height: 6
+                                Layout.preferredHeight: 5
+                                height: 5
                                 radius: 0
                                 color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
@@ -927,9 +1125,10 @@ Item {
                             Text {
                                 Layout.preferredWidth: 44
                                 text: ((model.gemini4Quota || 0.0) * 100).toFixed(1) + "%"
-                                font.family: "Monospace"
+                                font.family: theme.monoFont
                                 font.pixelSize: 12
-                                font.bold: true
+                                font.weight: Font.DemiBold
+                                renderType: Text.NativeRendering
                                 horizontalAlignment: Text.AlignRight
                                 color: accountListView.getQuotaColor(model.gemini4Quota)
                             }
@@ -937,9 +1136,10 @@ Item {
                             // 3. 重置倒计时槽位 (52px 零截断)
                             Text {
                                 Layout.preferredWidth: 52
-                                text: model.gemini4Reset || "--"
-                                font.family: "Monospace"
+                                text: model.gemini4Reset || "—"
+                                font.family: theme.monoFont
                                 font.pixelSize: 11
+                                renderType: Text.NativeRendering
                                 color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                 horizontalAlignment: Text.AlignRight
                                 elide: Text.ElideNone
@@ -951,9 +1151,11 @@ Item {
                     Rectangle {
                         width: 1
                         Layout.preferredWidth: 1
+                        Layout.minimumWidth: 1
+                        Layout.maximumWidth: 1
                         Layout.fillHeight: true
-                        Layout.topMargin: 4
-                        Layout.bottomMargin: 4
+                        Layout.topMargin: 6
+                        Layout.bottomMargin: 6
                         radius: 0
                         color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                     }
@@ -962,16 +1164,19 @@ Item {
                     // Col 6: Gemini 3.8 双维配额单元格 (带周耗尽 0.0% 熔断)
                     // -------------------------------------------------
                     Item {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: Math.round(100 * colG38Weight)
+                        Layout.preferredWidth: colG38Width
+                        Layout.minimumWidth: colG38Width
+                        Layout.maximumWidth: colG38Width
                         Layout.fillHeight: true
 
                         ColumnLayout {
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
                             anchors.leftMargin: 10
-                            anchors.topMargin: 4
-                            anchors.bottomMargin: 4
-                            spacing: 3
+                            anchors.topMargin: 2
+                            anchors.bottomMargin: 2
+                            spacing: 1
 
                             // 上轨: 5小时滑动窗口
                             RowLayout {
@@ -979,8 +1184,8 @@ Item {
                                 spacing: 5
 
                                 Rectangle {
-                                    width: 24
-                                    height: 16
+                                    width: 20
+                                    height: 14
                                     radius: 0
                                     color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
                                     border.width: 1
@@ -988,8 +1193,10 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: "5h"
+                                        font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        font.bold: true
+                                        font.weight: Font.DemiBold
+                                        renderType: Text.NativeRendering
                                         color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                                     }
                                 }
@@ -998,8 +1205,8 @@ Item {
                                     Layout.fillWidth: true
                                     implicitWidth: 64
                                     Layout.minimumWidth: 48
-                                    Layout.preferredHeight: 6
-                                    height: 6
+                                    Layout.preferredHeight: 5
+                                    height: 5
                                     radius: 0
                                     color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
@@ -1019,9 +1226,10 @@ Item {
                                     Layout.preferredWidth: 42
                                     text: (model.gemini38QuotaW <= 0.0001) ? "0.0%" :
                                           (((model.gemini38Quota5h || 0.0) * 100).toFixed(1) + "%")
-                                    font.family: "Monospace"
+                                    font.family: theme.monoFont
                                     font.pixelSize: 12
-                                    font.bold: true
+                                    font.weight: Font.DemiBold
+                                    renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
                                     color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            accountListView.getQuotaColor(model.gemini38Quota5h)
@@ -1029,9 +1237,10 @@ Item {
 
                                 Text {
                                     Layout.preferredWidth: 54
-                                    text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") : (model.gemini38Reset5h || "--")
-                                    font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") : (model.gemini38Reset5h || "—")
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 11
+                                    renderType: Text.NativeRendering
                                     color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                     horizontalAlignment: Text.AlignRight
@@ -1045,8 +1254,8 @@ Item {
                                 spacing: 5
 
                                 Rectangle {
-                                    width: 24
-                                    height: 16
+                                    width: 20
+                                    height: 14
                                     radius: 0
                                     color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
                                     border.width: 1
@@ -1054,8 +1263,10 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: qsTr("Weekly")
+                                        font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        font.bold: true
+                                        font.weight: Font.DemiBold
+                                        renderType: Text.NativeRendering
                                         color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                                     }
                                 }
@@ -1064,8 +1275,8 @@ Item {
                                     Layout.fillWidth: true
                                     implicitWidth: 64
                                     Layout.minimumWidth: 48
-                                    Layout.preferredHeight: 6
-                                    height: 6
+                                    Layout.preferredHeight: 5
+                                    height: 5
                                     radius: 0
                                     color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
@@ -1083,18 +1294,20 @@ Item {
                                 Text {
                                     Layout.preferredWidth: 42
                                     text: ((model.gemini38QuotaW || 0.0) * 100).toFixed(1) + "%"
-                                    font.family: "Monospace"
+                                    font.family: theme.monoFont
                                     font.pixelSize: 12
-                                    font.bold: true
+                                    font.weight: Font.DemiBold
+                                    renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
                                     color: accountListView.getQuotaColor(model.gemini38QuotaW)
                                 }
 
                                 Text {
                                     Layout.preferredWidth: 52
-                                    text: model.gemini38ResetW || "--"
-                                    font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    text: model.gemini38ResetW || "—"
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 11
+                                    renderType: Text.NativeRendering
                                     color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideNone
@@ -1107,9 +1320,11 @@ Item {
                     Rectangle {
                         width: 1
                         Layout.preferredWidth: 1
+                        Layout.minimumWidth: 1
+                        Layout.maximumWidth: 1
                         Layout.fillHeight: true
-                        Layout.topMargin: 4
-                        Layout.bottomMargin: 4
+                        Layout.topMargin: 6
+                        Layout.bottomMargin: 6
                         radius: 0
                         color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                     }
@@ -1118,16 +1333,19 @@ Item {
                     // Col 7: Claude 双维配额单元格
                     // -------------------------------------------------
                     Item {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: Math.round(100 * colClaudeWeight)
+                        Layout.preferredWidth: colClaudeWidth
+                        Layout.minimumWidth: colClaudeWidth
+                        Layout.maximumWidth: colClaudeWidth
                         Layout.fillHeight: true
 
                         ColumnLayout {
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
                             anchors.leftMargin: 10
-                            anchors.topMargin: 4
-                            anchors.bottomMargin: 4
-                            spacing: 3
+                            anchors.topMargin: 2
+                            anchors.bottomMargin: 2
+                            spacing: 1
 
                             // 上轨: 5小时滑动窗口
                             RowLayout {
@@ -1135,8 +1353,8 @@ Item {
                                 spacing: 5
 
                                 Rectangle {
-                                    width: 24
-                                    height: 16
+                                    width: 20
+                                    height: 14
                                     radius: 0
                                     color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
                                     border.width: 1
@@ -1144,8 +1362,10 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: "5h"
+                                        font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        font.bold: true
+                                        font.weight: Font.DemiBold
+                                        renderType: Text.NativeRendering
                                         color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                                     }
                                 }
@@ -1154,8 +1374,8 @@ Item {
                                     Layout.fillWidth: true
                                     implicitWidth: 64
                                     Layout.minimumWidth: 48
-                                    Layout.preferredHeight: 6
-                                    height: 6
+                                    Layout.preferredHeight: 5
+                                    height: 5
                                     radius: 0
                                     color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
@@ -1175,9 +1395,10 @@ Item {
                                     Layout.preferredWidth: 42
                                     text: (model.claudeQuotaW <= 0.0001) ? "0.0%" :
                                           (((model.claudeQuota5h || 0.0) * 100).toFixed(1) + "%")
-                                    font.family: "Monospace"
+                                    font.family: theme.monoFont
                                     font.pixelSize: 12
-                                    font.bold: true
+                                    font.weight: Font.DemiBold
+                                    renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
                                     color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            accountListView.getQuotaColor(model.claudeQuota5h)
@@ -1185,9 +1406,10 @@ Item {
 
                                 Text {
                                     Layout.preferredWidth: 54
-                                    text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") : (model.claudeReset5h || "--")
-                                    font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") : (model.claudeReset5h || "—")
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 11
+                                    renderType: Text.NativeRendering
                                     color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1")
                                     horizontalAlignment: Text.AlignRight
@@ -1201,8 +1423,8 @@ Item {
                                 spacing: 5
 
                                 Rectangle {
-                                    width: 24
-                                    height: 16
+                                    width: 20
+                                    height: 14
                                     radius: 0
                                     color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : "#12ffffff"
                                     border.width: 1
@@ -1210,8 +1432,10 @@ Item {
                                     Text {
                                         anchors.centerIn: parent
                                         text: qsTr("Weekly")
+                                        font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        font.bold: true
+                                        font.weight: Font.DemiBold
+                                        renderType: Text.NativeRendering
                                         color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                                     }
                                 }
@@ -1220,8 +1444,8 @@ Item {
                                     Layout.fillWidth: true
                                     implicitWidth: 64
                                     Layout.minimumWidth: 48
-                                    Layout.preferredHeight: 6
-                                    height: 6
+                                    Layout.preferredHeight: 5
+                                    height: 5
                                     radius: 0
                                     color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
 
@@ -1239,18 +1463,20 @@ Item {
                                 Text {
                                     Layout.preferredWidth: 42
                                     text: ((model.claudeQuotaW || 0.0) * 100).toFixed(1) + "%"
-                                    font.family: "Monospace"
+                                    font.family: theme.monoFont
                                     font.pixelSize: 12
-                                    font.bold: true
+                                    font.weight: Font.DemiBold
+                                    renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
                                     color: accountListView.getQuotaColor(model.claudeQuotaW)
                                 }
 
                                 Text {
                                     Layout.preferredWidth: 52
-                                    text: model.claudeResetW || "--"
-                                    font.family: "Monospace"
-                                    font.pixelSize: 10
+                                    text: model.claudeResetW || "—"
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 11
+                                    renderType: Text.NativeRendering
                                     color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideNone
@@ -1263,37 +1489,43 @@ Item {
                     Rectangle {
                         width: 1
                         Layout.preferredWidth: 1
+                        Layout.minimumWidth: 1
+                        Layout.maximumWidth: 1
                         Layout.fillHeight: true
-                        Layout.topMargin: 4
-                        Layout.bottomMargin: 4
+                        Layout.topMargin: 6
+                        Layout.bottomMargin: 6
                         radius: 0
                         color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                     }
 
                     // -------------------------------------------------
-                    // Col 8: 快速操作按钮组 (收紧至 74px，纯直角长方形)
+                    // Col 8: 快速操作按钮组 (82px 纯直角长方形)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colActionWidth
+                        Layout.minimumWidth: colActionWidth
+                        Layout.maximumWidth: colActionWidth
                         Layout.fillHeight: true
 
-                        // 1. 在用徽章 (ACTIVE 状态)
+                        // 1. 在用徽章 (ACTIVE 状态) - Marker 6: theme.accent, 严禁 goodText 绿色
                         Rectangle {
                             anchors.centerIn: parent
                             visible: model.isActive
                             width: 58
-                            height: 28
+                            height: 24
                             radius: 0
-                            color: Qt.alpha((theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f", 0.15)
+                            color: Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15)
                             border.width: 1
-                            border.color: (theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f"
+                            border.color: (theme && theme.accent) ? theme.accent : "#7daea3"
 
                             Text {
                                 anchors.centerIn: parent
                                 text: qsTr("In Use")
+                                font.family: theme.uiFont
                                 font.pixelSize: 11
-                                font.bold: true
-                                color: (theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f"
+                                font.weight: Font.DemiBold
+                                renderType: Text.NativeRendering
+                                color: (theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3")
                             }
                         }
 
@@ -1302,7 +1534,7 @@ Item {
                             anchors.centerIn: parent
                             visible: !model.isActive && model.isBlocked
                             width: 58
-                            height: 28
+                            height: 24
                             radius: 0
                             color: Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.15)
                             border.width: 1
@@ -1311,8 +1543,10 @@ Item {
                             Text {
                                 anchors.centerIn: parent
                                 text: qsTr("Unblock")
+                                font.family: theme.uiFont
                                 font.pixelSize: 11
-                                font.bold: true
+                                font.weight: Font.DemiBold
+                                renderType: Text.NativeRendering
                                 color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
                             }
 
@@ -1333,21 +1567,23 @@ Item {
                             anchors.centerIn: parent
                             visible: !model.isActive && !model.isBlocked
                             width: 58
-                            height: 28
+                            height: 24
                             radius: 0
                             color: btnSwitchMouse.containsMouse ?
                                    ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#24283b") :
                                    ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
                             border.width: 1
                             border.color: btnSwitchMouse.containsMouse ?
-                                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                                          ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                           ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")
 
                             Text {
                                 anchors.centerIn: parent
                                 text: qsTr("Switch")
+                                font.family: theme.uiFont
                                 font.pixelSize: 12
-                                font.bold: true
+                                font.weight: Font.DemiBold
+                                renderType: Text.NativeRendering
                                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                             }
 
@@ -1369,12 +1605,12 @@ Item {
         }
 
         // =============================================================
-        // 4. 底部极简状态与快捷键导航栏 (26px Omarchy Standard Footer Bar)
+        // 4. 底部极简状态与按键键帽导航栏 (Omarchy Full Chinese Footer Bar)
         // =============================================================
         Rectangle {
             id: bottomBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 26
+            Layout.preferredHeight: 24
             radius: 0
             color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c"
             border.width: 1
@@ -1386,38 +1622,68 @@ Item {
                 anchors.rightMargin: 12
                 spacing: 12
 
-                // 统计信息
-                RowLayout {
-                    spacing: 6
-                    Text {
-                        text: "Accounts: " + (proxyModel ? proxyModel.rowCount() : 0)
-                        font.pixelSize: 11
-                        font.family: "Monospace"
-                        color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
-                    }
-                    Text {
-                        text: "·"
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
-                    }
-                    Text {
-                        text: "Filtered: " + (proxyModel ? proxyModel.filteredCount : 0)
-                        font.pixelSize: 11
-                        font.family: "Monospace"
-                        color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
-                    }
+                // 左侧: 全池统计信息 (共 %1 个账号 · 可用 %2 · 显示 %3)
+                Text {
+                    text: qsTr("共 %1 个账号 · 可用 %2 · 显示 %3")
+                          .arg((accountModel && typeof accountModel.count !== "undefined") ? accountModel.count : (accountModel ? accountModel.rowCount() : 0))
+                          .arg(accountListView.availableCount)
+                          .arg(accountListView.displayedCount)
+                    font.family: theme.uiFont
+                    font.pixelSize: 11
+                    renderType: Text.NativeRendering
+                    color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                 }
 
+                // 弹性推开间隔
                 Item {
                     Layout.fillWidth: true
                 }
 
-                // 键盘快捷键提示
+                // 右侧: 直角按键键帽组 ([J/K] 移动选择  [Enter] 快速切换  [/] 搜索账号  [?] 快捷键帮助)
                 RowLayout {
-                    spacing: 8
-                    Text {
-                        text: "j/k: Navigate · Enter: Switch · r: Refresh · /: Search · ?: Help"
-                        font.pixelSize: 10
-                        color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
+                    spacing: 12
+
+                    Repeater {
+                        model: [
+                            { key: "J/K", label: qsTr("移动选择") },
+                            { key: "Enter", label: qsTr("快速切换") },
+                            { key: "/", label: qsTr("搜索账号") },
+                            { key: "?", label: qsTr("快捷键帮助") }
+                        ]
+
+                        delegate: RowLayout {
+                            spacing: 5
+
+                            // 矩形直角键帽 (border: theme.hairline, background: theme.surface2, radius: 0)
+                            Rectangle {
+                                height: 16
+                                implicitWidth: keycapText.implicitWidth + 8
+                                radius: 0
+                                color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26"
+                                border.width: 1
+                                border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#3c3836"
+
+                                Text {
+                                    id: keycapText
+                                    anchors.centerIn: parent
+                                    text: modelData.key
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    font.weight: Font.DemiBold
+                                    renderType: Text.NativeRendering
+                                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                                }
+                            }
+
+                            // 快捷操作描述文本 (theme.uiFont, theme.text2)
+                            Text {
+                                text: modelData.label
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                renderType: Text.NativeRendering
+                                color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
+                            }
+                        }
                     }
                 }
             }
@@ -1463,7 +1729,7 @@ Item {
                 Text {
                     text: qsTr("Operation Confirmation")
                     font.pixelSize: 14
-                    font.bold: true
+                    font.weight: Font.DemiBold
                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     Layout.fillWidth: true
                 }
@@ -1523,7 +1789,7 @@ Item {
                         anchors.centerIn: parent
                         text: qsTr("Delete")
                         font.pixelSize: 12
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: "#FFFFFF"
                     }
                     MouseArea {

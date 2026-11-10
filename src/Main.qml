@@ -6,17 +6,20 @@ import QtQuick.Layouts 1.15
 ApplicationWindow {
     id: appWindow
     visible: true
-    width: 1080
-    height: 720
-    minimumWidth: 880
-    minimumHeight: 540
+    // 固定最佳宽度（内容 1016 + 外边距 24 = 1040），高度刚好放下 15 行账号
+    readonly property int contentWidth: 1016
+    width: 1040
+    minimumWidth: 1040
+    maximumWidth: 1040
+    height: 800
+    minimumHeight: 600
     title: qsTr("Antigravity Hub")
 
     // Dynamic Omarchy Design System & Typography
     color: (theme && theme.canvas) ? theme.canvas : ((theme && theme.background) ? theme.background : "#142620")
     font.family: (theme && theme.uiFont) ? theme.uiFont : "sans-serif"
     Material.theme: (theme && theme.mode === "light") ? Material.Light : Material.Dark
-    Material.accent: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+    Material.accent: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3"
     Material.background: (theme && theme.background && theme.background.charAt(0) === '#') ? theme.background : "#142620"
     Material.foreground: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
     Material.roundedScale: theme ? theme.controlRadius : 4
@@ -162,6 +165,20 @@ ApplicationWindow {
         onActivated: Qt.quit()
     }
 
+    // PgUp / PgDn -> 翻页（每页 15 个）
+    Shortcut {
+        sequence: "PgDown"
+        enabled: !appWindow.isModalOpen
+        context: Qt.ApplicationShortcut
+        onActivated: accountListView.gotoPage(accountListView.currentPage + 1)
+    }
+    Shortcut {
+        sequence: "PgUp"
+        enabled: !appWindow.isModalOpen
+        context: Qt.ApplicationShortcut
+        onActivated: accountListView.gotoPage(accountListView.currentPage - 1)
+    }
+
     // Esc -> Unfocus Search / Dismiss Dialogs
     Shortcut {
         sequence: "Escape"
@@ -187,15 +204,19 @@ ApplicationWindow {
         LayoutMirroring.childrenInherit: true
 
         ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 12
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 12
+            anchors.bottomMargin: 12
+            width: appWindow.contentWidth
             spacing: 8
 
             // 1. Header Bar
             HeaderBar {
                 id: headerBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: 48
+                Layout.preferredHeight: 44
                 onOpenSettings: {
                     if (settingsDialog && typeof settingsDialog.open === "function") {
                         settingsDialog.open();
@@ -207,7 +228,7 @@ ApplicationWindow {
             FilterBar {
                 id: filterBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: 42
+                Layout.preferredHeight: 34
             }
 
             // 3. Account Quota Matrix Table View

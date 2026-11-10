@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "models.h"
 #include <QDir>
 #include <QFile>
 #include <QDateTime>
@@ -6,6 +7,8 @@
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QJsonArray>
+#include <QUrl>
+#include <QUrlQuery>
 
 BackendController::BackendController(QObject *parent)
     : QObject(parent)
@@ -702,4 +705,111 @@ void BackendController::fetchRotationStatus()
             emit rotationModeChanged();
         }
     });
+}
+
+void BackendController::setAccountModel(AccountModel *model)
+{
+    if (m_accountModel != model) {
+        m_accountModel = model;
+        emit accountModelChanged();
+    }
+}
+
+void BackendController::reorderAccounts(const QStringList &orderedEmails)
+{
+    if (orderedEmails.isEmpty()) return;
+
+    // ------------------------------------------------------------------------
+    // 步骤 1: 立即更新内存模型 (零延迟交互响应)
+    // ------------------------------------------------------------------------
+    if (m_accountModel) {
+        m_accountModel->reorderAccounts(orderedEmails);
+    }
+    emit accountsReordered(orderedEmails);
+
+    // ------------------------------------------------------------------------
+    // 步骤 2: 构造 application/x-www-form-urlencoded POST 请求发送至守护服务
+    // 格式契约: order[]=<url_encoded_email_1>&order[]=<url_encoded_email_2>...
+    // ------------------------------------------------------------------------
+    QByteArray postData;
+    for (int i = 0; i < orderedEmails.size(); ++i) {
+        const QString em = orderedEmails[i].trimmed();
+        if (em.isEmpty()) continue;
+        if (!postData.isEmpty()) {
+            postData.append('&');
+        }
+        postData.append("order[]=");
+        postData.append(QUrl::toPercentEncoding(em));
+    }
+
+    executePost(QStringLiteral("/api/reorder"), postData,
+                QStringLiteral("application/x-www-form-urlencoded"),
+                tr("Reorder Accounts"),
+                [this](const QByteArray &, int) {
+        emit notificationRequested(tr("Reorder Accounts"),
+                                  tr("Account order persisted successfully"), false);
+    });
+
+    // ------------------------------------------------------------------------
+    // 步骤 3: 兜底与直接持久化更新 accounts_hub.json (离线容灾防护)
+    // 确保在守护服务离线或单元测试环境下，自定义顺序 100% 保持持久化
+    // ------------------------------------------------------------------------
+    QString accountsPath = m_hubDir + QStringLiteral("/data/accounts_hub.json");
+    if (!QFile::exists(accountsPath) && QFile::exists(m_hubDir + QStringLiteral("/accounts_hub.json"))) {
+        accountsPath = m_hubDir + QStringLiteral("/accounts_hub.json");
+    }
+
+    QFile file(accountsPath);
+    if (file.open(QIODevice::ReadOnly)) {
+        const QByteArray rawBytes = file.readAll();
+        file.close();
+
+        QJsonParseError parseErr;
+        QJsonDocument doc = QJsonDocument::fromJson(rawBytes, &parseErr);
+        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
+            QJsonObject root = doc.object();
+
+            // 1. 添加/更新顶层 accounts_order JSON 数组
+            QJsonArray orderArr;
+            for (const QString &em : orderedEmails) {
+                const QString trimmed = em.trimmed();
+                if (!trimmed.isEmpty()) {
+                    orderArr.append(trimmed);
+                }
+            }
+            root[QStringLiteral("accounts_order")] = orderArr;
+
+            // 2. 同步重排 accounts 对象字段
+            const QJsonObject oldAccounts = root.value(QStringLiteral("accounts")).toObject();
+            QJsonObject reorderedAccounts;
+            for (const QString &em : orderedEmails) {
+                const QString trimmed = em.trimmed();
+                if (oldAccounts.contains(trimmed)) {
+                    reorderedAccounts[trimmed] = oldAccounts.value(trimmed);
+                }
+            }
+            for (auto it = oldAccounts.constBegin(); it != oldAccounts.constEnd(); ++it) {
+                if (!reorderedAccounts.contains(it.key())) {
+                    reorderedAccounts[it.key()] = it.value();
+                }
+            }
+            root[QStringLiteral("accounts")] = reorderedAccounts;
+
+            // 3. 回写主存储
+            if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+                file.close();
+            }
+
+            // 4. 若存在本地根目录备份文件 (~/.antigravity_hub/accounts_hub.json)，同步双写
+            const QString backupPath = m_hubDir + QStringLiteral("/accounts_hub.json");
+            if (backupPath != accountsPath && QFile::exists(backupPath)) {
+                QFile backupFile(backupPath);
+                if (backupFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                    backupFile.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+                    backupFile.close();
+                }
+            }
+        }
+    }
 }

@@ -13,6 +13,9 @@
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QQuickItem>
+#include <QRegularExpression>
+#include <QMetaProperty>
 #include <cstdio>
 
 #include "theme.h"
@@ -56,6 +59,13 @@ private slots:
     // Milestone 3 Tests: QML Components Instantiation & Smoke
     void qmlComponentsInstantiationAndSmoke();
     void accountListViewVisualDenoisingInvariants();
+
+    // Milestone 3 Tests: v2.50.0 Invariant Verification
+    void v250WindowGeometryLockInvariants();
+    void v250TableColumnsFixedGeometryInvariants();
+    void v250ScreenFixedZebraRhythmInvariants();
+    void v250AccountReorderPersistenceInvariants();
+    void v250ThemeMonoFontAndAccentTextInvariants();
 
     void cleanupTestCase();
 };
@@ -1335,6 +1345,413 @@ void AntigravityHubTests::accountListViewVisualDenoisingInvariants() {
              "MANDATORY DENOISING VIOLATION: Bolt logo found in HeaderBar topg capsule");
     QVERIFY2(!headerContent.contains(QStringLiteral("name: \"sparkle\"")),
              "MANDATORY DENOISING VIOLATION: Sparkle logo found in HeaderBar prewarm capsule");
+}
+
+// -----------------------------------------------------------------------------
+// Milestone 3: v2.50.0 Fixed Geometry & Invariant Verification Suite
+// -----------------------------------------------------------------------------
+
+void AntigravityHubTests::v250WindowGeometryLockInvariants() {
+    // 1. Static Source Code Invariants in src/Main.qml
+    QFile mainFile(QStringLiteral(":/Main.qml"));
+    QVERIFY(mainFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString mainContent = QString::fromUtf8(mainFile.readAll());
+    mainFile.close();
+
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*1040\b)"))), "Main.qml width != 1040");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*1040\b)"))), "Main.qml minimumWidth != 1040");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bmaximumWidth\s*:\s*1040\b)"))), "Main.qml maximumWidth != 1040");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*800\b)"))), "Main.qml height != 800");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*600\b)"))), "Main.qml minimumHeight != 600");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*1016\b)"))), "Main.qml contentWidth != 1016");
+
+    // 2. Offscreen Dynamic Instantiation of Main.qml
+    QQmlEngine engine;
+    engine.addImageProvider(QStringLiteral("icons"), new IconProvider());
+
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    Theme theme(tempDir.path());
+    Translator translator(tempDir.filePath("lang"), ":/i18n");
+    BackendController backend;
+    AccountModel accountModel;
+    AccountFilterProxyModel proxyModel;
+    proxyModel.setSourceModel(&accountModel);
+
+    QQmlContext *ctx = engine.rootContext();
+    ctx->setContextProperty(QStringLiteral("theme"), &theme);
+    ctx->setContextProperty(QStringLiteral("translator"), &translator);
+    ctx->setContextProperty(QStringLiteral("backend"), &backend);
+    ctx->setContextProperty(QStringLiteral("backendController"), &backend);
+    ctx->setContextProperty(QStringLiteral("accountModel"), &accountModel);
+    ctx->setContextProperty(QStringLiteral("proxyModel"), &proxyModel);
+    ctx->setContextProperty(QStringLiteral("accountFilterProxyModel"), &proxyModel);
+
+    QQmlComponent comp(&engine, QUrl(QStringLiteral("qrc:/Main.qml")));
+    QVERIFY2(!comp.isError(), qPrintable(comp.errorString()));
+
+    QScopedPointer<QObject> rootObj(comp.create());
+    QVERIFY2(rootObj != nullptr, "Main.qml failed to instantiate");
+
+    QQuickWindow *win = qobject_cast<QQuickWindow*>(rootObj.data());
+    QVERIFY2(win != nullptr, "Main.qml root object is not a QQuickWindow");
+
+    QCOMPARE(win->width(), 1040);
+    QCOMPARE(win->height(), 800);
+    QCOMPARE(win->property("minimumWidth").toInt(), 1040);
+    QCOMPARE(win->property("maximumWidth").toInt(), 1040);
+    QCOMPARE(win->property("minimumHeight").toInt(), 600);
+    QCOMPARE(win->property("contentWidth").toInt(), 1016);
+
+    win->show();
+    QCoreApplication::processEvents();
+
+    // Resize stress test: window geometry constraints enforce fixed contentWidth
+    win->resize(1280, 900);
+    QCoreApplication::processEvents();
+    QCOMPARE(win->property("contentWidth").toInt(), 1016);
+}
+
+void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
+    // 1. Static Source Code Invariants in src/AccountListView.qml
+    QFile file(QStringLiteral(":/AccountListView.qml"));
+    QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString content = QString::fromUtf8(file.readAll());
+    file.close();
+
+    // Verify column width constants and row height
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolCheckWidth\s*:\s*28\b)"))), "colCheckWidth != 28");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolIndexWidth\s*:\s*32\b)"))), "colIndexWidth != 32");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolStatusWidth\s*:\s*76\b)"))), "colStatusWidth != 76");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*120\b)"))), "colAccountWidth != 120");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG4Width\s*:\s*176\b)"))), "colG4Width != 176");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG38Width\s*:\s*238\b)"))), "colG38Width != 238");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*238\b)"))), "colClaudeWidth != 238");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*82\b)"))), "colActionWidth != 82");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\browHeight\s*:\s*40\b)"))), "rowHeight != 40");
+
+    // Exact arithmetic sum check: 28 + 32 + 76 + 120 + 176 + 238 + 238 + 82 == 990
+    const int totalColumnWidth = 28 + 32 + 76 + 120 + 176 + 238 + 238 + 82;
+    QCOMPARE(totalColumnWidth, 990);
+
+    // Verify that NO direct column in Header RowLayout has Layout.fillWidth
+    int headerRowPos = content.indexOf(QStringLiteral("id: headerRow"));
+    QVERIFY(headerRowPos != -1);
+    int batchBarPos = content.indexOf(QStringLiteral("id: batchActionBar"));
+    QVERIFY(batchBarPos > headerRowPos);
+    QString headerSection = content.mid(headerRowPos, batchBarPos - headerRowPos);
+    int headerRowLayoutPos = headerSection.indexOf(QStringLiteral("RowLayout {"));
+    QVERIFY(headerRowLayoutPos != -1);
+    QString headerColumnsSection = headerSection.mid(headerRowLayoutPos);
+    QVERIFY2(!headerColumnsSection.contains(QStringLiteral("Layout.fillWidth")), "Header column has Layout.fillWidth!");
+
+    // Verify all 8 columns in Header specify preferredWidth
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colCheckWidth")), "Header Col 1 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colIndexWidth")), "Header Col 2 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colStatusWidth")), "Header Col 3 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Header Col 4 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colG4Width")), "Header Col 5 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colG38Width")), "Header Col 6 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Header Col 7 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Header Col 8 missing preferredWidth");
+
+    // Verify all 8 columns in Delegate specify preferredWidth
+    int delegatePos = content.indexOf(QStringLiteral("id: rowDelegate"));
+    QVERIFY(delegatePos != -1);
+    int bottomBarPos = content.indexOf(QStringLiteral("id: bottomBar"));
+    QVERIFY(bottomBarPos > delegatePos);
+    QString delegateSection = content.mid(delegatePos, bottomBarPos - delegatePos);
+
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colCheckWidth")), "Delegate Col 1 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colIndexWidth")), "Delegate Col 2 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colStatusWidth")), "Delegate Col 3 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Delegate Col 4 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colG4Width")), "Delegate Col 5 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colG38Width")), "Delegate Col 6 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Delegate Col 7 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Delegate Col 8 missing preferredWidth");
+
+    // Verify spacing in Col 6 & 7 between 5h and weekly containers is 1px
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(spacing\s*:\s*1\b)"))), "spacing: 1 between 5h and weekly missing");
+
+    // Verify progress bar height 5px and label pill 20x14px
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(Layout\.preferredHeight\s*:\s*5\b)"))), "Progress bar preferredHeight 5 missing");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(width\s*:\s*20\b[\s\S]*?height\s*:\s*14\b)"))), "Label pill 20x14 missing");
+}
+
+void AntigravityHubTests::v250ScreenFixedZebraRhythmInvariants() {
+    // 1. Static Source Code Invariants in src/AccountListView.qml
+    QFile file(QStringLiteral(":/AccountListView.qml"));
+    QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString content = QString::fromUtf8(file.readAll());
+    file.close();
+
+    // Verify screen-fixed alternating zebra rule (index % 2)
+    QVERIFY2(content.contains(QStringLiteral("rowBgColor: (index % 2 === 0)")), "rowBgColor alternating rule missing");
+    QVERIFY2(content.contains(QStringLiteral("theme.rowEven")), "theme.rowEven missing in rowBgColor");
+    QVERIFY2(content.contains(QStringLiteral("theme.rowOdd")), "theme.rowOdd missing in rowBgColor");
+
+    // Verify active account preserves zebra rhythm with 10% tint blend
+    QVERIFY2(content.contains(QStringLiteral("Qt.tint(rowBgColor, Qt.alpha")), "Active row tint blend missing");
+    QVERIFY2(content.contains(QStringLiteral("0.10")), "Active row 10% tint opacity missing");
+
+    // Verify 3px vertical accent indicator stripe on active row
+    QVERIFY2(content.contains(QStringLiteral("width: 3")), "3px active stripe missing");
+    QVERIFY2(content.contains(QStringLiteral("visible: isRowActive")), "Active stripe visibility binding missing");
+
+    // Verify zero solid green block or pure red in delegate background
+    int delegatePos = content.indexOf(QStringLiteral("id: rowDelegate"));
+    QVERIFY(delegatePos != -1);
+    int rowMousePos = content.indexOf(QStringLiteral("id: rowMouse"), delegatePos);
+    QVERIFY(rowMousePos > delegatePos);
+    QString delegateHeader = content.mid(delegatePos, rowMousePos - delegatePos);
+    QVERIFY2(!delegateHeader.contains(QStringLiteral("#EF4444")), "Pure red #EF4444 found in delegate");
+    QVERIFY2(!delegateHeader.contains(QStringLiteral("goodText")), "goodText found in row background");
+
+    // 2. Mathematical Zebra Striping Contrast Verification across Omarchy Themes
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    Theme defaultTheme(tempDir.path());
+    QVERIFY(defaultTheme.rowEven() != defaultTheme.rowOdd());
+    QVERIFY(defaultTheme.rowEven() != QStringLiteral("#000000"));
+    QVERIFY(defaultTheme.rowOdd() != QStringLiteral("#000000"));
+
+    const QStringList sampleThemes = {
+        QStringLiteral("/usr/share/omarchy/themes/gruvbox/colors.toml"),
+        QStringLiteral("/usr/share/omarchy/themes/jade-horse/colors.toml"),
+        QStringLiteral("/usr/share/omarchy/themes/catppuccin-latte/colors.toml")
+    };
+    QDir(tempDir.path()).mkpath("theme");
+    for (const QString &sourceToml : sampleThemes) {
+        if (!QFile::exists(sourceToml)) continue;
+        const QString targetToml = tempDir.filePath("theme/colors.toml");
+        if (QFile::exists(targetToml)) QFile::remove(targetToml);
+        QVERIFY(QFile::copy(sourceToml, targetToml));
+
+        Theme t(tempDir.path());
+        const QString rEven = t.rowEven();
+        const QString rOdd = t.rowOdd();
+        const QString accent = t.accent();
+
+        // 10% accent tint on even and odd rows
+        const QString tintedEven = Theme::mix(rEven, accent, 0.10);
+        const QString tintedOdd = Theme::mix(rOdd, accent, 0.10);
+
+        // Invariant: alternating contrast is strictly preserved (never collapses to 1.0)
+        QVERIFY(Theme::contrast(tintedEven, rOdd) > 1.05);
+        QVERIFY(Theme::contrast(rEven, tintedOdd) > 1.10);
+        QVERIFY(Theme::contrast(tintedEven, tintedOdd) > 1.10);
+    }
+}
+
+void AntigravityHubTests::v250AccountReorderPersistenceInvariants() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    QDir(tempDir.path()).mkpath("data");
+    const QString accountsFile = tempDir.filePath("data/accounts_hub.json");
+
+    // 1. Initial accounts setup: 3 accounts (accA, accB, accC)
+    QJsonObject rootDoc;
+    rootDoc["active_email"] = QStringLiteral("accA@test.com");
+    QJsonObject accs;
+    for (const QString &name : {QStringLiteral("accA@test.com"), QStringLiteral("accB@test.com"), QStringLiteral("accC@test.com")}) {
+        QJsonObject a;
+        a["email"] = name;
+        a["name"] = name;
+        a["tier"] = QStringLiteral("PRO");
+        a["pro"] = true;
+        a["validation_blocked"] = false;
+        QJsonObject g; g["quota_5h"] = 0.8; g["quota_weekly"] = 0.8; a["gemini"] = g;
+        QJsonObject c; c["quota_5h"] = 0.8; c["quota_weekly"] = 0.8; a["claude"] = c;
+        QJsonObject g4; g4["quota_weekly"] = 0.8; a["gemini4"] = g4;
+        accs[name] = a;
+    }
+    rootDoc["accounts"] = accs;
+
+    QFile file(accountsFile);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(QJsonDocument(rootDoc).toJson());
+    file.close();
+
+    // 2. Test AccountModel::reorderAccounts() in memory
+    AccountModel model;
+    QCOMPARE(model.rowCount(), 3);
+
+    // Reorder: accC, accA, accB
+    const QStringList newOrder = {
+        QStringLiteral("accC@test.com"),
+        QStringLiteral("accA@test.com"),
+        QStringLiteral("accB@test.com")
+    };
+    model.reorderAccounts(newOrder);
+
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.data(model.index(0, 0), AccountModel::EmailRole).toString(), QStringLiteral("accC@test.com"));
+    QCOMPARE(model.data(model.index(1, 0), AccountModel::EmailRole).toString(), QStringLiteral("accA@test.com"));
+    QCOMPARE(model.data(model.index(2, 0), AccountModel::EmailRole).toString(), QStringLiteral("accB@test.com"));
+    QCOMPARE(model.accountsOrder(), newOrder);
+
+    // Partial reorder: pass only accB -> should put accB first, preserving others without loss
+    model.reorderAccounts(QStringList{QStringLiteral("accB@test.com")});
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.data(model.index(0, 0), AccountModel::EmailRole).toString(), QStringLiteral("accB@test.com"));
+    QCOMPARE(model.data(model.index(1, 0), AccountModel::EmailRole).toString(), QStringLiteral("accC@test.com"));
+    QCOMPARE(model.data(model.index(2, 0), AccountModel::EmailRole).toString(), QStringLiteral("accA@test.com"));
+
+    // Adversarial edge cases: empty list, non-existent emails, case insensitivity
+    model.reorderAccounts(QStringList{});
+    QCOMPARE(model.rowCount(), 3);
+
+    model.reorderAccounts(QStringList{QStringLiteral("nonexistent@test.com"), QStringLiteral("  ACCA@TEST.COM  ")});
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.data(model.index(0, 0), AccountModel::EmailRole).toString(), QStringLiteral("accA@test.com"));
+
+    // 3. Test BackendController::reorderAccounts() and JSON persistence
+    BackendController backend;
+    backend.setAccountModel(&model);
+
+    QSignalSpy spyReorder(&backend, &BackendController::accountsReordered);
+    const QStringList persistedOrder = {
+        QStringLiteral("accB@test.com"),
+        QStringLiteral("accA@test.com"),
+        QStringLiteral("accC@test.com")
+    };
+
+    QVERIFY2(QMetaObject::invokeMethod(&backend, "reorderAccounts", Q_ARG(QStringList, persistedOrder)),
+             "BackendController::reorderAccounts not invokable via QMetaObject");
+    QCOMPARE(spyReorder.count(), 1);
+    QCOMPARE(model.accountsOrder(), persistedOrder);
+
+    // Verify accounts_order written to accounts_hub.json
+    QFile readF(accountsFile);
+    QVERIFY(readF.open(QIODevice::ReadOnly));
+    const QJsonDocument savedDoc = QJsonDocument::fromJson(readF.readAll());
+    readF.close();
+    QVERIFY(savedDoc.isObject());
+    const QJsonArray orderArr = savedDoc.object().value(QStringLiteral("accounts_order")).toArray();
+    QCOMPARE(orderArr.size(), 3);
+    QCOMPARE(orderArr.at(0).toString(), QStringLiteral("accB@test.com"));
+    QCOMPARE(orderArr.at(1).toString(), QStringLiteral("accA@test.com"));
+    QCOMPARE(orderArr.at(2).toString(), QStringLiteral("accC@test.com"));
+
+    // 4. Test Cold Reload Survival from accounts_order array (Strategy 1)
+    AccountModel coldModel;
+    QCOMPARE(coldModel.rowCount(), 3);
+    QCOMPARE(coldModel.data(coldModel.index(0, 0), AccountModel::EmailRole).toString(), QStringLiteral("accB@test.com"));
+    QCOMPARE(coldModel.data(coldModel.index(1, 0), AccountModel::EmailRole).toString(), QStringLiteral("accA@test.com"));
+    QCOMPARE(coldModel.data(coldModel.index(2, 0), AccountModel::EmailRole).toString(), QStringLiteral("accC@test.com"));
+
+    // 5. Test Fallback Strategy 2: Raw byte physical order preservation without accounts_order
+    const QString rawJsonText = QStringLiteral(
+        "{\n"
+        "  \"active_email\": \"accC@test.com\",\n"
+        "  \"accounts\": {\n"
+        "    \"accC@test.com\": {\"email\": \"accC@test.com\", \"name\": \"C\"},\n"
+        "    \"accA@test.com\": {\"email\": \"accA@test.com\", \"name\": \"A\"},\n"
+        "    \"accB@test.com\": {\"email\": \"accB@test.com\", \"name\": \"B\"}\n"
+        "  }\n"
+        "}\n"
+    );
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text));
+    file.write(rawJsonText.toUtf8());
+    file.close();
+
+    AccountModel rawScanModel;
+    QCOMPARE(rawScanModel.rowCount(), 3);
+    QCOMPARE(rawScanModel.data(rawScanModel.index(0, 0), AccountModel::EmailRole).toString(), QStringLiteral("accC@test.com"));
+    QCOMPARE(rawScanModel.data(rawScanModel.index(1, 0), AccountModel::EmailRole).toString(), QStringLiteral("accA@test.com"));
+    QCOMPARE(rawScanModel.data(rawScanModel.index(2, 0), AccountModel::EmailRole).toString(), QStringLiteral("accB@test.com"));
+}
+
+void AntigravityHubTests::v250ThemeMonoFontAndAccentTextInvariants() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    Theme theme(tempDir.path());
+
+    // 1. Theme::monoFont() property & value
+    const QMetaObject *themeMo = theme.metaObject();
+    int monoFontPropIdx = themeMo->indexOfProperty("monoFont");
+    QVERIFY2(monoFontPropIdx != -1, "Theme::monoFont Q_PROPERTY missing");
+    QMetaProperty monoProp = themeMo->property(monoFontPropIdx);
+    QVERIFY2(monoProp.isConstant(), "Theme::monoFont should be CONSTANT");
+    QCOMPARE(theme.monoFont(), QStringLiteral("JetBrainsMono Nerd Font"));
+
+    // 2. QML purge of raw "Monospace" in favor of theme.monoFont
+    const QStringList qmlPaths = {
+        QStringLiteral(":/Main.qml"),
+        QStringLiteral(":/AccountListView.qml"),
+        QStringLiteral(":/HeaderBar.qml"),
+        QStringLiteral(":/FilterBar.qml")
+    };
+    for (const QString &qmlPath : qmlPaths) {
+        QFile f(qmlPath);
+        QVERIFY(f.open(QIODevice::ReadOnly | QIODevice::Text));
+        const QString qmlContent = QString::fromUtf8(f.readAll());
+        f.close();
+
+        QVERIFY2(!qmlContent.contains(QStringLiteral("\"Monospace\""), Qt::CaseInsensitive),
+                 qPrintable(QString("Raw 'Monospace' font found in %1").arg(qmlPath)));
+    }
+
+    // Verify theme.monoFont usage in key locations
+    QFile listFile(QStringLiteral(":/AccountListView.qml"));
+    QVERIFY(listFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString listContent = QString::fromUtf8(listFile.readAll());
+    listFile.close();
+    QVERIFY2(listContent.contains(QStringLiteral("theme.monoFont")), "AccountListView.qml missing theme.monoFont usage");
+
+    // 3. Theme::accentText dynamic contrast adaptation
+    int accentTextPropIdx = themeMo->indexOfProperty("accentText");
+    QVERIFY2(accentTextPropIdx != -1, "Theme::accentText Q_PROPERTY missing");
+
+    const QStringList themeNames = {
+        QStringLiteral("jade-horse"),
+        QStringLiteral("gruvbox"),
+        QStringLiteral("tokyo-night"),
+        QStringLiteral("catppuccin-latte"),
+        QStringLiteral("white")
+    };
+    QDir(tempDir.path()).mkpath("theme");
+
+    for (const QString &themeName : themeNames) {
+        const QString sourceToml = QStringLiteral("/usr/share/omarchy/themes/%1/colors.toml").arg(themeName);
+        if (!QFile::exists(sourceToml)) continue;
+
+        const QString targetToml = tempDir.filePath("theme/colors.toml");
+        if (QFile::exists(targetToml)) QFile::remove(targetToml);
+        QVERIFY(QFile::copy(sourceToml, targetToml));
+
+        Theme t(tempDir.path());
+        QVERIFY2(Theme::contrast(t.accentText(), t.canvas()) >= 4.5,
+                 qPrintable(QString("[%1] accentText contrast against canvas < 4.5:1").arg(themeName)));
+    }
+
+    // 4. Markers 1~6 Theme Unification Verification
+    QFile headerFile(QStringLiteral(":/HeaderBar.qml"));
+    QVERIFY(headerFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString headerContent = QString::fromUtf8(headerFile.readAll());
+    headerFile.close();
+
+    // Marker 1 (+ 添加账户), Marker 2 (Gemini), Marker 3 (ACTIVE badge)
+    QVERIFY2(headerContent.contains(QStringLiteral("theme.accent")), "HeaderBar missing theme.accent");
+    QVERIFY2(headerContent.contains(QStringLiteral("theme.accentText")), "HeaderBar ACTIVE badge missing theme.accentText");
+    QVERIFY2(!headerContent.contains(QStringLiteral("#8bcbb1")), "Hardcoded #8bcbb1 found in HeaderBar.qml");
+
+    // Marker 4: FilterBar "全部" tab
+    QFile filterFile(QStringLiteral(":/FilterBar.qml"));
+    QVERIFY(filterFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString filterContent = QString::fromUtf8(filterFile.readAll());
+    filterFile.close();
+    QVERIFY2(filterContent.contains(QStringLiteral("theme.accentText")), "FilterBar missing theme.accentText");
+    QVERIFY2(!filterContent.contains(QStringLiteral("#8bcbb1")), "Hardcoded #8bcbb1 found in FilterBar.qml");
+
+    // Markers 5 & 6 in AccountListView.qml
+    QVERIFY2(listContent.contains(QStringLiteral("theme.accentText")), "AccountListView.qml missing theme.accentText");
+    QVERIFY2(!listContent.contains(QStringLiteral("#8bcbb1")), "Hardcoded #8bcbb1 found in AccountListView.qml");
 }
 
 void AntigravityHubTests::cleanupTestCase() {

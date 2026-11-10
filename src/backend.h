@@ -15,6 +15,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <functional>
+#include "models.h"
 
 /**
  * @brief Antigravity Hub 原生后端控制器
@@ -39,6 +40,7 @@ class BackendController : public QObject
     Q_PROPERTY(bool isManualLocked READ isManualLocked NOTIFY manualLockedChanged)
     Q_PROPERTY(int manualLockRemaining READ manualLockRemaining NOTIFY manualLockRemainingChanged)
     Q_PROPERTY(QJsonObject settings READ settings NOTIFY settingsChanged)
+    Q_PROPERTY(AccountModel* accountModel READ accountModel WRITE setAccountModel NOTIFY accountModelChanged)
 
 public:
     explicit BackendController(QObject *parent = nullptr);
@@ -54,10 +56,12 @@ public:
     bool isManualLocked() const { return m_isManualLocked; }
     int manualLockRemaining() const { return m_manualLockRemaining; }
     QJsonObject settings() const { return m_settings; }
+    AccountModel* accountModel() const { return m_accountModel; }
 
     // 属性写入器
     Q_INVOKABLE void setMasked(bool masked);
     Q_INVOKABLE void setThemeMode(const QString &mode);
+    Q_INVOKABLE void setAccountModel(AccountModel *model);
 
     // QML 调用的核心业务控制方法 (Q_INVOKABLE)
     Q_INVOKABLE void switchAccount(const QString &email);
@@ -69,6 +73,7 @@ public:
     Q_INVOKABLE void saveSettings(const QJsonObject &settings);
     Q_INVOKABLE void unlockManualOverride();
     Q_INVOKABLE void copyToClipboard(const QString &text);
+    Q_INVOKABLE void reorderAccounts(const QStringList &orderedEmails);
 
     // 批量操作与账号纳管扩展 (Milestone 2)
     Q_INVOKABLE void deleteAccounts(const QStringList &emails);
@@ -104,6 +109,8 @@ signals:
     // 跨组件通信与数据同步信号
     void accountsReloadRequested();
     void accountsExported(const QString &json);
+    void accountsReordered(const QStringList &orderedEmails);
+    void accountModelChanged();
 
 private slots:
     void onLockDirectoryChanged(const QString &path);
@@ -150,6 +157,9 @@ private:
     QString m_baseUrl;
     QString m_hubDir;
     QString m_lockFilePath;
+
+    // 模型引用
+    AccountModel *m_accountModel = nullptr;
 };
 
 #endif // BACKEND_H

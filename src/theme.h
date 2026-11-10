@@ -32,6 +32,7 @@ class Theme : public QObject {
 
     // Omarchy Standard Design System Tokens
     Q_PROPERTY(QString uiFont READ uiFont CONSTANT)
+    Q_PROPERTY(QString monoFont READ monoFont CONSTANT)
     Q_PROPERTY(QString canvas READ canvas NOTIFY changed)
     Q_PROPERTY(QString surfaceTop READ surfaceTop NOTIFY changed)
     Q_PROPERTY(QString surfaceBottom READ surfaceBottom NOTIFY changed)
@@ -80,6 +81,7 @@ public:
 
     // Omarchy Standard Getters
     QString uiFont() const { return m_uiFont; }
+    QString monoFont() const { return QStringLiteral("JetBrainsMono Nerd Font"); }
     QString canvas() const { return m_canvas.isEmpty() ? m_background : m_canvas; }
     QString surfaceTop() const { return m_surfaceTop; }
     QString surfaceBottom() const { return m_surfaceBottom; }

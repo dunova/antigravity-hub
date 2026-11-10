@@ -36,7 +36,7 @@ Rectangle {
         IconImage {
             id: logoIcon
             source: "qrc:/assets/logo.svg"
-            color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+            color: (theme && theme.accent) ? theme.accent : "#7daea3"
             width: 24
             height: 24
             sourceSize: Qt.size(24, 24)
@@ -58,8 +58,10 @@ Rectangle {
         Text {
             id: titleLabel
             text: qsTr("Antigravity Hub")
-            font.bold: true
+            font.family: theme.uiFont
+            font.weight: Font.DemiBold
             font.pixelSize: 15
+            renderType: Text.NativeRendering
             color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#dfede5"
             Layout.alignment: Qt.AlignVCenter
         }
@@ -75,10 +77,10 @@ Rectangle {
             // Adaptive coloring based on manual protection lock
             color: (backend && backend.isManualLocked) ?
                    Qt.alpha((theme && theme.dangerText) ? theme.dangerText : "#ff5f4a", 0.15) :
-                   Qt.alpha((theme && theme.goodText) ? theme.goodText : "#5fc97f", 0.15)
+                   Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15)
             border.color: (backend && backend.isManualLocked) ?
                           ((theme && theme.dangerText) ? theme.dangerText : "#ff5f4a") :
-                          ((theme && theme.goodText) ? theme.goodText : "#5fc97f")
+                          ((theme && theme.accent) ? theme.accent : "#7daea3")
             border.width: 1
 
             RowLayout {
@@ -94,7 +96,7 @@ Rectangle {
                     radius: 0
                     color: (backend && backend.isManualLocked) ?
                            ((theme && theme.dangerText) ? theme.dangerText : "#ff5f4a") :
-                           ((theme && theme.goodText) ? theme.goodText : "#5fc97f")
+                           ((theme && theme.accent) ? theme.accent : "#7daea3")
                 }
 
                 // Badge Status Tag
@@ -109,11 +111,12 @@ Rectangle {
                         }
                         return qsTr("Not Active");
                     }
-                    font.bold: true
+                    font.weight: Font.DemiBold
                     font.pixelSize: 11
+                    renderType: Text.NativeRendering
                     color: (backend && backend.isManualLocked) ?
                            ((theme && theme.dangerText) ? theme.dangerText : "#ff5f4a") :
-                           ((theme && theme.goodText) ? theme.goodText : "#5fc97f")
+                           ((theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3"))
                 }
 
                 // Active Account Handle (Masked if masking enabled)
@@ -130,8 +133,9 @@ Rectangle {
                         return uname;
                     }
                     font.pixelSize: 12
-                    font.bold: true
-                    font.family: "Monospace"
+                    font.weight: Font.DemiBold
+                    font.family: theme.monoFont
+                    renderType: Text.NativeRendering
                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     elide: Text.ElideRight
                     Layout.maximumWidth: 180
@@ -171,9 +175,10 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.49.0")
-                font.family: "Monospace"
+                text: qsTr("v%1").arg("2.50.0")
+                font.family: theme.monoFont
                 font.pixelSize: 11
+                renderType: Text.NativeRendering
                 color: (theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#64887b"
             }
         }
@@ -196,9 +201,9 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
 
             color: addAccountMouse.containsMouse ?
-                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
-                   Qt.alpha((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1", 0.18)
-            border.color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
+                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                   Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.16)
+            border.color: (theme && theme.accent) ? theme.accent : "#7daea3"
             border.width: 1
 
             RowLayout {
@@ -209,9 +214,11 @@ Rectangle {
                 Text {
                     id: addAccountLabel
                     text: "+ 添加账户"
+                    font.family: theme.uiFont
                     font.pixelSize: 12
-                    font.bold: true
-                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                    font.weight: Font.DemiBold
+                    renderType: Text.NativeRendering
+                    color: (theme && theme.accentText) ? theme.accentText : ((theme && theme.text1) ? theme.text1 : "#FFFFFF")
                 }
             }
 
@@ -240,19 +247,21 @@ Rectangle {
             color: (backend && backend.masked) ?
                    ((theme && theme.selection && theme.selection.charAt(0) === '#') ? theme.selection : "#2b5147") :
                    (maskMouse.containsMouse ?
-                       ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
-                       ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26"))
+                       ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                       ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c"))
             border.color: (backend && backend.masked) ?
-                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                          ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")
+                          ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                          ((theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff")
             border.width: 1
 
             Text {
                 id: maskText
                 anchors.centerIn: parent
                 text: (backend && backend.masked) ? qsTr("Unmask") : qsTr("Mask")
+                font.family: theme.uiFont
                 font.pixelSize: 12
-                font.bold: true
+                font.weight: Font.DemiBold
+                renderType: Text.NativeRendering
                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
             }
 
@@ -278,19 +287,21 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
 
             color: settMouse.containsMouse ?
-                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31") :
-                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#142620")
+                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                   ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
             border.color: settMouse.containsMouse ?
-                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                          ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")
+                          ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                          ((theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff")
             border.width: 1
 
             Text {
                 id: settText
                 anchors.centerIn: parent
                 text: qsTr("Settings")
+                font.family: theme.uiFont
                 font.pixelSize: 12
-                font.bold: true
+                font.weight: Font.DemiBold
+                renderType: Text.NativeRendering
                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
             }
 
@@ -314,19 +325,21 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
 
             color: topgMouse.containsMouse ?
-                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#203b31") :
-                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#142620")
+                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                   ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
             border.color: topgMouse.containsMouse ?
-                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                          ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff")
+                          ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                          ((theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff")
             border.width: 1
 
             Text {
                 id: topgText
                 anchors.centerIn: parent
                 text: "TopG"
+                font.family: theme.uiFont
                 font.pixelSize: 12
-                font.bold: true
+                font.weight: Font.DemiBold
+                renderType: Text.NativeRendering
                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
             }
 
@@ -354,12 +367,12 @@ Rectangle {
             property string currentMode: backend ? backend.rotationMode : "gemini"
 
             color: rotMouse.containsMouse ?
-                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
-                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26")
+                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                   ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
             border.color: {
-                if (currentMode === "gemini") return (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1";
+                if (currentMode === "gemini") return (theme && theme.accent) ? theme.accent : "#7daea3";
                 if (currentMode === "claude") return "#bb9af7";
-                return (theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff";
+                return (theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff";
             }
             border.width: 1
 
@@ -371,9 +384,13 @@ Rectangle {
                     if (rotationCapsule.currentMode === "claude") return qsTr("Claude");
                     return qsTr("Off");
                 }
+                font.family: theme.uiFont
                 font.pixelSize: 12
-                font.bold: true
-                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
+                font.weight: Font.DemiBold
+                renderType: Text.NativeRendering
+                color: (rotationCapsule.currentMode === "gemini") ?
+                       ((theme && theme.accentText) ? theme.accentText : ((theme && theme.text1) ? theme.text1 : "#FFFFFF")) :
+                       ((theme && theme.text1) ? theme.text1 : "#FFFFFF")
             }
 
             MouseArea {
@@ -398,13 +415,13 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
 
             color: prewarmMouse.containsMouse ?
-                   ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
-                   ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26")
+                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                   ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
             border.color: (backend && backend.busy) ?
-                          ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
+                          ((theme && theme.accent) ? theme.accent : "#7daea3") :
                           (prewarmMouse.containsMouse ?
-                              ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1") :
-                              ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff"))
+                              ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                              ((theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff"))
             border.width: 1
 
             RowLayout {
@@ -422,8 +439,10 @@ Rectangle {
                 Text {
                     id: prewarmLabel
                     text: qsTr("Prewarm")
+                    font.family: theme.uiFont
                     font.pixelSize: 12
-                    font.bold: true
+                    font.weight: Font.DemiBold
+                    renderType: Text.NativeRendering
                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                 }
             }

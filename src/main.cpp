@@ -1,5 +1,6 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QCommandLineParser>
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QIcon>
@@ -19,9 +20,16 @@ int main(int argc, char *argv[])
     // 1. Initialize GUI Application
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("antigravity-hub"));
-    app.setApplicationVersion(QStringLiteral("2.48.0"));
+    app.setApplicationVersion(QStringLiteral("2.50.0"));
     app.setOrganizationName(QStringLiteral("Omarchy"));
     app.setOrganizationDomain(QStringLiteral("omarchy.org"));
+
+    // Parse standard CLI flags (--version, -v, --help, -h)
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral("Omarchy native account manager and quota hub for Antigravity"));
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.process(app);
 
     // Crucial Omarchy / Wayland desktop binding:
     // Guarantees Hyprland window rules 'class:^(antigravity-hub)$' and XDG taskbar matching
@@ -51,6 +59,13 @@ int main(int argc, char *argv[])
     AccountModel accountModel;
     AccountFilterProxyModel proxyModel;
     proxyModel.setSourceModel(&accountModel);
+
+    // ★ v2.50.0 新增: 注入 AccountModel 引用及双向信号槽绑定
+    backend.setAccountModel(&accountModel);
+    QObject::connect(&backend, &BackendController::accountsReordered,
+                     &accountModel, &AccountModel::reorderAccounts);
+    QObject::connect(&backend, &BackendController::accountsReloadRequested,
+                     &accountModel, &AccountModel::reload);
 
     // Synchronize masking toggle between BackendController and AccountModel
     QObject::connect(&backend, &BackendController::maskedChanged,

@@ -114,6 +114,10 @@ public:
     Q_INVOKABLE QString maskName(const QString &raw) const;
     Q_INVOKABLE int findIndexByEmail(const QString &email) const;
 
+    // ★ v2.50.0 新增: 账号就地重排与顺序读取接口
+    Q_INVOKABLE void reorderAccounts(const QStringList &orderedEmails);
+    Q_INVOKABLE QStringList accountsOrder() const;
+
     static QString computeMaskedName(const QString &rawName);
     static QString computeMaskedUsername(const QString &rawUname);
     static qint64 parseIsoTimestamp(const QString &isoStr);

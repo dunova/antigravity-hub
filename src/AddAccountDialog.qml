@@ -38,7 +38,7 @@ Dialog {
             Text {
                 text: qsTr("添加新账户")
                 font.pixelSize: 15
-                font.bold: true
+                font.weight: Font.DemiBold
                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                 Layout.fillWidth: true
             }
@@ -104,12 +104,12 @@ Dialog {
                     Text {
                         text: qsTr("一键吸纳当前系统凭据")
                         font.pixelSize: 12
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                     Text {
                         text: qsTr("从系统钥匙串/IDE 现存登录缓存中直接导入活跃 Google 凭据")
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                     }
                 }
@@ -159,12 +159,12 @@ Dialog {
                     Text {
                         text: qsTr("浏览器授权登录添加")
                         font.pixelSize: 12
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                     Text {
                         text: qsTr("启动系统默认浏览器完成 Google OAuth 授权接管")
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                     }
                 }
@@ -214,19 +214,19 @@ Dialog {
                     Text {
                         text: qsTr("导入 JSON 凭据备份")
                         font.pixelSize: 12
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     }
                     Text {
                         text: qsTr("粘贴来自其他 Hub 实例或备份文件的 JSON 凭据文本")
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                     }
                 }
 
                 Text {
                     text: root.isJsonInputExpanded ? "▲" : "▼"
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                 }
             }
@@ -263,7 +263,7 @@ Dialog {
 
                     TextArea {
                         id: jsonArea
-                        font.family: "Monospace"
+                        font.family: (theme && theme.monoFont) ? theme.monoFont : "monospace"
                         font.pixelSize: 11
                         color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                         placeholderText: qsTr("在此粘贴导出的 accounts_hub.json 或账号字典...")
@@ -295,7 +295,7 @@ Dialog {
                         anchors.centerIn: parent
                         text: qsTr("确认导入")
                         font.pixelSize: 11
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         color: (theme && theme.accentForeground) ? theme.accentForeground : "#000000"
                     }
 

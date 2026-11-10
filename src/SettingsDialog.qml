@@ -236,7 +236,7 @@ Dialog {
                                 anchors.centerIn: parent
                                 text: Math.round(geminiSlider.value * 100) + "%"
                                 font.pixelSize: 11
-                                font.family: "Monospace"
+                                font.family: (theme && theme.monoFont) ? theme.monoFont : "monospace"
                                 font.weight: Font.DemiBold
                                 color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                             }
@@ -305,7 +305,7 @@ Dialog {
                                 anchors.centerIn: parent
                                 text: Math.round(claudeSlider.value * 100) + "%"
                                 font.pixelSize: 11
-                                font.family: "Monospace"
+                                font.family: (theme && theme.monoFont) ? theme.monoFont : "monospace"
                                 font.weight: Font.DemiBold
                                 color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#8bcbb1"
                             }

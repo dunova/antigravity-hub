@@ -9,6 +9,9 @@
 #include <QJsonValue>
 #include <QStandardPaths>
 #include <QDebug>
+#include <QSet>
+#include <QHash>
+#include <QRegularExpression>
 #include <algorithm>
 
 // ============================================================================
@@ -320,6 +323,75 @@ void AccountModel::loadFromDisk() {
         newItems.append(item);
     }
 
+    // ========================================================================
+    // ★ v2.50.0: 解决 Qt QJsonObject 字典序强制排序问题，恢复权威自定义/物理排序
+    // ========================================================================
+    QStringList preferredOrder;
+
+    // 策略 1: 优先读取 JSON 根对象中的 accounts_order / account_order 数组
+    QJsonArray orderArr = root.value(QStringLiteral("accounts_order")).toArray();
+    if (orderArr.isEmpty()) {
+        orderArr = root.value(QStringLiteral("account_order")).toArray();
+    }
+    for (const auto &v : orderArr) {
+        const QString em = v.toString().trimmed();
+        if (!em.isEmpty()) {
+            preferredOrder.append(em.toLower());
+        }
+    }
+
+    // 策略 2: 兜底策略 — 若 accounts_order 不存在，从 rawBytes 扫描 accounts 下键的物理书写顺序
+    if (preferredOrder.isEmpty()) {
+        const int accountsPos = rawBytes.indexOf("\"accounts\"");
+        if (accountsPos != -1) {
+            const QString text = QString::fromUtf8(rawBytes.mid(accountsPos));
+            static const QRegularExpression rxKey(QStringLiteral("\"([^\"]+)\"\\s*:\\s*\\{"));
+            auto itMatch = rxKey.globalMatch(text);
+            while (itMatch.hasNext()) {
+                const QString candidate = itMatch.next().captured(1).trimmed();
+                if (accountsObj.contains(candidate)) {
+                    const QString lower = candidate.toLower();
+                    if (!preferredOrder.contains(lower)) {
+                        preferredOrder.append(lower);
+                        if (preferredOrder.size() == accountsObj.size()) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 按 preferredOrder 对 newItems 进行保序重建
+    if (!preferredOrder.isEmpty()) {
+        QHash<QString, AccountItem> itemMap;
+        for (const auto &item : newItems) {
+            itemMap.insert(item.email.trimmed().toLower(), item);
+        }
+
+        QList<AccountItem> orderedItems;
+        orderedItems.reserve(newItems.size());
+        QSet<QString> placed;
+
+        for (const QString &em : preferredOrder) {
+            if (itemMap.contains(em) && !placed.contains(em)) {
+                orderedItems.append(itemMap.value(em));
+                placed.insert(em);
+            }
+        }
+
+        // 兜底追加未出现在 preferredOrder 中的账号（确保绝对零丢号）
+        for (const auto &item : newItems) {
+            const QString em = item.email.trimmed().toLower();
+            if (!placed.contains(em)) {
+                orderedItems.append(item);
+                placed.insert(em);
+            }
+        }
+
+        newItems = std::move(orderedItems);
+    }
+
     beginResetModel();
     m_accounts = std::move(newItems);
     const bool emailChanged = (m_activeEmail != activeEmail);
@@ -561,6 +633,60 @@ int AccountModel::findIndexByEmail(const QString &email) const {
         }
     }
     return -1;
+}
+
+// ============================================================================
+// ★ v2.50.0 新增: 内存模型账号自定义排序实现
+// ============================================================================
+
+void AccountModel::reorderAccounts(const QStringList &orderedEmails)
+{
+    if (orderedEmails.isEmpty() || m_accounts.size() <= 1) {
+        return;
+    }
+
+    QHash<QString, AccountItem> itemMap;
+    for (const auto &item : m_accounts) {
+        itemMap.insert(item.email.trimmed().toLower(), item);
+    }
+
+    QList<AccountItem> reordered;
+    reordered.reserve(m_accounts.size());
+    QSet<QString> placed;
+
+    for (const QString &rawEmail : orderedEmails) {
+        const QString lower = rawEmail.trimmed().toLower();
+        if (itemMap.contains(lower) && !placed.contains(lower)) {
+            reordered.append(itemMap.value(lower));
+            placed.insert(lower);
+        }
+    }
+
+    // 兜底保留未在 orderedEmails 中列出的账号
+    for (const auto &item : m_accounts) {
+        const QString lower = item.email.trimmed().toLower();
+        if (!placed.contains(lower)) {
+            reordered.append(item);
+            placed.insert(lower);
+        }
+    }
+
+    beginResetModel();
+    m_accounts = std::move(reordered);
+    endResetModel();
+
+    emit countChanged();
+    emit dataRefreshed();
+}
+
+QStringList AccountModel::accountsOrder() const
+{
+    QStringList list;
+    list.reserve(m_accounts.size());
+    for (const auto &item : m_accounts) {
+        list.append(item.email);
+    }
+    return list;
 }
 
 // ============================================================================
