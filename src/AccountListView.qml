@@ -35,11 +35,83 @@ Item {
     }
 
     property int dragFromIndex: -1
-    property int dragTargetIndex: -1
+    property int dragTargetRow: -1
+    property bool dragInsertBefore: true
+    property string dragAccountName: ""
+    property real dragCursorX: 0
+    property real dragCursorY: 0
+
+    function startRowDrag(idx, name, sourceItem, mouseX, mouseY) {
+        if (proxyModel && proxyModel.sortField !== "default") {
+            proxyModel.setSortRule("default", Qt.DescendingOrder);
+        }
+        dragFromIndex = idx;
+        dragTargetRow = idx;
+        dragInsertBefore = true;
+        dragAccountName = name;
+        listView.interactive = false;
+
+        var posInList = sourceItem.mapToItem(listView, mouseX, mouseY);
+        dragCursorX = posInList.x;
+        dragCursorY = posInList.y;
+    }
+
+    function updateRowDrag(sourceItem, mouseX, mouseY) {
+        if (dragFromIndex < 0) return;
+
+        var posInList = sourceItem.mapToItem(listView, mouseX, mouseY);
+        dragCursorX = posInList.x;
+        dragCursorY = posInList.y;
+
+        var posInContent = sourceItem.mapToItem(listView.contentItem, mouseX, mouseY);
+        var clampedY = Math.max(0, Math.min(listView.contentHeight - 1, posInContent.y));
+
+        var targetRow = Math.floor(clampedY / rowHeight);
+        targetRow = Math.max(0, Math.min(listView.count - 1, targetRow));
+
+        var yInRow = clampedY - (targetRow * rowHeight);
+        var insertBefore = (yInRow < rowHeight / 2);
+
+        dragTargetRow = targetRow;
+        dragInsertBefore = insertBefore;
+    }
+
+    function finishRowDrag() {
+        listView.interactive = true;
+        var fromIdx = dragFromIndex;
+        var targetRow = dragTargetRow;
+        var insertBefore = dragInsertBefore;
+
+        dragFromIndex = -1;
+        dragTargetRow = -1;
+
+        if (fromIdx >= 0 && targetRow >= 0) {
+            executeReorder(fromIdx, targetRow, insertBefore);
+        }
+    }
+
+    function cancelRowDrag() {
+        listView.interactive = true;
+        dragFromIndex = -1;
+        dragTargetRow = -1;
+    }
+
+    function executeReorder(fromIdx, targetRow, insertBefore) {
+        if (fromIdx < 0 || targetRow < 0 || !proxyModel) return;
+
+        var visibleCount = proxyModel.rowCount();
+        if (fromIdx >= visibleCount || targetRow >= visibleCount) return;
+
+        var targetSlot = insertBefore ? targetRow : targetRow + 1;
+        if (targetSlot === fromIdx || targetSlot === fromIdx + 1) return;
+
+        var destIndex = (fromIdx < targetSlot) ? (targetSlot - 1) : targetSlot;
+        reorderVisibleRow(fromIdx, destIndex);
+    }
 
     function reorderVisibleRow(fromIdx, toIdx) {
         if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx || !proxyModel) return;
-        var visibleCount = (typeof proxyModel.count !== "undefined") ? proxyModel.count : proxyModel.rowCount();
+        var visibleCount = proxyModel.rowCount();
         if (fromIdx >= visibleCount || toIdx >= visibleCount) return;
 
         var visibleEmails = [];
@@ -56,8 +128,7 @@ Item {
         for (var j = 0; j < visibleEmails.length; ++j) visibleSet[visibleEmails[j]] = true;
 
         var fullOrder = [];
-        var total = (accountModel && typeof accountModel.count !== "undefined") ? accountModel.count :
-                    (accountModel ? (typeof accountModel.rowCount === "function" ? accountModel.rowCount() : accountModel.totalAccounts) : 0);
+        var total = accountModel ? accountModel.rowCount() : 0;
         var visPtr = 0;
         for (var k = 0; k < total; ++k) {
             var fullAcc = accountModel.getAccount(k);
@@ -193,22 +264,49 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 0
+        spacing: 4
 
         // =============================================================
-        // 1. 固定表格表头行 (Table Header Row)
+        // 表格总容器：带四周完整边框 (完美闭环 12。边上应该有边框)
         // =============================================================
         Rectangle {
-            id: headerRow
+            id: tableWrap
             Layout.fillWidth: true
-            Layout.preferredHeight: 30
+            Layout.fillHeight: true
             radius: 0
-            gradient: Gradient {
-                GradientStop { position: 0; color: (theme && theme.surfaceTop && theme.surfaceTop.charAt(0) === '#') ? theme.surfaceTop : "#172c25" }
-                GradientStop { position: 1; color: (theme && theme.surfaceBottom && theme.surfaceBottom.charAt(0) === '#') ? theme.surfaceBottom : "#11201b" }
-            }
+            color: "transparent"
             border.width: 1
-            border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+            border.color: (theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder :
+                          ((theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline :
+                          ((theme && theme.mode === "light") ? "#E5E7EB" : "#3dffffff"))
+            clip: true
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 1
+                spacing: 0
+
+                // =============================================================
+                // 1. 固定表格表头行 (Table Header Row)
+                // =============================================================
+                Rectangle {
+                    id: headerRow
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+                    radius: 0
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: (theme && theme.surfaceTop && theme.surfaceTop.charAt(0) === '#') ? theme.surfaceTop : "#172c25" }
+                        GradientStop { position: 1; color: (theme && theme.surfaceBottom && theme.surfaceBottom.charAt(0) === '#') ? theme.surfaceBottom : "#11201b" }
+                    }
+                    border.width: 0
+
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 1
+                        color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                    }
 
             RowLayout {
                 anchors.fill: parent
@@ -785,24 +883,6 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             snapMode: ListView.SnapToItem
 
-            // 拖拽重排目标分割线指示器
-            Rectangle {
-                id: dropIndicator
-                visible: accountListView.dragFromIndex >= 0 && accountListView.dragTargetIndex >= 0 && accountListView.dragTargetIndex !== accountListView.dragFromIndex
-                x: 0
-                width: listView.width
-                height: 2
-                radius: 0
-                z: 20
-                color: (theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3"
-                y: {
-                    if (!visible) return 0;
-                    var idx = accountListView.dragTargetIndex;
-                    var baseY = (idx > accountListView.dragFromIndex) ? (idx + 1) * accountListView.rowHeight : idx * accountListView.rowHeight;
-                    return Math.max(0, Math.min(listView.height - 2, baseY - listView.contentY - 1));
-                }
-            }
-
             ScrollBar.vertical: ScrollBar {
                 id: listScrollBar
                 policy: ScrollBar.AsNeeded
@@ -852,7 +932,7 @@ Item {
                 width: listView.width
                 height: accountListView.rowHeight
                 radius: 0
-                opacity: (accountListView.dragFromIndex === index) ? 0.65 : 1.0
+                opacity: (accountListView.dragFromIndex === index) ? 0.35 : 1.0
 
                 // 25 项 QML Role 绑定的直接消费
                 property bool isRowActive: model.isActive || false
@@ -885,6 +965,32 @@ Item {
                 border.width: isRowSelected ? 1 : 0
                 border.color: (theme && theme.accent) ? theme.accent : "#7daea3"
 
+                // 拖拽排序顶部插入指示线 (Cyan/Accent 3px 对齐 Mac 原版 .drag-over-top)
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 3
+                    radius: 0
+                    z: 100
+                    color: (theme && theme.accent) ? theme.accent : "#00F0FF"
+                    visible: accountListView.dragTargetRow === index && accountListView.dragInsertBefore &&
+                             (accountListView.dragFromIndex !== index || !accountListView.dragInsertBefore)
+                }
+
+                // 拖拽排序底部插入指示线 (Cyan/Accent 3px 对齐 Mac 原版 .drag-over-bottom)
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 3
+                    radius: 0
+                    z: 100
+                    color: (theme && theme.accent) ? theme.accent : "#00F0FF"
+                    visible: accountListView.dragTargetRow === index && !accountListView.dragInsertBefore &&
+                             (accountListView.dragFromIndex !== index || accountListView.dragInsertBefore)
+                }
+
                 // Marker 7: 激活行左侧 3px 主题色指示竖条
                 Rectangle {
                     anchors.left: parent.left
@@ -910,8 +1016,40 @@ Item {
                     id: rowMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: {
-                        listView.currentIndex = index;
+                    cursorShape: (accountListView.dragFromIndex === index) ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                    property real pressX: 0
+                    property real pressY: 0
+                    property bool isDragging: false
+
+                    onPressed: function(mouse) {
+                        pressX = mouse.x;
+                        pressY = mouse.y;
+                        isDragging = false;
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!isDragging && (mouse.buttons & Qt.LeftButton)) {
+                            if (Math.abs(mouse.y - pressY) > 5 || Math.abs(mouse.x - pressX) > 5) {
+                                isDragging = true;
+                                accountListView.startRowDrag(index, model.displayUsername || "", rowMouse, mouse.x, mouse.y);
+                            }
+                        }
+                        if (isDragging) {
+                            accountListView.updateRowDrag(rowMouse, mouse.x, mouse.y);
+                        }
+                    }
+                    onReleased: function(mouse) {
+                        if (isDragging) {
+                            isDragging = false;
+                            accountListView.finishRowDrag();
+                        } else {
+                            listView.currentIndex = index;
+                        }
+                    }
+                    onCanceled: {
+                        if (isDragging) {
+                            isDragging = false;
+                            accountListView.cancelRowDrag();
+                        }
                     }
                 }
 
@@ -951,7 +1089,7 @@ Item {
                         Layout.fillHeight: true
                         Text {
                             anchors.centerIn: parent
-                            text: model.index
+                            text: model.accountIndex || (index + 1)
                             font.family: theme.monoFont
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
@@ -1073,7 +1211,7 @@ Item {
                         // 1. 拖拽手柄图标 (⠿) - 支持真实纵向拖拽排序
                         Item {
                             id: dragHandle
-                            width: 22
+                            width: 26
                             height: parent.height
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
@@ -1096,32 +1234,23 @@ Item {
                                 hoverEnabled: true
                                 preventStealing: true
                                 onPressed: function(mouse) {
-                                    accountListView.dragFromIndex = index;
-                                    accountListView.dragTargetIndex = index;
-                                    listView.interactive = false; // ★ 物理防 Flickable 抢夺拖拽手势
+                                    accountListView.startRowDrag(index, model.displayUsername || "", dragMouse, mouse.x, mouse.y);
                                     mouse.accepted = true;
                                 }
                                 onPositionChanged: function(mouse) {
-                                    if (accountListView.dragFromIndex !== index) return;
-                                    var pt = dragMouse.mapToItem(listView.contentItem, mouse.x, mouse.y);
-                                    var clampedY = Math.max(0, Math.min(listView.contentHeight - 1, pt.y));
-                                    var hoverIdx = Math.floor(clampedY / accountListView.rowHeight);
-                                    accountListView.dragTargetIndex = Math.max(0, Math.min(listView.count - 1, hoverIdx));
+                                    if (accountListView.dragFromIndex === index) {
+                                        accountListView.updateRowDrag(dragMouse, mouse.x, mouse.y);
+                                    }
                                 }
-                                onReleased: {
-                                    listView.interactive = true;
-                                    var f = accountListView.dragFromIndex;
-                                    var t = accountListView.dragTargetIndex;
-                                    accountListView.dragFromIndex = -1;
-                                    accountListView.dragTargetIndex = -1;
-                                    if (f >= 0 && t >= 0 && f !== t) {
-                                        accountListView.reorderVisibleRow(f, t);
+                                onReleased: function(mouse) {
+                                    if (accountListView.dragFromIndex === index) {
+                                        accountListView.finishRowDrag();
                                     }
                                 }
                                 onCanceled: {
-                                    listView.interactive = true;
-                                    accountListView.dragFromIndex = -1;
-                                    accountListView.dragTargetIndex = -1;
+                                    if (accountListView.dragFromIndex === index) {
+                                        accountListView.cancelRowDrag();
+                                    }
                                 }
                             }
                         }
@@ -1155,11 +1284,42 @@ Item {
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                listView.currentIndex = index;
-                                if (backend && typeof backend.copyToClipboard === "function") {
-                                    backend.copyToClipboard(model.email);
+                            cursorShape: isDragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+                            property real pressX: 0
+                            property real pressY: 0
+                            property bool isDragging: false
+
+                            onPressed: function(mouse) {
+                                pressX = mouse.x;
+                                pressY = mouse.y;
+                                isDragging = false;
+                            }
+                            onPositionChanged: function(mouse) {
+                                if (!isDragging && (mouse.buttons & Qt.LeftButton)) {
+                                    if (Math.abs(mouse.y - pressY) > 5 || Math.abs(mouse.x - pressX) > 5) {
+                                        isDragging = true;
+                                        accountListView.startRowDrag(index, model.displayUsername || "", nameMouse, mouse.x, mouse.y);
+                                    }
+                                }
+                                if (isDragging) {
+                                    accountListView.updateRowDrag(nameMouse, mouse.x, mouse.y);
+                                }
+                            }
+                            onReleased: function(mouse) {
+                                if (isDragging) {
+                                    isDragging = false;
+                                    accountListView.finishRowDrag();
+                                } else {
+                                    listView.currentIndex = index;
+                                    if (backend && typeof backend.copyToClipboard === "function") {
+                                        backend.copyToClipboard(model.email);
+                                    }
+                                }
+                            }
+                            onCanceled: {
+                                if (isDragging) {
+                                    isDragging = false;
+                                    accountListView.cancelRowDrag();
                                 }
                             }
                         }
@@ -1804,6 +1964,8 @@ Item {
                     }
                 }
             }
+            }
+            }
         }
 
         // =============================================================
@@ -1888,6 +2050,44 @@ Item {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 拖拽悬浮预览徽章 (跟随光标移动，提供清晰视觉反馈)
+    // -------------------------------------------------------------------------
+    Rectangle {
+        id: dragGhostBadge
+        visible: accountListView.dragFromIndex >= 0
+        x: Math.max(8, Math.min(accountListView.width - width - 8, accountListView.dragCursorX + 16))
+        y: Math.max(8, Math.min(accountListView.height - height - 8, accountListView.dragCursorY + 12))
+        width: dragGhostRow.implicitWidth + 24
+        height: 28
+        radius: 0
+        z: 999
+        color: (theme && theme.mode === "light") ? "#FFFFFF" : ((theme && theme.surface2) ? theme.surface2 : "#1e1e2e")
+        border.width: 1
+        border.color: (theme && theme.accent) ? theme.accent : "#00F0FF"
+
+        RowLayout {
+            id: dragGhostRow
+            anchors.centerIn: parent
+            spacing: 6
+
+            Text {
+                text: "⠿"
+                font.family: theme.monoFont
+                font.pixelSize: 13
+                color: (theme && theme.accent) ? theme.accent : "#00F0FF"
+            }
+
+            Text {
+                text: accountListView.dragAccountName
+                font.family: theme.uiFont
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                color: (theme && theme.text1) ? theme.text1 : "#FFFFFF"
             }
         }
     }

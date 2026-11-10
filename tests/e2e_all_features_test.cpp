@@ -1,4 +1,6 @@
 #include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QTest>
 #include <QSignalSpy>
 #include <QFile>
@@ -24,6 +26,7 @@ private slots:
     void testSearchFiltering();
     void testMaskingToggle();
     void testSettingsSaveAndApply();
+    void testDragAndDropReorderingQML();
     void cleanupTestCase();
 
 private:
@@ -208,6 +211,70 @@ void E2EAllFeaturesTest::testSettingsSaveAndApply() {
 
     backend.saveSettings(payload);
     // Backend emits signal and persists
+}
+
+void E2EAllFeaturesTest::testDragAndDropReorderingQML() {
+    AccountModel model;
+    AccountFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+    BackendController backend;
+    backend.setAccountModel(&model);
+    Theme theme;
+    Translator translator;
+
+    QQmlApplicationEngine engine;
+    auto *ctx = engine.rootContext();
+    ctx->setContextProperty("accountModel", &model);
+    ctx->setContextProperty("proxyModel", &proxy);
+    ctx->setContextProperty("backendController", &backend);
+    ctx->setContextProperty("backend", &backend);
+    ctx->setContextProperty("theme", &theme);
+    ctx->setContextProperty("translator", &translator);
+
+    engine.load(QUrl("qrc:/AccountListView.qml"));
+    QVERIFY(!engine.rootObjects().isEmpty());
+
+    QObject *root = engine.rootObjects().first();
+    const int count = proxy.filteredCount();
+    QVERIFY(count >= 3);
+
+    // 1. Verify roleNames does NOT have "index", but has "accountIndex"
+    QHash<int, QByteArray> roles = model.roleNames();
+    QVERIFY(!roles.values().contains("index"));
+    QVERIFY(roles.values().contains("accountIndex"));
+
+    // 2. Test executeReorder: moving bottom row to top (row 0, insertBefore = true)
+    const int lastIdx = count - 1;
+    QString targetEmail = proxy.getFilteredAccount(lastIdx)["email"].toString();
+
+    bool ok = QMetaObject::invokeMethod(root, "executeReorder",
+        Q_ARG(QVariant, lastIdx),
+        Q_ARG(QVariant, 0),
+        Q_ARG(QVariant, true));
+    QVERIFY(ok);
+    QCOMPARE(proxy.getFilteredAccount(0)["email"].toString(), targetEmail);
+
+    // 3. Test executeReorder: moving row 0 to middle
+    const int midIdx = count / 2;
+    ok = QMetaObject::invokeMethod(root, "executeReorder",
+        Q_ARG(QVariant, 0),
+        Q_ARG(QVariant, midIdx),
+        Q_ARG(QVariant, false));
+    QVERIFY(ok);
+    QCOMPARE(proxy.getFilteredAccount(midIdx)["email"].toString(), targetEmail);
+
+    // 4. Test startRowDrag auto-resets sortField to default
+    proxy.setSortRule(QStringLiteral("gemini4"), Qt::DescendingOrder);
+    QCOMPARE(proxy.sortField(), QStringLiteral("gemini4"));
+
+    ok = QMetaObject::invokeMethod(root, "startRowDrag",
+        Q_ARG(QVariant, 1),
+        Q_ARG(QVariant, "test"),
+        Q_ARG(QVariant, QVariant::fromValue(root)),
+        Q_ARG(QVariant, 10.0),
+        Q_ARG(QVariant, 10.0));
+    QVERIFY(ok);
+    QCOMPARE(proxy.sortField(), QStringLiteral("default"));
 }
 
 void E2EAllFeaturesTest::cleanupTestCase() {

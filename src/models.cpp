@@ -577,7 +577,7 @@ QVariant AccountModel::data(const QModelIndex &index, int role) const {
 
 QHash<int, QByteArray> AccountModel::roleNames() const {
     QHash<int, QByteArray> roles;
-    roles[IndexRole] = "index";
+    roles[IndexRole] = "accountIndex";
     roles[EmailRole] = "email";
     roles[UsernameRole] = "username";
     roles[DisplayUsernameRole] = "displayUsername";
@@ -613,6 +613,7 @@ QVariantMap AccountModel::getAccount(int row) const {
 
     const auto &item = m_accounts.at(row);
     map[QStringLiteral("index")] = row + 1;
+    map[QStringLiteral("accountIndex")] = row + 1;
     map[QStringLiteral("email")] = item.email;
     map[QStringLiteral("username")] = item.username;
     map[QStringLiteral("displayUsername")] = m_isMasked ? item.maskedUsername : item.username;
