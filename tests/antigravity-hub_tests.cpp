@@ -1385,12 +1385,12 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     const QString mainContent = QString::fromUtf8(mainFile.readAll());
     mainFile.close();
 
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*1040\b)"))), "Main.qml width != 1040");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*880\b)"))), "Main.qml minimumWidth != 880");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*940\b)"))), "Main.qml width != 940");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*920\b)"))), "Main.qml minimumWidth != 920");
     QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth to allow Hyprland dynamic tiling");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*800\b)"))), "Main.qml height != 800");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*540\b)"))), "Main.qml minimumHeight != 540");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*1016\b)"))), "Main.qml contentWidth != 1016");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*896\b)"))), "Main.qml contentWidth != 896");
 
     // 2. Offscreen Dynamic Instantiation of Main.qml
     QQmlEngine engine;
@@ -1425,11 +1425,11 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     QQuickWindow *win = qobject_cast<QQuickWindow*>(rootObj.data());
     QVERIFY2(win != nullptr, "Main.qml root object is not a QQuickWindow");
 
-    QCOMPARE(win->width(), 1040);
+    QCOMPARE(win->width(), 940);
     QCOMPARE(win->height(), 800);
-    QCOMPARE(win->property("minimumWidth").toInt(), 880);
+    QCOMPARE(win->property("minimumWidth").toInt(), 920);
     QCOMPARE(win->property("minimumHeight").toInt(), 540);
-    QCOMPARE(win->property("contentWidth").toInt(), 1016);
+    QCOMPARE(win->property("contentWidth").toInt(), 896);
 
     win->show();
     QCoreApplication::processEvents();
@@ -1437,7 +1437,7 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     // Resize stress test: window geometry constraints enforce fixed contentWidth
     win->resize(1280, 900);
     QCoreApplication::processEvents();
-    QCOMPARE(win->property("contentWidth").toInt(), 1016);
+    QCOMPARE(win->property("contentWidth").toInt(), 896);
 }
 
 void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
@@ -1448,19 +1448,19 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     file.close();
 
     // Verify column width constants and row height
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolCheckWidth\s*:\s*28\b)"))), "colCheckWidth != 28");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolIndexWidth\s*:\s*32\b)"))), "colIndexWidth != 32");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolStatusWidth\s*:\s*76\b)"))), "colStatusWidth != 76");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*120\b)"))), "colAccountWidth != 120");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG4Width\s*:\s*176\b)"))), "colG4Width != 176");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG38Width\s*:\s*238\b)"))), "colG38Width != 238");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*238\b)"))), "colClaudeWidth != 238");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*82\b)"))), "colActionWidth != 82");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolCheckWidth\s*:\s*24\b)"))), "colCheckWidth != 24");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolIndexWidth\s*:\s*26\b)"))), "colIndexWidth != 26");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolStatusWidth\s*:\s*66\b)"))), "colStatusWidth != 66");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*106\b)"))), "colAccountWidth != 106");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG4Width\s*:\s*150\b)"))), "colG4Width != 150");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG38Width\s*:\s*218\b)"))), "colG38Width != 218");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*218\b)"))), "colClaudeWidth != 218");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*65\b)"))), "colActionWidth != 65");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\browHeight\s*:\s*40\b)"))), "rowHeight != 40");
 
-    // Exact arithmetic sum check: 28 + 32 + 76 + 120 + 176 + 238 + 238 + 82 == 990
-    const int totalColumnWidth = 28 + 32 + 76 + 120 + 176 + 238 + 238 + 82;
-    QCOMPARE(totalColumnWidth, 990);
+    // Exact arithmetic sum check: 24 + 26 + 66 + 106 + 150 + 218 + 218 + 65 == 873
+    const int totalColumnWidth = 24 + 26 + 66 + 106 + 150 + 218 + 218 + 65;
+    QCOMPARE(totalColumnWidth, 873);
 
     // Verify that NO direct column in Header RowLayout has Layout.fillWidth
     int headerRowPos = content.indexOf(QStringLiteral("id: headerRow"));

@@ -6,15 +6,15 @@ Item {
     id: accountListView
 
     // =========================================================================
-    // 0. 共享列几何常数 (Strict Header-Data Row Synchronization)
+    // 0. 共享列几何常数 (Strict Header-Data Row Synchronization - Tiled 896px Geometry)
     // =========================================================================
-    readonly property int colCheckWidth: 28
-    readonly property int colIndexWidth: 32
-    readonly property int colStatusWidth: 76
-    readonly property int colAccountWidth: 120
-    readonly property int colG4Width: 176
-    readonly property int colG38Width: 238
-    readonly property int colClaudeWidth: 238
+    readonly property int colCheckWidth: 24
+    readonly property int colIndexWidth: 26
+    readonly property int colStatusWidth: 66
+    readonly property int colAccountWidth: 106
+    readonly property int colG4Width: 150
+    readonly property int colG38Width: 218
+    readonly property int colClaudeWidth: 218
     readonly property int rowHeight: 40
     readonly property int pageSize: 15
     readonly property int pageCount: Math.max(1, Math.ceil(listView.count / pageSize))
@@ -23,7 +23,7 @@ Item {
         var pg = Math.max(0, Math.min(pageCount - 1, p));
         listView.positionViewAtIndex(pg * pageSize, ListView.Beginning);
     }
-    readonly property int colActionWidth: 82
+    readonly property int colActionWidth: 65
 
     // 账号配额统计计数 (供底部状态栏与筛选器消费)
     readonly property int availableCount: {
@@ -865,7 +865,7 @@ Item {
 
                         Rectangle {
                             anchors.centerIn: parent
-                            width: 74
+                            width: 58
                             height: 20
                             radius: 0
 
@@ -1133,9 +1133,9 @@ Item {
                                 color: accountListView.getQuotaColor(model.gemini4Quota)
                             }
 
-                            // 3. 重置倒计时槽位 (60px 零截断)
+                            // 3. 重置倒计时槽位 (54px 零截断)
                             Text {
-                                Layout.preferredWidth: 60
+                                Layout.preferredWidth: 54
                                 text: model.gemini4Reset || "—"
                                 font.family: theme.monoFont
                                 font.pixelSize: 11
@@ -1237,7 +1237,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 64
+                                    Layout.preferredWidth: 54
                                     text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") : (model.gemini38Reset5h || "—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
@@ -1305,7 +1305,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 64
+                                    Layout.preferredWidth: 54
                                     text: model.gemini38ResetW || "—"
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
@@ -1408,7 +1408,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 64
+                                    Layout.preferredWidth: 54
                                     text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") : (model.claudeReset5h || "—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
@@ -1476,7 +1476,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 64
+                                    Layout.preferredWidth: 54
                                     text: model.claudeResetW || "—"
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
@@ -1516,7 +1516,7 @@ Item {
                         Rectangle {
                             anchors.centerIn: parent
                             visible: model.isActive
-                            width: 58
+                            width: 52
                             height: 24
                             radius: 0
                             color: Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15)
@@ -1538,7 +1538,7 @@ Item {
                         Rectangle {
                             anchors.centerIn: parent
                             visible: !model.isActive && model.isBlocked
-                            width: 58
+                            width: 52
                             height: 24
                             radius: 0
                             color: Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.15)
@@ -1571,7 +1571,7 @@ Item {
                             id: btnSwitch
                             anchors.centerIn: parent
                             visible: !model.isActive && !model.isBlocked
-                            width: 58
+                            width: 52
                             height: 24
                             radius: 0
                             color: btnSwitchMouse.containsMouse ?

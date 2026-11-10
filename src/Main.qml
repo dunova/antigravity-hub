@@ -6,10 +6,10 @@ import QtQuick.Layouts 1.15
 ApplicationWindow {
     id: appWindow
     visible: true
-    // 最佳默认宽度与内容锁定（内容 1016 + 外边距 24 = 1040），允许系统动态平铺分屏
-    readonly property int contentWidth: 1016
-    width: 1040
-    minimumWidth: 880
+    // 最佳默认宽度与内容锁定（内容 896 + 外边距 24 = 920），完美适配系统动态平铺分屏与极简防截断
+    readonly property int contentWidth: 896
+    width: 940
+    minimumWidth: 920
     height: 800
     minimumHeight: 540
     title: qsTr("Antigravity Hub")

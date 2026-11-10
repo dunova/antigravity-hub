@@ -84,15 +84,15 @@ QString AccountModel::formatCountdown(qint64 targetEpoch, qint64 nowEpoch) {
     const qint64 mins = (diff % 3600) / 60;
 
     if (days > 0) {
-        return QStringLiteral("%1d %2h").arg(days).arg(hours);
+        return QStringLiteral("%1d %2h").arg(days).arg(hours, 2, 10, QLatin1Char('0'));
     }
     if (hours > 0) {
-        return QStringLiteral("%1h %2m").arg(hours).arg(mins);
+        return QStringLiteral("%1h %2m").arg(hours).arg(mins, 2, 10, QLatin1Char('0'));
     }
     if (mins > 0) {
-        return QStringLiteral("%1m").arg(mins);
+        return QStringLiteral("0h %1m").arg(mins, 2, 10, QLatin1Char('0'));
     }
-    return QStringLiteral("<1m");
+    return QStringLiteral("< 1m");
 }
 
 // ============================================================================
