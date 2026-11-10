@@ -1,6 +1,6 @@
 # Maintainer: Dunova <dunova@omarchy.org>
 pkgname=antigravity-hub
-pkgver=3.0.0
+pkgver=3.0.1
 pkgrel=1
 pkgdesc='Omarchy native account manager and quota hub for Antigravity'
 arch=('x86_64' 'aarch64')

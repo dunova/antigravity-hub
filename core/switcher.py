@@ -196,11 +196,12 @@ class AntigravityPhysicalManager:
         """原子保存 Hub 数据库"""
         return atomic_write_json(self.accounts_file, data)
 
-    def ensure_fresh_token(self, account: Dict[str, Any]) -> Tuple[Optional[str], bool]:
+    def ensure_fresh_token(self, account: Dict[str, Any], force: bool = False) -> Tuple[Optional[str], bool]:
         """
-        按需 Token 缓存与临期刷新：
-        若现有 access_token 存在且距离过期 > 15 分钟，直接复用，0 网络开销；
-        若临期或缺失，调用 Google OAuth 刷新接口。
+        按需 Token 缓存与临期刷新 (严格对齐 Mac 原版与原生 oauth.rs#L707-L728)：
+        若现有 access_token 存在且距离过期 > 15 分钟且非 force，直接复用，0 网络开销；
+        若临期、缺失或 force=True，调用 Google OAuth 刷新接口。
+        若被刷新的账号为当前活跃账号，自动无感同步至系统密钥环与 ~/.gemini/ 凭据池。
         返回: (access_token, was_refreshed)
         """
         now = int(time.time())
@@ -208,12 +209,13 @@ class AntigravityPhysicalManager:
         access_token = account.get("access_token") or tok_sub.get("access_token") or ""
         expiry_ts = int(account.get("expiry_timestamp") or account.get("expires_at") or tok_sub.get("expiry_timestamp") or 0)
         rt = account.get("refresh_token") or tok_sub.get("refresh_token") or ""
+        email = account.get("email", "")
 
-        if access_token and expiry_ts > (now + TOKEN_REFRESH_SKEW_SECONDS):
+        if not force and access_token and expiry_ts > (now + TOKEN_REFRESH_SKEW_SECONDS):
             return access_token, False
 
         if not rt:
-            logger.warning(f"账号 {account.get('email')} 缺少 refresh_token，无法执行刷新")
+            logger.warning(f"账号 {email} 缺少 refresh_token，无法执行刷新")
             return None, False
 
         tok = self.refresh_google_token(rt)
@@ -224,6 +226,19 @@ class AntigravityPhysicalManager:
             account["access_token"] = new_at
             account["expiry_timestamp"] = new_exp
             account["expires_at"] = new_exp
+            if tok_sub:
+                tok_sub["access_token"] = new_at
+                tok_sub["expiry_timestamp"] = new_exp
+                tok_sub["expires_in"] = expires_in
+
+            # 核心机制：若为当前活跃账号，立即无感同步至系统钥匙串与 ~/.gemini/ 文件凭据
+            try:
+                hub_data = self.load_hub_accounts()
+                if email and email == hub_data.get("active_email"):
+                    self.sync_all_active_credentials(email, new_at, rt, new_exp)
+            except Exception as se:
+                logger.warning(f"同步活跃账号凭据至系统异常 ({email}): {se}")
+
             return new_at, True
         return None, False
 
@@ -473,6 +488,26 @@ class AntigravityPhysicalManager:
                     logger.error(f"❌ 执行 security 命令异常: {e}")
                     time.sleep(0.1 * attempt)
             return False
+
+    def sync_all_active_credentials(self, email: str, access_token: str, refresh_token: str, expiry_ts: float) -> bool:
+        """
+        【活跃账号全端凭据强一致性同步 · 物理对齐 Mac 原版与 Linux Secret Service】
+        将最新签发的 access_token 同步至：
+        1. Linux Secret Service (secret-tool) / macOS Keychain
+        2. ~/.gemini/oauth_creds.json (保证 agy CLI 与扩展不过期)
+        3. ~/.gemini/jetski-standalone-oauth-token (语言服务优先回退凭据)
+        4. ~/.gemini/google_accounts.json (活跃指针)
+        5. ~/.config/Antigravity/app_storage.json (防止 Electron 掉登录页)
+        """
+        exp_rfc = format_rfc3339(expiry_ts or (time.time() + 3600))
+        ok_sec = False
+        if sys.platform == "darwin":
+            ok_sec = self.write_to_macos_keychain(access_token, refresh_token, expiry_str=exp_rfc)
+        elif sys.platform.startswith("linux"):
+            ok_sec = self.write_to_linux_secret(access_token, refresh_token, email=email, expiry_str=exp_rfc)
+        self.sync_local_credentials(email, access_token, refresh_token, expiry_ts)
+        logger.info(f"🔄 [活跃凭据原子同步] 账号 {email} 最新 Token 已原子同步至系统钥匙串与 ~/.gemini/ 凭据池！")
+        return ok_sec
 
     def sync_local_credentials(self, email: str, access_token: str, refresh_token: str, expiry_ts: float):
         """

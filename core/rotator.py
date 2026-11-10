@@ -125,7 +125,9 @@ class AntigravityQuotaRotator:
                 self.last_full_refresh_ts = now_ts
         else:
             active_acc = accounts[active_email]
-            at, _ = self.switcher.ensure_fresh_token(active_acc)
+            at, was_ref = self.switcher.ensure_fresh_token(active_acc)
+            if was_ref:
+                self.switcher.save_hub_accounts(hub_data)
             if at:
                 quotas, resets, val_url = self.switcher.fetch_live_quota(at)
                 if val_url:

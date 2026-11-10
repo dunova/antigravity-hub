@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.0"
-__canonical_version_tag__ = "20261110-v3.0.0-OMARCHY_SILHOUETTE_FULL_QA_RELEASE"
-__last_updated__ = "2026-11-10 16:30:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.0 全栈发布：正统 Antigravity 拱门 Omarchy 单色剪影 Logo、零渐变、防穿透、六层全矩阵测试通过"
+__version__ = "3.0.1"
+__canonical_version_tag__ = "20261110-v3.0.1-PROACTIVE_TOKEN_GUARDIAN_RELEASE"
+__last_updated__ = "2026-11-10 19:15:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.1：全面学习对齐 Mac 定时保鲜机制，实装全池与活跃账号 30s 临期看门狗守护、401 自愈与全端凭据强一致性原子同步"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -1025,6 +1025,13 @@ class HubEngine:
                     existing["access_token"] = at
                     existing["expires_at"] = now_ts + 3600
                     updated = True
+                else:
+                    # refresh_token 相同，检查系统钥匙串中的 Token 是否滞后于 Hub 账本
+                    hub_exp = existing.get("expires_at", 0) or existing.get("expiry_timestamp", 0)
+                    hub_at = existing.get("access_token", "")
+                    if hub_exp > now_ts + 300 and hub_at and hub_at != at:
+                        logger.info(f"🛡️ [钥匙串滞后自愈] 系统密钥环凭据滞后于 Hub 账本，主动反向同步最新 Token 至系统...")
+                        self.sync_active_credentials_to_system(detected_email, hub_at, rt, hub_exp)
                 if data.get("active_email") != detected_email:
                     # 人工干预保护优先门禁：若当前处于有效锁定保护期，杜绝被意外覆盖
                     lock_info = get_manual_override_lock()
@@ -1233,28 +1240,54 @@ class HubEngine:
         except Exception as e:
             logger.warning(f"同步 ~/.antigravity_tools 缓存失败 {acc_id}: {e}")
 
-    def ensure_fresh_token(self, acc: Dict[str, Any]) -> Tuple[Optional[str], bool]:
+    def sync_active_credentials_to_system(self, email: str, access_token: str, refresh_token: str, expiry_ts: float) -> bool:
         """
-        按需 Token 缓存与临期刷新 (严格对齐原生 Antigravity Tools oauth.rs#L707-L728)
+        【活跃账号全端凭据强一致性同步 · 物理对齐 Mac 原版与 Linux Secret Service】
+        将最新签发的 access_token 同步至：
+        1. Linux Secret Service (secret-tool) / macOS Keychain
+        2. ~/.gemini/oauth_creds.json (保证 agy CLI 与扩展不过期)
+        3. ~/.gemini/jetski-standalone-oauth-token (语言服务优先回退凭据)
+        4. ~/.gemini/google_accounts.json (活跃指针)
+        5. ~/.config/Antigravity/app_storage.json (防止 Electron 掉登录页)
+        """
+        try:
+            from core.switcher import AntigravityPhysicalManager, format_rfc3339
+            mgr = AntigravityPhysicalManager()
+            exp_rfc = format_rfc3339(expiry_ts or (time.time() + 3600))
+            if sys.platform == "darwin":
+                mgr.write_to_macos_keychain(access_token, refresh_token, expiry_str=exp_rfc)
+            elif sys.platform.startswith("linux"):
+                mgr.write_to_linux_secret(access_token, refresh_token, email=email, expiry_str=exp_rfc)
+            mgr.sync_local_credentials(email, access_token, refresh_token, expiry_ts)
+            logger.info(f"🔄 [活跃凭据自愈同步] 账号 {email} 最新 Token 已原子同步至系统钥匙串与 ~/.gemini/ 凭据池！")
+            return True
+        except Exception as e:
+            logger.error(f"❌ 同步活跃凭据至系统失败: {e}")
+            return False
+
+    def ensure_fresh_token(self, acc: Dict[str, Any], force: bool = False) -> Tuple[Optional[str], bool]:
+        """
+        按需 Token 缓存与临期刷新 (严格对齐原生 Antigravity Tools oauth.rs#L707-L728 与 Mac 原版)
         返回: (access_token, was_refreshed)
         """
         now = int(time.time())
         acc_id = acc.get("id", "")
+        email = acc.get("email", "")
         at = acc.get("access_token")
         exp = acc.get("expires_at", 0) or acc.get("expiry_timestamp", 0)
         rt = acc.get("refresh_token")
 
-        # 只要现有 access_token 存在且距离过期 > 15 分钟，直接复用本地缓存 Token，0 次 OAuth 请求！
-        if at and exp > (now + TOKEN_REFRESH_SKEW_SECONDS):
+        # 只要现有 access_token 存在且距离过期 > 15 分钟且非强制刷新，直接复用本地缓存 Token，0 次 OAuth 请求！
+        if not force and at and exp > (now + TOKEN_REFRESH_SKEW_SECONDS):
             return at, False
 
         if not rt:
-            logger.warning(f"账号 {acc.get('email')} 缺少 refresh_token，无法刷新")
+            logger.warning(f"账号 {email} 缺少 refresh_token，无法刷新")
             return None, False
 
         refreshed = self.refresh_google_token(rt)
         if not refreshed or "access_token" not in refreshed:
-            logger.error(f"账号 {acc.get('email')} 刷新 Google Token 失败")
+            logger.error(f"账号 {email} 刷新 Google Token 失败")
             return None, False
 
         at = refreshed.get("access_token")
@@ -1265,10 +1298,21 @@ class HubEngine:
         acc["expiry_timestamp"] = exp
         if acc_id:
             self._sync_antigravity_tools_cache(acc_id, access_token=at, refresh_token=rt, expiry_ts=exp)
+
+        # 核心契约：若当前被刷新的账号是活跃账号，必须立即无感同步至底层钥匙串与所有凭据真源！
+        try:
+            data = self.load_accounts()
+            active_email = data.get("active_email", "")
+            if email and email == active_email:
+                self.sync_active_credentials_to_system(email, at, rt, exp)
+        except Exception as se:
+            logger.warning(f"同步活跃账号凭据至系统异常: {se}")
+
         return at, True
 
     def refresh_single_account_quota(self, email: str, acc: Dict[str, Any]) -> bool:
         acc_id = acc.get("id", "")
+        rt = acc.get("refresh_token")
 
         # 1. 严格先通过 ensure_fresh_token 确保 token 新鲜 (彻底消除因 401 导致的假死与死锁)
         at, was_refreshed = self.ensure_fresh_token(acc)
@@ -1278,6 +1322,12 @@ class HubEngine:
 
         # 2. 向端点发起探测
         quotas, resets, val_url = self.fetch_live_quota(at)
+        if not quotas and not val_url and rt:
+            # 捕获 401 或无效 Token，启动强制刷新一次性自愈
+            logger.warning(f"⚠️ 账号 {email} 探测配额返回空或 401，立即启动强制 Token 续签自愈...")
+            new_at, ok = self.ensure_fresh_token(acc, force=True)
+            if ok and new_at:
+                quotas, resets, val_url = self.fetch_live_quota(new_at)
         if val_url is not None:
             # 捕获到 Google 风控拦截，立即熔断
             acc["validation_blocked"] = True
@@ -6320,12 +6370,87 @@ def start_background_workers():
                 logger.error(f"后台预热调度异常: {e}")
                 time.sleep(30)
 
+    def token_guardian_worker():
+        """
+        【全池与活跃账号 Token 临期主动保鲜看门狗 · 100% 对齐 Mac 定时保鲜机制】
+        周期: 30 秒
+        契约：
+        1. 活跃账号绝对保鲜：实时检查 active 账号在 accounts_hub、secret-tool 与 oauth_creds.json 中的剩余有效期；
+           若剩余 <= 15 分钟 (900s) 或已失效，立即触发 ensure_fresh_token(force=True) 并在 0 进程中断下原子同步至全系统！
+        2. 全池 11 账号预刷新：后台遍历账号池，若任一账号 Token 剩余 <= 15 分钟，主动换取新 access_token 并持久化；
+        3. 彻底根除用户工作期间“模型失效/授权过期/掉登录页”等偶发恶性事故。
+        """
+        logger.info("🛡️ 后台 Token 临期主动保鲜看门狗已启动 (周期: 30 秒高频巡检)")
+        time.sleep(3)
+        while True:
+            try:
+                now_ts = int(time.time())
+                data = ENGINE.load_accounts()
+                accounts = data.get("accounts", {})
+                active_email = data.get("active_email", "")
+
+                updated_hub = False
+
+                # 1. 活跃账号高优先保鲜检查
+                if active_email and active_email in accounts:
+                    active_acc = accounts[active_email]
+                    at = active_acc.get("access_token", "")
+                    exp = int(active_acc.get("expires_at", 0) or active_acc.get("expiry_timestamp", 0))
+                    rt = active_acc.get("refresh_token", "")
+
+                    needs_active_refresh = False
+                    # 检查 Hub 记录的有效期
+                    if not at or exp <= (now_ts + TOKEN_REFRESH_SKEW_SECONDS):
+                        needs_active_refresh = True
+                    else:
+                        # 双重自检：检查本地 ~/.gemini/oauth_creds.json 是否临期或缺失
+                        if os.path.exists(OAUTH_CREDS_PATH):
+                            try:
+                                with open(OAUTH_CREDS_PATH, "r", encoding="utf-8") as f:
+                                    creds_j = json.load(f)
+                                exp_ms = creds_j.get("expiry_date", 0)
+                                if exp_ms <= (now_ts + TOKEN_REFRESH_SKEW_SECONDS) * 1000:
+                                    needs_active_refresh = True
+                            except Exception:
+                                needs_active_refresh = True
+                        else:
+                            needs_active_refresh = True
+
+                    if needs_active_refresh and rt:
+                        logger.info(f"🔄 [Token保鲜守卫] 发现活跃账号 {active_email} Token 临期或文件滞后，立即主动续签...")
+                        new_at, ok = ENGINE.ensure_fresh_token(active_acc, force=True)
+                        if ok and new_at:
+                            updated_hub = True
+                            logger.info(f"✅ [Token保鲜守卫] 活跃账号 {active_email} 已成功提前续签并原子推送到系统钥匙串！")
+
+                # 2. 全池所有待命账号轮巡保鲜
+                for email, acc in list(accounts.items()):
+                    if email == active_email:
+                        continue
+                    exp = int(acc.get("expires_at", 0) or acc.get("expiry_timestamp", 0))
+                    rt = acc.get("refresh_token", "")
+                    if rt and exp <= (now_ts + TOKEN_REFRESH_SKEW_SECONDS):
+                        logger.info(f"⏰ [全池Token保鲜] 备用账号 {email} Token 临期 (剩余 {exp - now_ts}s)，提前续签...")
+                        new_at, ok = ENGINE.ensure_fresh_token(acc, force=True)
+                        if ok and new_at:
+                            updated_hub = True
+
+                if updated_hub:
+                    ENGINE.save_accounts(data)
+
+            except Exception as e:
+                logger.error(f"后台 Token 临期保鲜看门狗异常: {e}")
+
+            time.sleep(30)
+
     t_ingest = threading.Thread(target=auto_ingest_worker, daemon=True)
     t_quota = threading.Thread(target=quota_worker, daemon=True)
     t_warmup = threading.Thread(target=warmup_worker, daemon=True)
+    t_token = threading.Thread(target=token_guardian_worker, daemon=True)
     t_ingest.start()
     t_quota.start()
     t_warmup.start()
+    t_token.start()
 
 
 def run_server(port: int = SERVER_PORT):

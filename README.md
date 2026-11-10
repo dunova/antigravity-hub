@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.0 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.1 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,32 +9,45 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.0.0-0F172A?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v3.0.1-0F172A?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/C++-17-00599C?style=flat-square&logo=c%2B%2B" alt="C++" />
   <img src="https://img.shields.io/badge/Framework-Qt%206.12%20QML-41CD52?style=flat-square&logo=qt" alt="Qt" />
   <img src="https://img.shields.io/badge/Platform-Omarchy%20%7C%20Wayland%20%7C%20Linux-black?style=flat-square" alt="Platform" />
   <img src="https://img.shields.io/badge/Design-Omarchy%20Flat%20%7C%20Zero--Gradient-1c1c1e?style=flat-square" alt="Style" />
+  <img src="https://img.shields.io/badge/Token%20Guardian-Active%2030s%20Keepalive-10B981?style=flat-square" alt="Token Guardian" />
   <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.0 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.1 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub v3.0.0 生产级实际 UI 界面（基于 Omarchy 设计规范，零渐变纯平顶栏、正统 Antigravity 单色剪影 Logo、闭合 1px 细线外框、屏幕绝对固定的偶奇斑马纹行、Gemini 4 / 3.8 / Claude 三模型配额毫米级对齐排版与一键脱敏打码保护）</em>
+  <em>图：Antigravity Hub v3.0.1 生产级实际 UI 界面（基于 Omarchy 设计规范，零渐变纯平顶栏、正统 Antigravity 单色剪影 Logo、闭合 1px 细线外框、屏幕绝对固定的偶奇斑马纹行、Gemini 4 / 3.8 / Claude 三模型配额毫米级对齐排版与一键脱敏打码保护）</em>
 </p>
 
 ---
 
-## ⚡ v3.0.0 核心架构演进与重大革新
+## ⚡ v3.0.1 核心架构演进与重大革新
 
-**Antigravity Hub v3.0.0** 标志着控制中心从早期 Web 界面全面跃迁为 **Omarchy 官方原生 C++17 / Qt6 QML 桌面应用程序**：
+**Antigravity Hub v3.0.1** 全面学习并严格对齐 Mac 原版 Token 定时保鲜机制，重构全端凭据强一致性自愈流水线：
 
-1. **正统 Google Antigravity 剪影 Logo 重塑**：
+1. **Mac 原版 Token 保鲜对齐与 30s 常驻守护看门狗**：
+   - 彻底修复 Linux 移植版仅在切号时写入凭据、日常使用 1 小时后 Token 自然过期导致“模型失效”的恶性缺陷；
+   - 建立 30 秒高频 Token 临期守护线程（`token_guardian_worker`），主动扫描活跃账号与全池 11 账号剩余有效期；
+   - 严格执行 **15 分钟临期安全偏置（`TOKEN_REFRESH_SKEW_SECONDS = 900`）**：在 Token 到期前 15 分钟内，后台自动以 `refresh_token` 向 Google OAuth 端点换取全新 3600s `access_token`，无需重启进程，实现 100% 物理无感续签。
+2. **全端凭据强一致性原子写入契约（Multi-Store Dual Sync）**：
+   - 凡活跃账号发生续签或刷新，立即原子级强一致性双向同步：
+     1. Linux Secret Service (`secret-tool`) / macOS Keychain (`security`)；
+     2. `~/.gemini/oauth_creds.json`（供 `agy` CLI 与工具层直接调用，彻底告别 `invalid_token`）；
+     3. `~/.gemini/jetski-standalone-oauth-token`（供语言服务器底层零回退直接解析）；
+     4. `~/.gemini/google_accounts.json` 与 `app_storage.json`。
+3. **HTTP 401 Unauthorized 反应式自愈机制**：
+   - 配额端点探测遇到 401 或空响应时，自动触发 `ensure_fresh_token(force=True)` 一次性强制换取新 Token 并无感重试，杜绝假死与死锁。
+4. **正统 Google Antigravity 剪影 Logo 重塑**：
    - 彻底废除旧版几何三角假标与蓝色着色；
    - 基于官方流线型不对称悬浮拱门（Sweeping Aerodynamic Arch）精确矢量化，呈现在高对比度 Omarchy 单色剪影下（浅色极黑 `#0F172A`、深色纯白 `#FFFFFF`），与 `Omarchy Control` 风格完美对齐。
-2. **纯正 Omarchy 扁平设计铁律**：
+5. **纯正 Omarchy 扁平设计铁律**：
    - **全面清零渐变**：顶栏、状态栏、表头与斑马纹背景实现 `gradient` 语法 0 出现率，消除一切发灰发脏的视觉噪点；
    - **全面直角纯平**：`radius: 0` 严格贯彻，1px 语义线框完整闭合；
    - **屏幕绝对固定斑马纹**：彻底分离数据排序与视觉行号，奇偶行背景在任意动态拖拽或表头排序时永远保持绝对交替，杜绝双灰行重叠；
