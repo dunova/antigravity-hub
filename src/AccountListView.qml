@@ -294,10 +294,9 @@ Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 30
                     radius: 0
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: (theme && theme.surfaceTop && theme.surfaceTop.charAt(0) === '#') ? theme.surfaceTop : "#172c25" }
-                        GradientStop { position: 1; color: (theme && theme.surfaceBottom && theme.surfaceBottom.charAt(0) === '#') ? theme.surfaceBottom : "#11201b" }
-                    }
+                    color: (theme && theme.mode === "light") ?
+                           ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#F8FAFC") :
+                           ((theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26")
                     border.width: 0
 
                     Rectangle {

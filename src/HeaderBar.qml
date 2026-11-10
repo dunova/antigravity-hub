@@ -10,10 +10,9 @@ Rectangle {
     radius: 0
     border.color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
     border.width: 1
-    gradient: Gradient {
-        GradientStop { position: 0; color: (theme && theme.surfaceTop && theme.surfaceTop.charAt(0) === '#') ? theme.surfaceTop : "#172c25" }
-        GradientStop { position: 1; color: (theme && theme.surfaceBottom && theme.surfaceBottom.charAt(0) === '#') ? theme.surfaceBottom : "#11201b" }
-    }
+    color: (theme && theme.mode === "light") ?
+           ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#FFFFFF") :
+           ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#13141c")
 
     signal openSettings()
     signal openAddAccount()
@@ -179,7 +178,7 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg("2.51.5")
+                text: qsTr("v%1").arg("2.51.6")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 renderType: Text.NativeRendering
