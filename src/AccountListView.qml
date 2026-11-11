@@ -942,7 +942,7 @@ Item {
                 // 25 项 QML Role 绑定的直接消费
                 property bool isRowActive: model.isActive || false
                 property bool isRowBlocked: model.isBlocked || false
-                property bool isRowSelected: listView.currentIndex === index
+                property bool isRowSelected: false
                 property bool isRowChecked: accountListView.selectedEmails[model.email] === true
                 readonly property bool isManualLockedRow: (model.isActive || false) && ((model.manualLockRemaining || 0) > 0)
                 readonly property bool isRowHovered: rowMouse.containsMouse ||
@@ -961,14 +961,13 @@ Item {
                     ((theme && theme.rowEven) ? theme.rowEven : "#1c1c1c") :
                     ((theme && theme.rowOdd) ? theme.rowOdd : "#32302f")
 
-                color: isRowSelected ?
-                    Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.24) :
-                    (rowDelegate.isRowHovered ?
-                        ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
-                        (isRowActive ? Qt.tint(rowBgColor, Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.10)) : rowBgColor))
+                // 点击某个账号不变色：完全消除点击选中引起的行背景变色与外边框，保持屏幕纯净与交替斑马纹
+                color: rowDelegate.isRowHovered ?
+                    ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
+                    (isRowActive ? Qt.tint(rowBgColor, Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.10)) : rowBgColor)
 
-                border.width: isRowSelected ? 1 : 0
-                border.color: (theme && theme.accent) ? theme.accent : "#7daea3"
+                border.width: 0
+                border.color: "transparent"
 
                 // 拖拽排序顶部插入指示线 (Cyan/Accent 3px 对齐 Mac 原版 .drag-over-top)
                 Rectangle {
@@ -1865,14 +1864,15 @@ Item {
                         Layout.maximumWidth: colActionWidth
                         Layout.fillHeight: true
 
-                        // 1. 在用徽章 (ACTIVE 状态) - Marker 6: theme.accent, 严禁 goodText 绿色
+                        // 1. 在用徽章 (ACTIVE 状态) - Marker 6: 响应当前系统 Omarchy 主题色 theme.accent，纯色直角实体高对比按钮
                         Rectangle {
+                            id: btnInUse
                             anchors.centerIn: parent
                             visible: model.isActive
                             width: 52
                             height: 24
                             radius: 0
-                            color: Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15)
+                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
                             border.width: 1
                             border.color: (theme && theme.accent) ? theme.accent : "#7daea3"
 
@@ -1881,9 +1881,9 @@ Item {
                                 text: qsTr("In Use")
                                 font.family: theme.uiFont
                                 font.pixelSize: 11
-                                font.weight: Font.DemiBold
+                                font.weight: Font.Bold
                                 renderType: Text.NativeRendering
-                                color: (theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3")
+                                color: (theme && theme.accentForeground) ? theme.accentForeground : "#0a1713"
                             }
 
                             MouseArea {

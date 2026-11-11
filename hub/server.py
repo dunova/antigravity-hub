@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.4"
-__canonical_version_tag__ = "20261111-v3.0.4-NATIVE_LS_QUOTA_SUMMARY_AND_ARGON_PARSING"
-__last_updated__ = "2026-11-11 19:45:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.4：接入原生 RetrieveUserQuotaSummary 消除额度失准、修复 Gemini 4 Argon 独立周配额解析、解除 Google Cloud Code aicode-consumers 项目 403 阻断"
+__version__ = "3.0.5"
+__canonical_version_tag__ = "20261111-v3.0.5-OMARCHY_ACTIVE_ACCENT_AND_ZERO_CLICK_TINT"
+__last_updated__ = "2026-11-11 20:20:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.5：彻底根除行点击变色视觉干扰、在用账号操作按钮与状态全面对齐 Omarchy 当前系统主题色 (Solid Accent & High-Contrast AAA)"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -3146,8 +3146,8 @@ def render_dashboard_html() -> str:
             min-width: 54px !important;
             max-width: 54px !important;
             height: 22px !important;
-            background: #4ADE80 !important;
-            color: #000000 !important;
+            background: #8bcbb1 !important;
+            color: #0a1713 !important;
             font-size: 10.5px !important;
             font-weight: 900 !important;
             border: 2px solid #000000 !important;
@@ -3287,8 +3287,8 @@ def render_dashboard_html() -> str:
             min-width: 54px !important;
             max-width: 54px !important;
             height: 22px !important;
-            background: #4ADE80 !important;
-            color: #000000 !important;
+            background: #8bcbb1 !important;
+            color: #0a1713 !important;
             font-size: 10.5px !important;
             font-weight: 900 !important;
             border: 2px solid #000000 !important;

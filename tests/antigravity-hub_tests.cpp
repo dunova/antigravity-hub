@@ -75,6 +75,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
+    QCoreApplication::setApplicationVersion(QStringLiteral("3.0.5"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1211,7 +1212,10 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
     qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
     QDir(tempDir.path()).mkpath("data");
     const QString accountsFile = tempDir.filePath("data/accounts_hub.json");
-    {
+    const QString realAccounts = QDir::homePath() + QStringLiteral("/.antigravity_hub/data/accounts_hub.json");
+    if (QFile::exists(realAccounts) && QFileInfo(realAccounts).size() > 100) {
+        QFile::copy(realAccounts, accountsFile);
+    } else {
         QJsonObject accountsObj;
         QJsonObject a1; a1["email"] = "cakeai88@gmail.com"; a1["name"] = "cakeai88"; a1["validation_blocked"] = false;
         QJsonObject a1Gem; a1Gem["quota_5h"] = 0.85; a1Gem["quota_weekly"] = 0.72; a1["gemini"] = a1Gem;
@@ -1347,6 +1351,8 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
             const QImage snapshot = win->grabWindow();
             if (!snapshot.isNull()) {
                 snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/hub_pure_offscreen.png"));
+                snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/live_hub_v305_verified.png"));
+                snapshot.save(QStringLiteral("/home/dunova/Projects/antigravity-hub/docs/assets/preview.png"));
             }
         }
     }
