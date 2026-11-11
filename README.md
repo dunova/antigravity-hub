@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.6 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.7 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.0.6-0F172A?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v3.0.7-0F172A?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/C++-17-00599C?style=flat-square&logo=c%2B%2B" alt="C++" />
   <img src="https://img.shields.io/badge/Framework-Qt%206.12%20QML-41CD52?style=flat-square&logo=qt" alt="Qt" />
   <img src="https://img.shields.io/badge/Platform-Omarchy%20%7C%20Wayland%20%7C%20Linux-black?style=flat-square" alt="Platform" />
@@ -19,14 +19,24 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.6 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.7 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub v3.0.6 生产级实际 UI 界面（基于 Omarchy 设计规范，全整数四舍五入极简配额展示、重平衡列宽消除账号名截断、Omarchy 主题色在用徽章、纯平斑马纹与精准在途会话接力）</em>
+  <em>图：Antigravity Hub v3.0.7 生产级实际 UI 界面（基于 Omarchy 设计规范，全整数四舍五入极简配额展示、0% 保底用尽切换与 1% 低周额度自动选号隔离、Omarchy 主题色在用徽章、纯平斑马纹与精准在途会话接力）</em>
 </p>
 
 ---
+
+## 🚀 v3.0.7 核心优化（2026-11-11）
+
+1. **保底告急阈值下限降至 0% · 保证每个账号用尽额度再切换**：
+   - 原生 Qt `SettingsDialog` Gemini / Claude 保底告急阈值滑块下限由 `1%` (`0.01`) 下放至 **`0%` (`0.00`)**，且设置页与后端默认阈值全面对齐 `0%`；
+   - `core/rotator.py` 修复 `0%` 阈值下的 `0.0 < 0.0` 盲区与 `< 0.5%`/`< 2%` 提前强切缺陷：当阈值设为 `0%` 时，活跃账号会一直使用到真正枯竭（`<= 0.0001`）才触发无缝接力；人工干预保护锁亦同步校准为仅在 `<= 0.0001` 或风控拦截时破锁。
+2. **两级健康隔离选号算法（彻底杜绝 1% 周额度账号抢占自动选择）**：
+   - `pick_best_standby_account`（全面接管 `highest-quota` / `round-robin` / `least-used` / `sticky` 四大策略）与 `switch_top_gemini_account`（TopG 一键切最优）统一实行健康分级隔离：
+     - **Tier 0 健康主力池**：要求周额度 `>= 1.5%`（展示 `>= 2%`）且 5h `>= 1.5%`；仅当全池无任何健康账号时，才允许 `1%` 周额度残丝（`0.5%~1.49%`）作为最终兜底；
+     - 彻底修复旧版因 `5h * 50` 权重过高或忽视 `round-robin` 导致 `5h=100%, 周=1%` 账号抢占自动切号的顽疾，同时兼容 `priority: null` / `token: null` 并排除风控/禁用/无 Token 账号。
 
 ## 🚀 v3.0.6 核心优化（2026-11-11）
 

@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.6"
-__canonical_version_tag__ = "20261111-v3.0.6-INTEGER_PCT_REBALANCED_LAYOUT_AND_PRECISE_RECOVERY"
-__last_updated__ = "2026-11-11 21:25:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.6：全端配额百分比四舍五入取整重排版、彻底消除账号名省略截断、切号精准仅唤醒在途未完结会话"
+__version__ = "3.0.7"
+__canonical_version_tag__ = "20261111-v3.0.7-ZERO_THRESHOLD_EXHAUSTION_AND_LOW_WEEKLY_ISOLATION"
+__last_updated__ = "2026-11-11 22:00:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.7：保底告急阈值下限降至 0% 用尽再切换、两级隔离阻断 1% 低周额度抢占自动选号、TopG 与全策略统一语义"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -391,7 +391,9 @@ def get_hub_settings() -> Dict[str, Any]:
     【全局控制台设置】读取 Magpie 风格控制台设置。
     """
     defaults = {
+        "rotation_strategy": "highest-quota",
         "gemini_threshold": 0.0,
+        "claude_threshold": 0.0,
         "default_sort": "gemini_5h_desc",
         "hourly_warmup": True,
         "warmup_model": "gemini_first",
@@ -1654,8 +1656,12 @@ class HubEngine:
 
                 data = self.load_accounts()
                 old_active = data.get("active_email", "")
+                now_epoch = int(time.time())
+                accs_map = data.get("accounts", {})
+                if target_email in accs_map and isinstance(accs_map[target_email], dict):
+                    accs_map[target_email]["last_used_time"] = now_epoch
                 data["active_email"] = target_email
-                data["last_updated"] = int(time.time())
+                data["last_updated"] = now_epoch
                 self.save_accounts(data)
 
                 threading.Thread(target=_async_post_refresh, args=(old_active, target_email), daemon=True).start()
@@ -1676,7 +1682,9 @@ class HubEngine:
 
     def switch_top_gemini_account(self) -> Tuple[bool, str, str]:
         """
-        针对 Gemini 专项优化：找出全池 Gemini 5h 剩余配额最充沛的健康账号并秒级物理切换
+        针对 Gemini 专项优化：找出全池 Gemini 有效剩余配额最充沛的健康账号并秒级物理切换。
+        严格剔除风控/禁用/无Token账号，并将 >=1.5% (显示>=2%) 健康池与 1% 残丝池物理分级隔离，
+        防止仅剩 1% 周额度的账号凭 5h=100% 抢占 TopG 选号。
         返回: (success: bool, msg: str, target_email: str)
         """
         data = self.load_accounts()
@@ -1685,25 +1693,44 @@ class HubEngine:
 
         candidates = []
         for email, acc in accounts.items():
-            g_info = acc.get("gemini", {})
-            g_5h = float(g_info.get("quota_5h", 0.0))
-            g_w = float(g_info.get("quota_weekly", 0.0))
-            if g_w > 0.0001:
-                candidates.append((email, g_5h, g_w))
+            if not isinstance(acc, dict):
+                continue
+            if acc.get("validation_blocked") or acc.get("disabled"):
+                continue
+            if "refresh_token" in acc or "token" in acc:
+                tok = acc.get("token")
+                rt = acc.get("refresh_token") or (tok.get("refresh_token") if isinstance(tok, dict) else "")
+                if not str(rt or "").strip():
+                    continue
+
+            g_info = acc.get("gemini") or {}
+            g_w = _safe_float(g_info.get("quota_weekly", 0.0), 0.0)
+            g_5h = 0.0 if g_w <= 0.0001 else _safe_float(g_info.get("quota_5h", 0.0), 0.0)
+            if g_w <= 0.0001 or g_5h <= 0.0001:
+                continue
+
+            if g_w >= 0.015 and g_5h >= 0.015:
+                tier = 2  # 主力健康池（>= 2% 周 & 5h）
+            elif g_w >= 0.005:
+                tier = 1  # 1% 周额度残丝兜底池
+            else:
+                tier = 0  # < 0.5% 残余最后兜底
+
+            eff = min(g_5h, g_w)
+            candidates.append((email, tier, eff, g_w, g_5h))
 
         if not candidates:
             return False, "全池未检测到可用的 Gemini 账号", ""
 
-        # 按 5h 剩余配额降序、周配额降序
-        candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
-        best = candidates[0]
+        # 按健康层级、有效可用配额 min(5h, w)、周配额、5h 配额降序
+        candidates.sort(key=lambda x: (x[1], round(x[2], 6), round(x[3], 6), round(x[4], 6)), reverse=True)
+        best_email, best_tier, best_eff, best_w, best_5h = candidates[0]
 
-        if best[0] == active_email and best[1] > 0.8:
-            return True, f"当前活跃账号 {active_email} Gemini 额度已处于顶峰 ({format_quota_int_pct(best[1])}%)", active_email
+        if best_email == active_email and best_tier == 2 and best_eff > 0.8:
+            return True, f"当前活跃账号 {active_email} Gemini 额度已处于顶峰 (5h {format_quota_int_pct(best_5h)}% · 周 {format_quota_int_pct(best_w)}%)", active_email
 
-        target_email = best[0]
-        ok, msg = self.switch_account(target_email)
-        return ok, f"已切至 Gemini 额度最高账号: {target_email} ({format_quota_int_pct(best[1])}%)", target_email
+        ok, msg = self.switch_account(best_email)
+        return ok, f"已切至 Gemini 额度最高账号: {best_email} (5h {format_quota_int_pct(best_5h)}% · 周 {format_quota_int_pct(best_w)}%)", best_email
 
 
 ENGINE = HubEngine()
@@ -4492,6 +4519,31 @@ def render_dashboard_html() -> str:
             const hideExhausted = localStorage.getItem('hub_hide_exhausted') === '1';
             const hideCb = document.getElementById('cfg-hide-exhausted');
             if (hideCb) hideCb.checked = hideExhausted;
+
+            fetch('/api/settings').then(r => r.ok ? r.json() : null).then(cfg => {{
+                if (!cfg) return;
+                if (rotMode && cfg.rotation_mode) rotMode.value = cfg.rotation_mode;
+                const thrSel = document.getElementById('cfg-gemini-threshold');
+                if (thrSel && cfg.gemini_threshold !== undefined) {{
+                    const rawVal = Number(cfg.gemini_threshold);
+                    const valStr = rawVal === 0 ? '0' : rawVal.toFixed(2);
+                    if (!Array.from(thrSel.options).some(o => Number(o.value) === rawVal)) {{
+                        const opt = document.createElement('option');
+                        opt.value = valStr;
+                        opt.textContent = `${{Math.round(rawVal * 100)}}% (自定义水位)`;
+                        thrSel.appendChild(opt);
+                    }}
+                    const matchOpt = Array.from(thrSel.options).find(o => Number(o.value) === rawVal);
+                    if (matchOpt) thrSel.value = matchOpt.value;
+                }}
+                if (sortSelect && cfg.default_sort) sortSelect.value = cfg.default_sort;
+                const warmupCb = document.getElementById('cfg-hourly-warmup');
+                if (warmupCb && cfg.hourly_warmup !== undefined) warmupCb.checked = !!cfg.hourly_warmup;
+                const warmupModel = document.getElementById('cfg-warmup-model');
+                if (warmupModel && cfg.warmup_model) warmupModel.value = cfg.warmup_model;
+                const warmupStagger = document.getElementById('cfg-warmup-stagger');
+                if (warmupStagger && cfg.warmup_stagger_sec !== undefined) warmupStagger.value = String(cfg.warmup_stagger_sec);
+            }}).catch(() => {{}});
         }}
 
         function onDensityChange(val) {{
@@ -6368,7 +6420,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
 
             export_payload = {
                 "exported_at": datetime.datetime.now().isoformat(),
-                "generator": "Antigravity Hub v2.38.0",
+                "generator": "Antigravity Hub v3.0.7",
                 "count": len(selected_dict),
                 "accounts": selected_dict
             }

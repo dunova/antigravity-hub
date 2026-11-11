@@ -739,7 +739,7 @@ class AntigravityPhysicalManager:
         if not target_acc:
             return False, f"未在 Hub 账号池中找到目标账号: {target_email}"
 
-        tok = target_acc.get("token", {})
+        tok = target_acc.get("token") or {}
         rt = tok.get("refresh_token") or target_acc.get("refresh_token", "")
         at = tok.get("access_token") or target_acc.get("access_token", "")
         exp = tok.get("expiry_timestamp") or target_acc.get("expiry_timestamp", 0)
@@ -768,9 +768,11 @@ class AntigravityPhysicalManager:
         # 2. 同步本地凭据文件
         self.sync_local_credentials(target_email, final_at, rt, fresh_acc.get("expiry_timestamp", 0))
 
-        # 3. 更新 Hub 活跃标记
+        # 3. 更新 Hub 活跃标记与最近使用时间戳 (供 least-used 策略排序)
+        now_epoch = int(time.time())
+        target_acc["last_used_time"] = now_epoch
         hub_data["active_email"] = target_email
-        hub_data["last_updated"] = int(time.time())
+        hub_data["last_updated"] = now_epoch
         self.save_hub_accounts(hub_data)
 
         # 4. 执行原生热切号 (带 post-kill 二次权威断言)
@@ -879,7 +881,7 @@ class AntigravityPhysicalManager:
         email = acc.get("email", "")
         rt = acc.get("refresh_token")
         if not rt:
-            tok = acc.get("token", {})
+            tok = acc.get("token") or {}
             rt = tok.get("refresh_token", "")
         if not rt:
             return {"email": email, "status": "no_refresh_token"}

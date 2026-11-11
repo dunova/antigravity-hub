@@ -70,12 +70,15 @@ private slots:
     // v3.0.0 Omarchy Silhouette Logo & QA Invariants
     void v300OmarchySilhouetteLogoAndModalGuardInvariants();
 
+    // v3.0.7 Zero-Threshold Depletion Floor Invariants
+    void v307SettingsZeroThresholdInvariants();
+
     void cleanupTestCase();
 };
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("3.0.6"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("3.0.7"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1351,7 +1354,7 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
             const QImage snapshot = win->grabWindow();
             if (!snapshot.isNull()) {
                 snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/hub_pure_offscreen.png"));
-                snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/live_hub_v306_verified.png"));
+                snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/live_hub_v307_verified.png"));
                 snapshot.save(QStringLiteral("/home/dunova/Projects/antigravity-hub/docs/assets/preview.png"));
             }
         }
@@ -1938,6 +1941,135 @@ void AntigravityHubTests::v300OmarchySilhouetteLogoAndModalGuardInvariants() {
     helpFile.close();
     QVERIFY2(helpContent.contains(QStringLiteral("padding: 24")), "HelpOverlay must set padding: 24");
     QVERIFY2(helpContent.contains(QStringLiteral("PgUp")), "HelpOverlay must list PgUp navigation shortcut");
+}
+
+void AntigravityHubTests::v307SettingsZeroThresholdInvariants() {
+    // 1. Static source check on SettingsDialog.qml
+    QFile dlgFile(QStringLiteral(":/SettingsDialog.qml"));
+    QVERIFY(dlgFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString dlgContent = QString::fromUtf8(dlgFile.readAll());
+    dlgFile.close();
+
+    QVERIFY2(dlgContent.contains(QRegularExpression(QStringLiteral(R"(from:\s*0\.00?)"))),
+             "SettingsDialog sliders must allow threshold down to 0%");
+    QVERIFY2(!dlgContent.contains(QRegularExpression(QStringLiteral(R"(from:\s*0\.01\b)"))),
+             "SettingsDialog sliders must NOT enforce hardcoded 0.01 (1%) minimum floor");
+
+    // 2. Runtime instantiation check: default values = 0.0, minimum = 0.0, saveAndApply emits 0
+    const QByteArray prevBaseUrl = qgetenv("ANTIGRAVITY_HUB_BASE_URL");
+    const QByteArray prevHubDir = qgetenv("ANTIGRAVITY_HUB_DIR");
+    qputenv("ANTIGRAVITY_HUB_BASE_URL", "http://127.0.0.1:1");
+
+    QQmlEngine engine;
+    engine.addImageProvider(QStringLiteral("icons"), new IconProvider());
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    Theme theme(tempDir.path());
+    Translator translator(tempDir.filePath("lang"), ":/i18n");
+    BackendController backend;
+
+    QQmlContext *ctx = engine.rootContext();
+    ctx->setContextProperty(QStringLiteral("theme"), &theme);
+    ctx->setContextProperty(QStringLiteral("translator"), &translator);
+    ctx->setContextProperty(QStringLiteral("backend"), &backend);
+    ctx->setContextProperty(QStringLiteral("backendController"), &backend);
+
+    QQmlComponent comp(&engine, QUrl(QStringLiteral("qrc:/SettingsDialog.qml")));
+    QVERIFY2(!comp.isError(), qPrintable(comp.errorString()));
+    QScopedPointer<QObject> obj(comp.create());
+    QVERIFY(obj != nullptr);
+
+    QObject *gemSlider = obj->findChild<QObject*>(QStringLiteral("geminiSlider"));
+    QObject *cldSlider = obj->findChild<QObject*>(QStringLiteral("claudeSlider"));
+    QVERIFY2(gemSlider != nullptr, "geminiSlider objectName missing");
+    QVERIFY2(cldSlider != nullptr, "claudeSlider objectName missing");
+
+    QCOMPARE(gemSlider->property("from").toDouble(), 0.0);
+    QCOMPARE(cldSlider->property("from").toDouble(), 0.0);
+    QCOMPARE(gemSlider->property("value").toDouble(), 0.0);
+    QCOMPARE(cldSlider->property("value").toDouble(), 0.0);
+
+    // Invoke loadCurrentSettings() when backend.settings is empty -> fallback must stay 0.0
+    QVERIFY(QMetaObject::invokeMethod(obj.data(), "loadCurrentSettings"));
+    QCOMPARE(gemSlider->property("value").toDouble(), 0.0);
+    QCOMPARE(cldSlider->property("value").toDouble(), 0.0);
+
+    // Ensure setting value to 0.0 sticks and saveAndApply emits payload with 0 thresholds
+    gemSlider->setProperty("value", 0.0);
+    cldSlider->setProperty("value", 0.0);
+    QCOMPARE(gemSlider->property("value").toDouble(), 0.0);
+    QCOMPARE(cldSlider->property("value").toDouble(), 0.0);
+
+    QSignalSpy spySaved(obj.data(), SIGNAL(settingsSaved(QVariant)));
+    QVERIFY(QMetaObject::invokeMethod(obj.data(), "saveAndApply"));
+    QCOMPARE(spySaved.count(), 1);
+    const QVariantMap payloadMap = spySaved.at(0).at(0).toMap();
+    QCOMPARE(payloadMap.value(QStringLiteral("gemini_threshold")).toDouble(), 0.0);
+    QCOMPARE(payloadMap.value(QStringLiteral("claude_threshold")).toDouble(), 0.0);
+
+    // 3. Visual snapshot of Main.qml with settingsDialog open at 0% floor
+    QDir(tempDir.path()).mkpath("data");
+    const QString accountsFile = tempDir.filePath("data/accounts_hub.json");
+    const QString realAccounts = QDir::homePath() + QStringLiteral("/.antigravity_hub/data/accounts_hub.json");
+    if (QFile::exists(realAccounts) && QFileInfo(realAccounts).size() > 100) {
+        QFile::copy(realAccounts, accountsFile);
+    }
+    QFile langF(tempDir.filePath("lang"));
+    if (langF.open(QIODevice::WriteOnly)) {
+        langF.write("zh-CN");
+        langF.close();
+    }
+    const QString realThemeDir = QDir::homePath() + QStringLiteral("/.local/state/omarchy/current");
+    Theme visTheme(QFile::exists(realThemeDir + QStringLiteral("/theme/colors.toml")) ? realThemeDir : tempDir.path());
+    Translator visTranslator(tempDir.filePath("lang"), ":/i18n");
+    BackendController visBackend;
+    AccountModel visAccountModel;
+    AccountFilterProxyModel visProxyModel;
+    visProxyModel.setSourceModel(&visAccountModel);
+
+    QQmlEngine visEngine;
+    visEngine.addImageProvider(QStringLiteral("icons"), new IconProvider());
+    QQmlContext *visCtx = visEngine.rootContext();
+    visCtx->setContextProperty(QStringLiteral("theme"), &visTheme);
+    visCtx->setContextProperty(QStringLiteral("translator"), &visTranslator);
+    visCtx->setContextProperty(QStringLiteral("backend"), &visBackend);
+    visCtx->setContextProperty(QStringLiteral("backendController"), &visBackend);
+    visCtx->setContextProperty(QStringLiteral("accountModel"), &visAccountModel);
+    visCtx->setContextProperty(QStringLiteral("proxyModel"), &visProxyModel);
+    visCtx->setContextProperty(QStringLiteral("accountFilterProxyModel"), &visProxyModel);
+
+    QQmlComponent mainComp(&visEngine, QUrl(QStringLiteral("qrc:/Main.qml")));
+    QVERIFY2(!mainComp.isError(), qPrintable(mainComp.errorString()));
+    QScopedPointer<QObject> mainObj(mainComp.create());
+    QVERIFY(mainObj != nullptr);
+    if (auto *win = qobject_cast<QQuickWindow*>(mainObj.data())) {
+        win->show();
+        QCoreApplication::processEvents();
+        auto *dlg = mainObj->findChild<QObject*>(QStringLiteral("settingsDialog"));
+        QVERIFY(dlg != nullptr);
+        QVERIFY(QMetaObject::invokeMethod(dlg, "open"));
+        QTRY_COMPARE_WITH_TIMEOUT(dlg->property("visible").toBool(), true, 1000);
+        auto *gSlider = dlg->findChild<QObject*>(QStringLiteral("geminiSlider"));
+        auto *cSlider = dlg->findChild<QObject*>(QStringLiteral("claudeSlider"));
+        QVERIFY(gSlider != nullptr);
+        QVERIFY(cSlider != nullptr);
+        gSlider->setProperty("value", 0.0);
+        cSlider->setProperty("value", 0.0);
+        QTest::qWait(80);
+        QCoreApplication::processEvents();
+        const QImage dlgShot = win->grabWindow();
+        if (!dlgShot.isNull()) {
+            dlgShot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/live_hub_v307_settings.png"));
+        }
+        QVERIFY(QMetaObject::invokeMethod(dlg, "close"));
+    }
+
+    if (prevBaseUrl.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_BASE_URL");
+    else qputenv("ANTIGRAVITY_HUB_BASE_URL", prevBaseUrl);
+    if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
+    else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
 }
 
 void AntigravityHubTests::cleanupTestCase() {

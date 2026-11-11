@@ -64,6 +64,16 @@ Dialog {
         }
     }
 
+    Connections {
+        target: backend
+        enabled: Boolean(backend)
+        function onSettingsChanged() {
+            if (!root.visible) {
+                loadCurrentSettings();
+            }
+        }
+    }
+
     function loadCurrentSettings() {
         var s = (backend && backend.settings) ? backend.settings : {};
 
@@ -77,8 +87,8 @@ Dialog {
         }
 
         // 2. Thresholds
-        geminiSlider.value = (s.gemini_threshold !== undefined) ? s.gemini_threshold : 0.05;
-        claudeSlider.value = (s.claude_threshold !== undefined) ? s.claude_threshold : 0.05;
+        geminiSlider.value = (s.gemini_threshold !== undefined) ? Number(s.gemini_threshold) : 0.00;
+        claudeSlider.value = (s.claude_threshold !== undefined) ? Number(s.claude_threshold) : 0.00;
 
         // 3. Switches
         prewarmSwitch.checked = (s.hourly_warmup !== undefined) ? s.hourly_warmup : true;
@@ -375,11 +385,12 @@ Dialog {
 
                     Slider {
                         id: geminiSlider
+                        objectName: "geminiSlider"
                         Layout.fillWidth: true
-                        from: 0.01
+                        from: 0.00
                         to: 0.50
                         stepSize: 0.01
-                        value: 0.05
+                        value: 0.00
 
                         background: Rectangle {
                             x: geminiSlider.leftPadding
@@ -444,11 +455,12 @@ Dialog {
 
                     Slider {
                         id: claudeSlider
+                        objectName: "claudeSlider"
                         Layout.fillWidth: true
-                        from: 0.01
+                        from: 0.00
                         to: 0.50
                         stepSize: 0.01
-                        value: 0.05
+                        value: 0.00
 
                         background: Rectangle {
                             x: claudeSlider.leftPadding

@@ -206,8 +206,8 @@ void E2EAllFeaturesTest::testSettingsSaveAndApply() {
     payload["language"] = "zh-CN";
     payload["hourly_warmup"] = true;
     payload["notifications_enabled"] = true;
-    payload["gemini_threshold"] = 0.05;
-    payload["claude_threshold"] = 0.05;
+    payload["gemini_threshold"] = 0.0;
+    payload["claude_threshold"] = 0.0;
 
     backend.saveSettings(payload);
     // Backend emits signal and persists
