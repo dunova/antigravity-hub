@@ -65,3 +65,6 @@ run/
 docs/preview.html
 cache/
 logs/
+
+antigravity-hub
+*antigravity-hub_tests

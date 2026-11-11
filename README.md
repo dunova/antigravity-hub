@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.3 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.4 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.0.3-0F172A?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v3.0.4-0F172A?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/C++-17-00599C?style=flat-square&logo=c%2B%2B" alt="C++" />
   <img src="https://img.shields.io/badge/Framework-Qt%206.12%20QML-41CD52?style=flat-square&logo=qt" alt="Qt" />
   <img src="https://img.shields.io/badge/Platform-Omarchy%20%7C%20Wayland%20%7C%20Linux-black?style=flat-square" alt="Platform" />
@@ -19,20 +19,28 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.3 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.4 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub v3.0.3 生产级实际 UI 界面（基于 Omarchy 设计规范，零渐变纯平顶栏、正统 Antigravity 单色剪影 Logo、闭合 1px 细线外框、屏幕绝对固定的偶奇斑马纹行、Gemini 4 / 3.8 / Claude 三模型配额毫米级对齐排版与一键脱敏打码保护）</em>
+  <em>图：Antigravity Hub v3.0.4 生产级实际 UI 界面（基于 Omarchy 设计规范，零渐变纯平顶栏、正统 Antigravity 单色剪影 Logo、闭合 1px 细线外框、屏幕绝对固定的偶奇斑马纹行、Gemini 4 / 3.8 / Claude 三模型配额毫米级对齐排版与一键脱敏打码保护）</em>
 </p>
 
 ---
 
-## ⚡ v3.0.3 核心架构演进与重大革新
+## ⚡ v3.0.4 核心架构演进与重大革新
 
-**Antigravity Hub v3.0.3** 全面学习并严格对齐 Mac 原版 Token 定时保鲜机制，彻底修复 `secret-tool ↔ 本地凭据` 双向滞后缺口与跨账号 `Gemini 4` 串台污染：
+**Antigravity Hub v3.0.4** 彻底根治 IDE 与 Hub 配额对齐失准难题，全链路接入原生 `RetrieveUserQuotaSummary` 接口，解决 Google Cloud Code PA 阻断并杜绝虚假配额复制：
 
-1. **Mac 原版单轨嵌入式 Token 保鲜与 `secret-tool` 全端锁定同步**：
+1. **直连本地 Language Server 原生 `RetrieveUserQuotaSummary`**：
+   - 彻底取代容易受 `gemini-4-carbon-disabled` 干扰的旧版 `GetUserStatus` 逻辑；
+   - 100% 对齐 IDE "Models & Usage" 弹窗数据源，独立采集 `Gemini Models`（周/5h）、`Claude and GPT models`（周/5h）与 `Gemini 4 Argon`（独立周配额）；
+2. **根除 Gemini 4 伪配额与周倒计时跨槽泄露**：
+   - 杜绝当未返回 Argon 独立配额时将 Gemini 3.8 周配额虚假复制赋给 Gemini 4 的不良逻辑；
+   - 5 小时重置槽位在配额满额（≥99.9%）时统一标定为 `满额`（Full），彻底消除跨窗口周倒计时误填至 5h 槽位的显示缺陷；
+3. **解除 Google Cloud Code PA 接口 403 阻断**：
+   - 全网请求统一补全 `{"project": "aicode-consumers"}` 官方载荷与原生 UA，解除后台巡检 403 异常；
+4. **Mac 原版单轨嵌入式 Token 保鲜与 `secret-tool` 全端锁定同步**：
    - 彻底修复 Linux 移植版仅在切号时写入凭据、日常使用 1 小时后 Token 自然过期导致“模型失效”的恶性缺陷；
    - 严格对齐 Mac 原版架构：不引入任何冗余的独立看门狗轮询线程，完全将 Token 保鲜嵌入在现有的 `refresh_all_quotas`（配额同步）与 `ensure_fresh_token` 自然调度链路中（并发加锁防重）；
    - 当 Antigravity IDE 自身刷新 `secret-tool` 凭据时，`auto_ingest_system_account` 自动校验时间戳并反向同步锁定 `~/.gemini/oauth_creds.json`、`~/.gemini/jetski-standalone-oauth-token`、`google_accounts.json` 与 `app_storage.json`，消除多存储分裂；

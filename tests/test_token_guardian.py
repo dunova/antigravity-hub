@@ -226,6 +226,107 @@ class TestTokenGuardian(unittest.TestCase):
                             self.assertEqual(args[1], "ide_fresh_at")
                             mock_save.assert_called()
 
+    def test_sync_from_local_language_server_captures_argon_and_ignores_carbon(self):
+        """测试：sync_from_local_language_server 成功采集 gemini-4-argon 配额且忽略 gemini-4-carbon-disabled"""
+        email = "duxilian88@example.com"
+        fake_hub = {
+            "active_email": email,
+            "accounts": {
+                email: {
+                    "id": "acc_g4",
+                    "email": email,
+                    "access_token": "valid_token",
+                    "gemini": {},
+                    "claude": {},
+                    "claude_version": "5.5"
+                }
+            }
+        }
+        mock_user_status = {
+            "userStatus": {
+                "email": email,
+                "cascadeModelConfigData": {
+                    "clientModelConfigs": [
+                        {
+                            "modelId": "gemini-4-argon-medium",
+                            "label": "Gemini 4 Argon (Medium)",
+                            "quotaInfo": {
+                                "remainingFraction": 0.6018,
+                                "resetTime": "2026-11-18T02:23:24Z"
+                            }
+                        },
+                        {
+                            "modelId": "gemini-4-carbon-disabled",
+                            "label": "Gemini 4 Carbon",
+                            "quotaInfo": {}
+                        },
+                        {
+                            "modelId": "claude-opus-5-5-high",
+                            "label": "Claude Opus 5.5 (High)",
+                            "quotaInfo": {"remainingFraction": 0.48, "resetTime": "2026-11-16T12:47:25Z"}
+                        }
+                    ]
+                }
+            }
+        }
+        mock_quota_summary = {
+            "response": {
+                "groups": [
+                    {
+                        "displayName": "Gemini Models",
+                        "buckets": [
+                            {"bucketId": "gemini-weekly", "remainingFraction": 0.165, "resetTime": "2026-11-16T19:04:15Z"},
+                            {"bucketId": "gemini-5h", "remainingFraction": 0.80, "resetTime": "2026-11-11T12:59:44Z"}
+                        ]
+                    },
+                    {
+                        "displayName": "Claude and GPT models",
+                        "buckets": [
+                            {"bucketId": "3p-weekly", "remainingFraction": 0.49, "resetTime": "2026-11-16T12:47:25Z"},
+                            {"bucketId": "3p-5h", "remainingFraction": 1.0, "resetTime": "2026-11-11T16:33:40Z"}
+                        ]
+                    },
+                    {
+                        "displayName": "Gemini 4 Argon",
+                        "buckets": [
+                            {"bucketId": "gemini-argon-wtu-weekly", "remainingFraction": 0.6018, "resetTime": "2026-11-18T02:23:24Z"}
+                        ]
+                    }
+                ]
+            }
+        }
+
+        class FakeResp:
+            def __init__(self, data):
+                self.data = data
+            def read(self):
+                return self.data
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        with patch("glob.glob", return_value=["/fake/daemon/daemon.json"]):
+            with patch("builtins.open", unittest.mock.mock_open(read_data=json.dumps({"pid": 99999, "httpPort": 40689, "csrfToken": "tok"}))):
+                with patch("os.kill"):
+                    with patch("urllib.request.urlopen") as mock_url:
+                        # 第一次响应 GetUserStatus，第二次响应 RetrieveUserQuotaSummary
+                        resp1 = FakeResp(json.dumps(mock_user_status).encode())
+                        resp2 = FakeResp(json.dumps(mock_quota_summary).encode())
+                        mock_url.side_effect = [resp1, resp2]
+
+                        with patch.object(self.engine, "load_accounts", return_value=fake_hub):
+                            with patch.object(self.engine, "save_accounts") as mock_save:
+                                updated = self.engine.sync_from_local_language_server(fake_hub)
+                                self.assertTrue(updated)
+                                acc = fake_hub["accounts"][email]
+                                self.assertIsNotNone(acc.get("gemini4"))
+                                self.assertAlmostEqual(acc["gemini4"]["quota_weekly"], 0.6018, places=3)
+                                self.assertEqual(acc["gemini4"]["reset_time_weekly"], "2026-11-18T02:23:24Z")
+                                self.assertAlmostEqual(acc["gemini"]["quota_5h"], 0.80, places=2)
+                                self.assertEqual(acc["gemini"]["reset_time_5h"], "2026-11-11T12:59:44Z")
+                                self.assertEqual(acc["claude"]["reset_time_5h"], "2026-11-11T16:33:40Z")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

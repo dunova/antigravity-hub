@@ -1573,8 +1573,9 @@ Item {
                                     Layout.preferredWidth: 62
                                     Layout.leftMargin: 2
                                     text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") :
-                                          ((model.gemini38Reset5h === "即将恢复") ? qsTr("即将恢复") :
-                                              ((model.gemini38Reset5h === "--" || !model.gemini38Reset5h) ? "—" : model.gemini38Reset5h))
+                                          ((model.gemini38Reset5h === "满额" || (model.gemini38Quota5h || 0.0) >= 0.999) ? qsTr("满额") :
+                                              ((model.gemini38Reset5h === "即将恢复") ? qsTr("即将恢复") :
+                                                  ((model.gemini38Reset5h === "--" || !model.gemini38Reset5h) ? "—" : model.gemini38Reset5h)))
                                     font.family: theme.monoFont
                                     font.pixelSize: (model.gemini38QuotaW <= 0.0001) ? 11 : 12
                                     font.weight: (model.gemini38QuotaW <= 0.0001) ? Font.Bold : Font.DemiBold
@@ -1755,8 +1756,9 @@ Item {
                                     Layout.preferredWidth: 62
                                     Layout.leftMargin: 2
                                     text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") :
-                                          ((model.claudeReset5h === "即将恢复") ? qsTr("即将恢复") :
-                                              ((model.claudeReset5h === "--" || !model.claudeReset5h) ? "—" : model.claudeReset5h))
+                                          ((model.claudeReset5h === "满额" || (model.claudeQuota5h || 0.0) >= 0.999) ? qsTr("满额") :
+                                              ((model.claudeReset5h === "即将恢复") ? qsTr("即将恢复") :
+                                                  ((model.claudeReset5h === "--" || !model.claudeReset5h) ? "—" : model.claudeReset5h)))
                                     font.family: theme.monoFont
                                     font.pixelSize: (model.claudeQuotaW <= 0.0001) ? 11 : 12
                                     font.weight: (model.claudeQuotaW <= 0.0001) ? Font.Bold : Font.DemiBold

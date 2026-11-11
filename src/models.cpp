@@ -293,7 +293,11 @@ void AccountModel::loadFromDisk() {
         }
         const QString gReset5hIso = geminiObj.value(QStringLiteral("reset_time_5h")).toString();
         item.gemini38Reset5hTs = parseIsoTimestamp(gReset5hIso);
-        item.gemini38Reset5h = formatCountdown(item.gemini38Reset5hTs, nowEpoch);
+        if (item.gemini38Quota5h >= 0.999 || item.gemini38Reset5hTs > nowEpoch + 18000) {
+            item.gemini38Reset5h = QStringLiteral("满额");
+        } else {
+            item.gemini38Reset5h = formatCountdown(item.gemini38Reset5hTs, nowEpoch);
+        }
 
         // Claude 双维解析 (带周耗尽短路)
         const QJsonObject claudeObj = a.value(QStringLiteral("claude")).toObject();
@@ -309,7 +313,11 @@ void AccountModel::loadFromDisk() {
         }
         const QString cReset5hIso = claudeObj.value(QStringLiteral("reset_time_5h")).toString();
         item.claudeReset5hTs = parseIsoTimestamp(cReset5hIso);
-        item.claudeReset5h = formatCountdown(item.claudeReset5hTs, nowEpoch);
+        if (item.claudeQuota5h >= 0.999 || item.claudeReset5hTs > nowEpoch + 18000) {
+            item.claudeReset5h = QStringLiteral("满额");
+        } else {
+            item.claudeReset5h = formatCountdown(item.claudeReset5hTs, nowEpoch);
+        }
 
         // 活跃状态与状态胶囊
         item.isActive = (!activeEmail.isEmpty() && item.email.compare(activeEmail, Qt::CaseInsensitive) == 0);

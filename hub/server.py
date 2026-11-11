@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.3"
-__canonical_version_tag__ = "20261110-v3.0.3-ZERO_G4_LEAK_AND_FULL_TOKEN_LOCKSTEP"
-__last_updated__ = "2026-11-10 20:40:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.3：根除跨账号 Gemini 4 串台污染（4.6/disabled 强制归零）、闭合 secret-tool ↔ oauth_creds/jetski/app_storage 全端同步缺口"
+__version__ = "3.0.4"
+__canonical_version_tag__ = "20261111-v3.0.4-NATIVE_LS_QUOTA_SUMMARY_AND_ARGON_PARSING"
+__last_updated__ = "2026-11-11 19:45:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.4：接入原生 RetrieveUserQuotaSummary 消除额度失准、修复 Gemini 4 Argon 独立周配额解析、解除 Google Cloud Code aicode-consumers 项目 403 阻断"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -821,14 +821,76 @@ class HubEngine:
                         pass
 
                 acc = accounts[email]
+
+                # 🚀【第一真源：本地原生 RetrieveUserQuotaSummary 直连】
+                # 100% 对齐 IDE "Models & Usage" 弹窗核心接口，读取物理隔离的 5 大配额分组
+                g4_from_ls_summary = False
+                try:
+                    q_url = f"http://127.0.0.1:{http_port}/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary"
+                    q_req = urllib.request.Request(
+                        q_url,
+                        data=b'{"forceRefresh": true}',
+                        headers={
+                            "Content-Type": "application/json",
+                            "x-codeium-csrf-token": str(csrf_token)
+                        },
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(q_req, timeout=3) as q_resp:
+                        q_res = json.loads(q_resp.read().decode("utf-8", errors="ignore"))
+                        q_groups = q_res.get("response", {}).get("groups", [])
+                        for grp in q_groups:
+                            grp_name = grp.get("displayName", "")
+                            is_g4_grp = ("gemini 4" in grp_name.lower() or "argon" in grp_name.lower())
+                            for bkt in grp.get("buckets", []):
+                                bid = bkt.get("bucketId", "")
+                                rem = bkt.get("remainingFraction")
+                                rst = bkt.get("resetTime")
+                                if rem is not None:
+                                    val = float(rem)
+                                    if bid == "gemini-weekly":
+                                        g_d = acc.setdefault("gemini", {})
+                                        g_d["quota_weekly"] = val
+                                        if rst:
+                                            g_d["reset_time_weekly"] = str(rst)
+                                            g_d["reset_time"] = str(rst)
+                                        updated_any = True
+                                    elif bid == "gemini-5h":
+                                        g_d = acc.setdefault("gemini", {})
+                                        g_d["quota_5h"] = val
+                                        if rst:
+                                            g_d["reset_time_5h"] = str(rst)
+                                        updated_any = True
+                                    elif bid == "3p-weekly":
+                                        c_d = acc.setdefault("claude", {})
+                                        c_d["quota_weekly"] = val
+                                        if rst:
+                                            c_d["reset_time_weekly"] = str(rst)
+                                            c_d["reset_time"] = str(rst)
+                                        updated_any = True
+                                    elif bid == "3p-5h":
+                                        c_d = acc.setdefault("claude", {})
+                                        c_d["quota_5h"] = val
+                                        if rst:
+                                            c_d["reset_time_5h"] = str(rst)
+                                        updated_any = True
+                                    elif is_g4_grp or "argon" in bid.lower() or "gemini-4" in bid.lower():
+                                        g4_d = acc.setdefault("gemini4", {})
+                                        g4_d["quota_weekly"] = val
+                                        if rst:
+                                            g4_d["reset_time_weekly"] = str(rst)
+                                        g4_from_ls_summary = True
+                                        updated_any = True
+                except Exception as qe:
+                    logger.debug(f"本地 language_server RetrieveUserQuotaSummary 直连探测跳过: {qe}")
+
+                # 🎯【第二真源：GetUserStatus 提取可用模型矩阵与精确 Argon 判定】
                 configs = u_status.get("cascadeModelConfigData", {}).get("clientModelConfigs", [])
                 if not configs:
                     continue
 
-                g4_found = None
-                g4_disabled = False
-                g38_found = None
-                claude_found = None
+                argon_found = None
+                argon_disabled = False
                 c_models = []
                 for m in configs:
                     m_id = str(m.get("modelId") or "")
@@ -839,69 +901,32 @@ class HubEngine:
                     m_id_low = m_id.lower()
                     m_lbl_low = m_lbl.lower()
 
-                    if "gemini-4" in m_id_low or "argon" in m_id_low or "gemini 4" in m_lbl_low:
+                    if "claude" in m_id_low:
+                        c_models.append(m_id)
+
+                    # 严格聚焦 Argon 模型，彻底忽略内部未发布的 gemini-4-carbon-disabled 干扰！
+                    if "argon" in m_id_low or "argon" in m_lbl_low:
                         if "disabled" in m_id_low or rem is None:
-                            g4_disabled = True
-                        elif g4_found is None:
-                            g4_found = {
+                            argon_disabled = True
+                        elif rem is not None and argon_found is None:
+                            argon_found = {
                                 "quota_weekly": float(rem),
                                 "reset_time_weekly": reset
                             }
-                    elif "gemini-3.8" in m_id_low or "gemini-2.5" in m_id_low or "gemini 3.8" in m_lbl_low:
-                        if rem is not None and g38_found is None:
-                            g38_found = {
-                                "quota_5h": float(rem),
-                                "reset_time_5h": reset
-                            }
-                    elif "claude" in m_id_low:
-                        c_models.append(m_id)
-                        if rem is not None and claude_found is None:
-                            claude_found = {
-                                "quota_5h": float(rem),
-                                "reset_time_5h": reset
-                            }
 
                 ls_has_55 = any(("5-5" in cm or "5.5" in cm) for cm in c_models)
-                if g4_disabled or (c_models and not ls_has_55):
-                    # 明确未开通 Gemini 4 (如 gemini-4-argon-disabled 或 4.6 账号)，必须彻底清空残留/串台数据
-                    if acc.get("gemini4") is not None:
-                        acc["gemini4"] = None
-                        updated_any = True
-                elif g4_found is not None and (ls_has_55 or not c_models):
-                    # 防切号瞬间串台门禁：切号首拍若 g4_found 与前活跃账号完全一致且当前账号此前为 4.6，禁止跨号污染
-                    is_bleed = (old_active != email and prev_active_g4 == g4_found and acc.get("claude_version") == "4.6")
-                    if not is_bleed:
-                        prev_g4 = acc.get("gemini4")
-                        if prev_g4 != g4_found:
-                            acc["gemini4"] = g4_found
+                # 只有在 RetrieveUserQuotaSummary 未明确抓取到 Argon 时，才采用 GetUserStatus 进行兜底判定
+                if not g4_from_ls_summary:
+                    if (argon_disabled and argon_found is None) or (c_models and not ls_has_55):
+                        if acc.get("gemini4") is not None:
+                            acc["gemini4"] = None
                             updated_any = True
-
-                if g38_found is not None:
-                    g_dict = acc.setdefault("gemini", {})
-                    new_g5h = g38_found["quota_5h"]
-                    cur_g5h = _safe_float(g_dict.get("quota_5h", 1.0), 1.0)
-                    new_g_rst = g38_found["reset_time_5h"]
-                    cur_g_rst = str(g_dict.get("reset_time_5h") or "")
-                    # 同一 5h 周期内仅向更低剩余额度单向收敛，防止本地 LS 缓存回滚实时接口的新鲜低值
-                    if new_g5h < cur_g5h - 0.0005 or (new_g_rst and new_g_rst != cur_g_rst and new_g5h < 0.999):
-                        g_dict["quota_5h"] = new_g5h
-                        updated_any = True
-                    if new_g_rst and new_g5h < 0.999 and cur_g_rst != new_g_rst:
-                        g_dict["reset_time_5h"] = new_g_rst
-                        updated_any = True
-
-                if claude_found is not None:
-                    c_dict = acc.setdefault("claude", {})
-                    new_c5h = claude_found["quota_5h"]
-                    cur_c5h = _safe_float(c_dict.get("quota_5h", 1.0), 1.0)
-                    new_c_rst = claude_found["reset_time_5h"]
-                    cur_c_rst = str(c_dict.get("reset_time_5h") or "")
-                    if new_c5h < cur_c5h - 0.0005 or (new_c_rst and new_c_rst != cur_c_rst and new_c5h < 0.999):
-                        c_dict["quota_5h"] = new_c5h
-                        updated_any = True
-                    if new_c_rst and new_c5h < 0.999 and cur_c_rst != new_c_rst:
-                        c_dict["reset_time_5h"] = new_c_rst
-                        updated_any = True
+                    elif argon_found is not None:
+                        # 发现有效 Argon 周配额，更新账号独立周额度
+                        prev_g4 = acc.get("gemini4")
+                        if prev_g4 != argon_found:
+                            acc["gemini4"] = argon_found
+                            updated_any = True
 
                 if c_models:
                     has_55 = any(("5-5" in cm or "5.5" in cm) for cm in c_models)
@@ -1173,15 +1198,17 @@ class HubEngine:
         拉取配额，返回: (quotas, resets, validation_url)
         若触发 403 VALIDATION_REQUIRED，validation_url 会携带解封链接
         """
+        payload = json.dumps({"project": "aicode-consumers"}).encode("utf-8")
         req = urllib.request.Request(
             QUOTA_ENDPOINT,
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
-                "User-Agent": NATIVE_OAUTH_USER_AGENT
+                "User-Agent": "antigravity/2.31.0",
+                "X-Goog-Api-Client": "gl-go/1.22.0 gdcl/0.0.0"
             },
             method="POST",
-            data=b"{}"
+            data=payload
         )
         ctx = ssl.create_default_context()
         quotas: Dict[str, float] = {}
@@ -1192,7 +1219,7 @@ class HubEngine:
                 data = json.loads(body_str)
             for group in data.get("groups", []):
                 grp_name = group.get("displayName", "")
-                is_g4_grp = "gemini 4" in grp_name.lower() or "gemini-4" in grp_name.lower()
+                is_g4_grp = ("gemini 4" in grp_name.lower() or "gemini-4" in grp_name.lower() or "argon" in grp_name.lower())
                 for bucket in group.get("buckets", []):
                     b_id = bucket.get("bucketId", "")
                     rem = bucket.get("remainingFraction")
@@ -1201,7 +1228,7 @@ class HubEngine:
                         quotas[b_id] = float(rem) if rem is not None else 0.0
                         if reset:
                             resets[b_id] = str(reset)
-                        if is_g4_grp or "gemini-4" in b_id.lower() or "gemini4" in b_id.lower():
+                        if is_g4_grp or "gemini-4" in b_id.lower() or "gemini4" in b_id.lower() or "argon" in b_id.lower():
                             quotas["gemini4-weekly"] = float(rem) if rem is not None else 0.0
                             if reset:
                                 resets["gemini4-weekly"] = str(reset)
@@ -1501,15 +1528,9 @@ class HubEngine:
             if c_mods:
                 acc["claude_models"] = c_mods
                 acc["claude_version"] = c_ver
-            # 业务真理门禁：5.5 账号必然开通并可使用 Gemini 4；非 5.5 (4.6) 且无官方 gemini4-weekly 返回时强制清零防串台
+            # 业务真理门禁：绝不将 gemini 3.8 周配额虚假复制赋给 gemini4；非 5.5 (4.6) 且无官方 gemini4-weekly 返回时强制清零防串台
             is_pro_55 = (c_ver == "5.5" or any(("5-5" in m or "5.5" in m) for m in c_mods))
-            if is_pro_55:
-                if not acc.get("gemini4") or not isinstance(acc.get("gemini4"), dict) or acc["gemini4"].get("quota_weekly") is None:
-                    acc["gemini4"] = {
-                        "quota_weekly": _safe_float(acc.get("gemini", {}).get("quota_weekly", 1.0), 1.0),
-                        "reset_time_weekly": acc.get("gemini", {}).get("reset_time_weekly", "")
-                    }
-            elif c_mods and not g4_from_summary:
+            if not is_pro_55 and not g4_from_summary:
                 acc["gemini4"] = None
         except Exception:
             pass
@@ -1774,15 +1795,15 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     c_5h = "#16A34A" if val_5h >= 50 else ("#EA580C" if val_5h >= 15 else "#DC2626")
     c_w = "#16A34A" if val_w >= 50 else ("#EA580C" if val_w >= 15 else "#DC2626")
     
-    # 5小时恢复倒计时与状态呈现 (彻底杜绝任何形式的假就绪伪饰与 4h59m 扎堆，100% 诚实呈现真实时间胶囊):
+    # 5小时恢复倒计时与状态呈现 (5h 滑动窗口至多 5 小时，凡 >=99.9% 满血或被误填多天周倒计时一律呈现满额，拒绝 5d 扎堆假象):
     if is_weekly_exhausted:
         tip = f"周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
-    elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪"):
-        # 只要有真实倒计时，一律直接诚实呈现时间胶囊
-        reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
-    elif val_5h >= 99.9:
+    elif val_5h >= 99.9 or (reset_5h_info and ("d" in reset_5h_info or reset_5h_info in ("--", "已就绪", "就绪"))):
         reset_5h_html = '<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额满血可用">满额</span>'
+    elif reset_5h_info:
+        # 只要有真实 5h 内倒计时，直接诚实呈现时间胶囊
+        reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
     else:
         reset_5h_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
 
