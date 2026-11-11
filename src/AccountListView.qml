@@ -12,18 +12,18 @@ Item {
     // =========================================================================
     readonly property int availColsWidth: Math.max(876, Math.floor(width) - 20)
     readonly property int extraColsWidth: Math.max(0, availColsWidth - 876)
-    readonly property int extraAccWidth: Math.round(extraColsWidth * 0.16)
+    readonly property int extraAccWidth: Math.round(extraColsWidth * 0.22)
     readonly property int extraG4Width: Math.round(extraColsWidth * 0.20)
-    readonly property int extraG38Width: Math.round(extraColsWidth * 0.32)
+    readonly property int extraG38Width: Math.round(extraColsWidth * 0.29)
     readonly property int extraClaudeWidth: Math.max(0, extraColsWidth - extraAccWidth - extraG4Width - extraG38Width)
 
     readonly property int colCheckWidth: 24
     readonly property int colIndexWidth: 24
     readonly property int colStatusWidth: 66
-    readonly property int colAccountWidth: 108 + extraAccWidth
-    readonly property int colG4Width: 152 + extraG4Width
-    readonly property int colG38Width: 219 + extraG38Width
-    readonly property int colClaudeWidth: 219 + extraClaudeWidth
+    readonly property int colAccountWidth: 142 + extraAccWidth
+    readonly property int colG4Width: 148 + extraG4Width
+    readonly property int colG38Width: 204 + extraG38Width
+    readonly property int colClaudeWidth: 204 + extraClaudeWidth
     readonly property int colActionWidth: 64
     readonly property int rowHeight: 42
     readonly property int pageSize: 15
@@ -266,6 +266,13 @@ Item {
         if (ratio >= 0.50) return (theme && theme.goodText && theme.goodText.charAt(0) === '#') ? theme.goodText : "#5fc97f";
         if (ratio >= 0.15) return (theme && theme.warningText && theme.warningText.charAt(0) === '#') ? theme.warningText : "#ffc27a";
         return (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a";
+    }
+
+    // 配额百分比四舍五入取整格式化 (极致紧凑高密，消除小数点冗余)
+    function formatQuotaPct(ratio) {
+        if (ratio === undefined || ratio === null || isNaN(ratio)) return "0%";
+        var clamped = Math.max(0.0, Math.min(1.0, Number(ratio)));
+        return Math.round(clamped * 100.0 + 1e-9) + "%";
     }
 
     ColumnLayout {
@@ -1447,10 +1454,10 @@ Item {
                                 }
                             }
 
-                            // 2. Monospace 百分比数值
+                            // 2. Monospace 百分比数值（四舍五入整数，32px 紧凑右对齐）
                             Text {
-                                Layout.preferredWidth: 44
-                                text: ((model.gemini4Quota || 0.0) * 100).toFixed(1) + "%"
+                                Layout.preferredWidth: 32
+                                text: accountListView.formatQuotaPct(model.gemini4Quota)
                                 font.family: theme.monoFont
                                 font.pixelSize: 12
                                 font.weight: Font.DemiBold
@@ -1459,9 +1466,9 @@ Item {
                                 color: accountListView.getQuotaColor(model.gemini4Quota)
                             }
 
-                            // 3. 重置倒计时槽位 (12px 统一字体字号 + 54px 右对齐，绝不越界)
+                            // 3. 重置倒计时槽位 (12px 统一字体字号 + 52px 右对齐，紧致清晰)
                             Text {
-                                Layout.preferredWidth: 54
+                                Layout.preferredWidth: 52
                                 Layout.leftMargin: 2
                                 text: (model.gemini4Reset === "即将恢复") ? qsTr("即将恢复") :
                                       ((model.gemini4Reset === "--" || !model.gemini4Reset) ? "—" : model.gemini4Reset)
@@ -1490,7 +1497,7 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 6: Gemini 3.8 双维配额单元格 (带周耗尽 0.0% 熔断，严格裁剪+边距+呼吸感)
+                    // Col 6: Gemini 3.8 双维配额单元格 (带周耗尽 0% 熔断，严格裁剪+边距+紧凑均衡)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colG38Width
@@ -1556,9 +1563,9 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 44
-                                    text: (model.gemini38QuotaW <= 0.0001) ? "0.0%" :
-                                          (((model.gemini38Quota5h || 0.0) * 100).toFixed(1) + "%")
+                                    Layout.preferredWidth: 32
+                                    text: (model.gemini38QuotaW <= 0.0001) ? "0%" :
+                                          accountListView.formatQuotaPct(model.gemini38Quota5h)
                                     font.family: theme.monoFont
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
@@ -1569,7 +1576,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 62
+                                    Layout.preferredWidth: 52
                                     Layout.leftMargin: 2
                                     text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") :
                                           ((model.gemini38Reset5h === "满额" || (model.gemini38Quota5h || 0.0) >= 0.999) ? qsTr("满额") :
@@ -1632,8 +1639,8 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 44
-                                    text: ((model.gemini38QuotaW || 0.0) * 100).toFixed(1) + "%"
+                                    Layout.preferredWidth: 32
+                                    text: accountListView.formatQuotaPct(model.gemini38QuotaW)
                                     font.family: theme.monoFont
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
@@ -1643,7 +1650,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 62
+                                    Layout.preferredWidth: 52
                                     Layout.leftMargin: 2
                                     text: (model.gemini38ResetW === "即将恢复") ? qsTr("即将恢复") :
                                           ((model.gemini38ResetW === "--" || !model.gemini38ResetW) ? "—" : model.gemini38ResetW)
@@ -1739,9 +1746,9 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 44
-                                    text: (model.claudeQuotaW <= 0.0001) ? "0.0%" :
-                                          (((model.claudeQuota5h || 0.0) * 100).toFixed(1) + "%")
+                                    Layout.preferredWidth: 32
+                                    text: (model.claudeQuotaW <= 0.0001) ? "0%" :
+                                          accountListView.formatQuotaPct(model.claudeQuota5h)
                                     font.family: theme.monoFont
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
@@ -1752,7 +1759,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 62
+                                    Layout.preferredWidth: 52
                                     Layout.leftMargin: 2
                                     text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") :
                                           ((model.claudeReset5h === "满额" || (model.claudeQuota5h || 0.0) >= 0.999) ? qsTr("满额") :
@@ -1815,8 +1822,8 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 44
-                                    text: ((model.claudeQuotaW || 0.0) * 100).toFixed(1) + "%"
+                                    Layout.preferredWidth: 32
+                                    text: accountListView.formatQuotaPct(model.claudeQuotaW)
                                     font.family: theme.monoFont
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
@@ -1826,7 +1833,7 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 62
+                                    Layout.preferredWidth: 52
                                     Layout.leftMargin: 2
                                     text: (model.claudeResetW === "即将恢复") ? qsTr("即将恢复") :
                                           ((model.claudeResetW === "--" || !model.claudeResetW) ? "—" : model.claudeResetW)

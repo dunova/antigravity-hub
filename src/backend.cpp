@@ -117,8 +117,12 @@ QNetworkRequest BackendController::createRequest(const QString &path) const
 {
     QUrl url(m_baseUrl + path);
     QNetworkRequest request(url);
-    // Qt 6 原生支持设置传输超时 (10 秒)，防止后台无响应导致 UI 永久处于 busy
-    request.setTransferTimeout(10000);
+    // Qt 6 原生支持设置传输超时：切换账号/配额全量刷新等重操作给予 25 秒，轻量请求 10 秒，杜绝假超时与 BrokenPipe
+    const bool isLongOp = path.startsWith(QStringLiteral("/api/switch")) ||
+                          path.startsWith(QStringLiteral("/api/refresh")) ||
+                          path.startsWith(QStringLiteral("/api/unblock")) ||
+                          path.startsWith(QStringLiteral("/api/warmup"));
+    request.setTransferTimeout(isLongOp ? 25000 : 10000);
     return request;
 }
 

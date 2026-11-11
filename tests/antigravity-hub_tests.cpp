@@ -75,7 +75,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("3.0.5"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("3.0.6"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1351,7 +1351,7 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
             const QImage snapshot = win->grabWindow();
             if (!snapshot.isNull()) {
                 snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/hub_pure_offscreen.png"));
-                snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/live_hub_v305_verified.png"));
+                snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/live_hub_v306_verified.png"));
                 snapshot.save(QStringLiteral("/home/dunova/Projects/antigravity-hub/docs/assets/preview.png"));
             }
         }
@@ -1378,9 +1378,15 @@ void AntigravityHubTests::accountListViewVisualDenoisingInvariants() {
     QVERIFY2(!content.contains(QStringLiteral("(周额度)")),
              "MANDATORY DENOISING VIOLATION: '(周额度)' found in AccountListView.qml");
 
-    // 3. Weekly depletion short-circuit to 0.0% & Weekly Depleted / 周耗尽
+    // 3. Weekly depletion short-circuit to 0% & Weekly Depleted / 周耗尽, zero decimal pct formats
     QVERIFY2(content.contains(QStringLiteral("qsTr(\"Weekly Depleted\")")) || content.contains(QStringLiteral("qsTr(\"周耗尽\")")),
              "AccountListView.qml missing Weekly Depleted / 周耗尽 short-circuit handler");
+    QVERIFY2(!content.contains(QStringLiteral("toFixed(1)")),
+             "MANDATORY INTEGER PCT VIOLATION: .toFixed(1) found in AccountListView.qml");
+    QVERIFY2(!content.contains(QStringLiteral("\"0.0%\"")),
+             "MANDATORY INTEGER PCT VIOLATION: Literal '0.0%' found in AccountListView.qml");
+    QVERIFY2(content.contains(QStringLiteral("function formatQuotaPct(")),
+             "AccountListView.qml missing formatQuotaPct() integer rounding helper");
 
     // 4. Zero animation on ACTIVE badge & zero pure red (#EF4444)
     QVERIFY2(!content.contains(QStringLiteral("SequentialAnimation on opacity")),
@@ -1479,19 +1485,19 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     const QString content = QString::fromUtf8(file.readAll());
     file.close();
 
-    // Verify responsive base column widths and row height
+    // Verify responsive base column widths and row height (v3.0.6 rebalanced integer layout)
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolCheckWidth\s*:\s*24\b)"))), "colCheckWidth != 24");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolIndexWidth\s*:\s*24\b)"))), "colIndexWidth != 24");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolStatusWidth\s*:\s*66\b)"))), "colStatusWidth != 66");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*108\b)"))), "colAccountWidth base != 108");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG4Width\s*:\s*152\b)"))), "colG4Width base != 152");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG38Width\s*:\s*219\b)"))), "colG38Width base != 219");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*219\b)"))), "colClaudeWidth base != 219");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*142\b)"))), "colAccountWidth base != 142");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG4Width\s*:\s*148\b)"))), "colG4Width base != 148");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG38Width\s*:\s*204\b)"))), "colG38Width base != 204");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*204\b)"))), "colClaudeWidth base != 204");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*64\b)"))), "colActionWidth != 64");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\browHeight\s*:\s*42\b)"))), "rowHeight != 42");
 
-    // Exact arithmetic base sum check: 24 + 24 + 66 + 108 + 152 + 219 + 219 + 64 == 876 (+ 20px overhead = 896px)
-    const int baseColumnWidth = 24 + 24 + 66 + 108 + 152 + 219 + 219 + 64;
+    // Exact arithmetic base sum check: 24 + 24 + 66 + 142 + 148 + 204 + 204 + 64 == 876 (+ 20px overhead = 896px)
+    const int baseColumnWidth = 24 + 24 + 66 + 142 + 148 + 204 + 204 + 64;
     QCOMPARE(baseColumnWidth, 876);
 
     // Verify interactive & collision-prevention guards in AccountListView.qml
@@ -1594,6 +1600,22 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     QCOMPARE(sum1872, 1852);
     QVERIFY(listObj->property("colG4Width").toInt() > 300);
     QVERIFY(listObj->property("colG38Width").toInt() > 450);
+
+    // 3. Runtime verification of integer half-up percentage rounding helper formatQuotaPct
+    auto invokePct = [&](double ratio) -> QString {
+        QVariant ret;
+        bool ok = QMetaObject::invokeMethod(listObj.data(), "formatQuotaPct",
+                                            Q_RETURN_ARG(QVariant, ret),
+                                            Q_ARG(QVariant, ratio));
+        return ok ? ret.toString() : QString();
+    };
+    QCOMPARE(invokePct(0.0), QStringLiteral("0%"));
+    QCOMPARE(invokePct(0.004), QStringLiteral("0%"));
+    QCOMPARE(invokePct(0.135), QStringLiteral("14%"));
+    QCOMPARE(invokePct(0.145), QStringLiteral("15%"));
+    QCOMPARE(invokePct(0.2757), QStringLiteral("28%"));
+    QCOMPARE(invokePct(0.719), QStringLiteral("72%"));
+    QCOMPARE(invokePct(0.999), QStringLiteral("100%"));
 }
 
 void AntigravityHubTests::v250ScreenFixedZebraRhythmInvariants() {

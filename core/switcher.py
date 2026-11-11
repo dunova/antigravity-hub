@@ -721,13 +721,14 @@ class AntigravityPhysicalManager:
             return False
 
     def switch_account(self, target_email: str, force_hot_switch: bool = True, relay_prompt: str = DEFAULT_RELAY_PROMPT, inject_recovery: bool = True) -> Tuple[bool, str]:
-        """完整账号切换流：快照 -> 刷新 Token -> 写入 Keychain -> 同步文件 -> 原生热切号 -> 原生接力"""
-        # 0. 切号前瞬间锁定活跃主会话快照 (避免杀进程后无法区分活跃主会话)
+        """完整账号切换流：快照 -> 刷新 Token -> 写入 Keychain -> 同步文件 -> 原生热切号 -> 异步精准接力"""
+        # 0. 切号前瞬间锁定真正活跃中的根会话快照 (仅纳入 RUNNING 与 180s 内意外报错中断会话)
+        snapshot_sessions = None
         if inject_recovery:
             try:
                 from .recovery import AntigravitySessionRecoveryManager
                 rec_mgr = AntigravitySessionRecoveryManager()
-                rec_mgr.pre_switch_snapshot()
+                snapshot_sessions = rec_mgr.pre_switch_snapshot()
             except Exception as ex:
                 logger.warning(f"切号前快照捕获异常: {ex}")
 
@@ -776,14 +777,36 @@ class AntigravityPhysicalManager:
         if force_hot_switch:
             self.execute_hot_switch(target_account=fresh_acc)
 
-        # 5. 原生断点接力投递
+        # 5. 原生断点接力投递（空快照瞬时收敛；有活跃会话则后台异步投递，避免阻塞 /api/switch HTTP 响应超时）
         if inject_recovery:
-            try:
-                from .recovery import AntigravitySessionRecoveryManager
-                rec_mgr = AntigravitySessionRecoveryManager()
-                rec_mgr.batch_recover_all_working_sessions(prompt=relay_prompt)
-            except Exception as ex:
-                logger.error(f"❌ 批量断点接力投递异常: {ex}")
+            if snapshot_sessions is not None and len(snapshot_sessions) == 0:
+                try:
+                    from .recovery import AntigravitySessionRecoveryManager
+                    rec_mgr = AntigravitySessionRecoveryManager()
+                    rec_mgr.batch_recover_all_working_sessions(
+                        prompt=relay_prompt,
+                        preloaded_sessions=[],
+                    )
+                except Exception as ex:
+                    logger.warning(f"空快照清理异常: {ex}")
+            else:
+                def _async_recover(snap_list, r_prompt):
+                    try:
+                        from .recovery import AntigravitySessionRecoveryManager
+                        rec_mgr = AntigravitySessionRecoveryManager()
+                        rec_mgr.batch_recover_all_working_sessions(
+                            prompt=r_prompt,
+                            preloaded_sessions=snap_list,
+                        )
+                    except Exception as ex:
+                        logger.error(f"❌ 批量断点接力投递异常: {ex}")
+
+                import threading
+                threading.Thread(
+                    target=_async_recover,
+                    args=(snapshot_sessions, relay_prompt),
+                    daemon=True,
+                ).start()
 
         return True, f"成功无感切换至账号: {target_email}"
 

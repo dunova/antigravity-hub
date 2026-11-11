@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.5"
-__canonical_version_tag__ = "20261111-v3.0.5-OMARCHY_ACTIVE_ACCENT_AND_ZERO_CLICK_TINT"
-__last_updated__ = "2026-11-11 20:20:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.5：彻底根除行点击变色视觉干扰、在用账号操作按钮与状态全面对齐 Omarchy 当前系统主题色 (Solid Accent & High-Contrast AAA)"
+__version__ = "3.0.6"
+__canonical_version_tag__ = "20261111-v3.0.6-INTEGER_PCT_REBALANCED_LAYOUT_AND_PRECISE_RECOVERY"
+__last_updated__ = "2026-11-11 21:25:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.6：全端配额百分比四舍五入取整重排版、彻底消除账号名省略截断、切号精准仅唤醒在途未完结会话"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -1699,11 +1699,11 @@ class HubEngine:
         best = candidates[0]
 
         if best[0] == active_email and best[1] > 0.8:
-            return True, f"当前活跃账号 {active_email} Gemini 额度已处于顶峰 ({int(best[1]*100)}%)", active_email
+            return True, f"当前活跃账号 {active_email} Gemini 额度已处于顶峰 ({format_quota_int_pct(best[1])}%)", active_email
 
         target_email = best[0]
         ok, msg = self.switch_account(target_email)
-        return ok, f"已切至 Gemini 额度最高账号: {target_email} ({int(best[1]*100)}%)", target_email
+        return ok, f"已切至 Gemini 额度最高账号: {target_email} ({format_quota_int_pct(best[1])}%)", target_email
 
 
 ENGINE = HubEngine()
@@ -1752,6 +1752,18 @@ def format_countdown_sec(sec_diff: int) -> str:
     return f"{sec_diff}s"
 
 
+def format_quota_int_pct(ratio: Optional[float]) -> int:
+    """标准四舍五入整数百分比 [0..100]，消除无意义小数位"""
+    if ratio is None:
+        return 0
+    try:
+        v = float(ratio)
+    except (TypeError, ValueError):
+        return 0
+    clamped = max(0.0, min(1.0, v))
+    return int(clamped * 100.0 + 0.5 + 1e-9)
+
+
 def render_gemini4_cell(weekly_pct: Optional[float], reset_weekly_info: str = "") -> str:
     """
     渲染 Gemini 4 周额度单元格：
@@ -1761,12 +1773,13 @@ def render_gemini4_cell(weekly_pct: Optional[float], reset_weekly_info: str = ""
     if weekly_pct is None:
         return '<div class="q-cell q-cell-g4 q-cell-empty font-mono" title="此账号暂未开放 Gemini 4 权限"><span class="q-empty-dash font-mono text-muted">—</span></div>'
 
-    val_w = round(weekly_pct * 100, 1)
+    raw_w = max(0.0, min(1.0, float(weekly_pct)))
+    val_w = format_quota_int_pct(raw_w)
     c_w = "#16A34A" if val_w >= 50 else ("#EA580C" if val_w >= 15 else "#DC2626")
 
     if reset_weekly_info and reset_weekly_info not in ("--", "已就绪", "就绪"):
         reset_w_html = f'<span class="q-reset q-reset-w font-mono" title="Gemini 4 重置倒计时: {reset_weekly_info}">{reset_weekly_info}</span>'
-    elif val_w >= 99.9:
+    elif raw_w >= 0.999:
         reset_w_html = '<span class="q-reset q-reset-ready font-mono" title="Gemini 4 满血可用">满额</span>'
     else:
         reset_w_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
@@ -1783,23 +1796,25 @@ def render_gemini4_cell(weekly_pct: Optional[float], reset_weekly_info: str = ""
 
 
 def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "", reset_weekly_info: str = "", model_type: str = "gemini", claude_ver: str = "") -> str:
-    val_w = round(weekly_pct * 100, 1)
+    raw_w = max(0.0, min(1.0, float(weekly_pct or 0.0)))
+    raw_5h = max(0.0, min(1.0, float(h5_pct or 0.0)))
+    val_w = format_quota_int_pct(raw_w)
 
-    # 核心物理约束：周额度没了，5H 自然归零，绝对不能虚假满额就绪！
-    is_weekly_exhausted = (val_w <= 0.0)
+    # 核心物理约束：以原始浮点门禁判定周耗尽（防止 0.4% 四舍五入为 0% 时误判周枯竭），周耗尽则 5H 自然归零
+    is_weekly_exhausted = (raw_w <= 0.0001)
     if is_weekly_exhausted:
-        val_5h = 0.0
+        val_5h = 0
     else:
-        val_5h = round(h5_pct * 100, 1)
+        val_5h = format_quota_int_pct(raw_5h)
 
     c_5h = "#16A34A" if val_5h >= 50 else ("#EA580C" if val_5h >= 15 else "#DC2626")
     c_w = "#16A34A" if val_w >= 50 else ("#EA580C" if val_w >= 15 else "#DC2626")
     
     # 5小时恢复倒计时与状态呈现 (5h 滑动窗口至多 5 小时，凡 >=99.9% 满血或被误填多天周倒计时一律呈现满额，拒绝 5d 扎堆假象):
     if is_weekly_exhausted:
-        tip = f"周度总配额已耗尽 (0.0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
+        tip = f"周度总配额已耗尽 (0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
-    elif val_5h >= 99.9 or (reset_5h_info and ("d" in reset_5h_info or reset_5h_info in ("--", "已就绪", "就绪"))):
+    elif raw_5h >= 0.999 or (reset_5h_info and ("d" in reset_5h_info or reset_5h_info in ("--", "已就绪", "就绪"))):
         reset_5h_html = '<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额满血可用">满额</span>'
     elif reset_5h_info:
         # 只要有真实 5h 内倒计时，直接诚实呈现时间胶囊
@@ -1810,7 +1825,7 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
     # 周度重置倒计时呈现 (彻底杜绝“就绪”假象，有倒计时显倒计时，无倒计时显满额)：
     if reset_weekly_info and reset_weekly_info not in ("--", "已就绪", "就绪"):
         reset_w_html = f'<span class="q-reset q-reset-w font-mono" title="周度配额重置倒计时: {reset_weekly_info}">{reset_weekly_info}</span>'
-    elif val_w >= 99.9:
+    elif raw_w >= 0.999:
         reset_w_html = '<span class="q-reset q-reset-ready font-mono" title="周度配额满血可用">满额</span>'
     else:
         reset_w_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
@@ -1915,8 +1930,8 @@ def render_table_rows(include_oob: bool = False) -> str:
 
     total_count = len(accounts)
     pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
-    avg_g = round(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
-    avg_c = round(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
+    avg_g = format_quota_int_pct(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
+    avg_c = format_quota_int_pct(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     cur_time = time.strftime("%H:%M:%S")
 
     if not accounts:
@@ -2143,8 +2158,8 @@ def render_dashboard_html() -> str:
     c55_count = sum(1 for a in accounts.values() if any(("5-5" in m or "5.5" in m) for m in (a.get("claude_models") or [])))
     c46_count = total_count - c55_count
     pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
-    avg_g = round(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
-    avg_c = round(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count) * 100, 1)
+    avg_g = format_quota_int_pct(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
+    avg_c = format_quota_int_pct(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     cur_time = time.strftime("%H:%M:%S")
 
     rot_btn_html = render_rotation_button_html(oob=False)
@@ -2888,13 +2903,13 @@ def render_dashboard_html() -> str:
             vertical-align: middle;
         }}
         .col-quota-g4 {{
-            min-width: 180px;
+            min-width: 162px;
         }}
         .col-quota-g38 {{
-            min-width: 192px;
+            min-width: 184px;
         }}
         .col-quota-claude {{
-            min-width: 192px;
+            min-width: 184px;
         }}
         .tag-w-g4 {{ background: #A855F7; color: #FFFFFF; }}
         .q-cell-empty {{
@@ -2966,11 +2981,11 @@ def render_dashboard_html() -> str:
         }}
         .q-fill {{ height: 100%; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }}
         
-        /* 百分比数值：严格定宽 40px，居右对齐，等宽防抖 */
+        /* 百分比数值：严格定宽 32px（整数取整极简态），居右对齐，等宽防抖 */
         .q-val {{
-            width: 40px !important;
-            min-width: 40px !important;
-            max-width: 40px !important;
+            width: 32px !important;
+            min-width: 32px !important;
+            max-width: 32px !important;
             flex-shrink: 0 !important;
             text-align: right;
             font-weight: 900;
@@ -5852,6 +5867,13 @@ OAUTH_STATES: Dict[str, Dict[str, Any]] = {}
 
 
 class HubHTTPRequestHandler(BaseHTTPRequestHandler):
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+            logger.debug(f"客户端连接提前断开: {self.client_address[0]}")
+
     def log_message(self, format, *args):
         try:
             msg = format % args

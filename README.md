@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.4 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v3.0.6 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.0.4-0F172A?style=flat-square&logo=github" alt="Release" />
+  <img src="https://img.shields.io/badge/Release-v3.0.6-0F172A?style=flat-square&logo=github" alt="Release" />
   <img src="https://img.shields.io/badge/C++-17-00599C?style=flat-square&logo=c%2B%2B" alt="C++" />
   <img src="https://img.shields.io/badge/Framework-Qt%206.12%20QML-41CD52?style=flat-square&logo=qt" alt="Qt" />
   <img src="https://img.shields.io/badge/Platform-Omarchy%20%7C%20Wayland%20%7C%20Linux-black?style=flat-square" alt="Platform" />
@@ -19,12 +19,25 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.4 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v3.0.6 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub v3.0.4 生产级实际 UI 界面（基于 Omarchy 设计规范，零渐变纯平顶栏、正统 Antigravity 单色剪影 Logo、闭合 1px 细线外框、屏幕绝对固定的偶奇斑马纹行、Gemini 4 / 3.8 / Claude 三模型配额毫米级对齐排版与一键脱敏打码保护）</em>
+  <em>图：Antigravity Hub v3.0.6 生产级实际 UI 界面（基于 Omarchy 设计规范，全整数四舍五入极简配额展示、重平衡列宽消除账号名截断、Omarchy 主题色在用徽章、纯平斑马纹与精准在途会话接力）</em>
 </p>
+
+---
+
+## 🚀 v3.0.6 核心优化（2026-11-11）
+
+1. **全端配额百分比四舍五入取整与列宽重排版**：
+   - 原生 Qt QML 与 Web Hub 看板全面去除冗余小数位（`.0%`–`.9%` → 标准四舍五入整数百分比 `%`），仅使用原始浮点门禁（`<= 0.0001`）判定周耗尽，杜绝 `0.4%` 四舍五入为 `0%` 时误触发「周耗尽」熔断；
+   - 紧缩百分比（`44px → 32px`）与倒计时槽位（`62px → 52px`），将释放出的横向空间精准注入「账号」列（`108px → 142px`，`+34px`）及各配额进度条轨道，半屏下完整展示 `superdunova` / `dunova8888` 绝不截断。
+2. **精准切号会话恢复（根绝误唤醒已结束历史会话）**：
+   - `core/recovery.py` 直接对接 Antigravity Language Server 原生 RPC `GetAllCascadeTrajectories`，仅在切号前快照捕获当前 `CASCADE_RUN_STATUS_RUNNING`、含运行中子代理或 `<= 180s` 内 `EXECUTOR_TERMINATION_REASON_ERROR` 中断的根会话；
+   - 彻底废除 `open_panes`（已打开但已完结标签页）与磁盘残留 `SUBAGENT_STATE_ALIVE` 豁免漏洞，明确尊重 `0` 会话空快照且切号恢复转入后台异步投递（`POST /api/switch` 零超时无 `BrokenPipeError`）。
+3. **v3.0.5 交互净噪延续**：
+   - 消除列表行点击变色与多余选中边框，「在用」操作按钮全面绑定 Omarchy 当前系统动态主题色（Solid Accent + 高对比自适应前景色）。
 
 ---
 
