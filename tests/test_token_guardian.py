@@ -327,6 +327,50 @@ class TestTokenGuardian(unittest.TestCase):
                                 self.assertEqual(acc["gemini"]["reset_time_5h"], "2026-11-11T12:59:44Z")
                                 self.assertEqual(acc["claude"]["reset_time_5h"], "2026-11-11T16:33:40Z")
 
+    def test_macos_purity_alignment_and_no_app_storage_mutation(self):
+        """验证 Linux Secret Service 凭据纯净度物理对齐 macOS Keychain，且绝不篡改 app_storage.json"""
+        import tempfile
+        from core.switcher import AntigravityPhysicalManager
+        mgr = AntigravityPhysicalManager()
+
+        captured_inputs = []
+
+        class FakePopen:
+            def __init__(self, cmd, **kwargs):
+                self.cmd = cmd
+                self.returncode = 0
+            def communicate(self, input=None, timeout=None):
+                captured_inputs.append(input)
+                return ("ok", "")
+
+        with patch("subprocess.Popen", side_effect=FakePopen):
+            ok = mgr.write_to_linux_secret("test_at", "test_rt", email="cakeai888@gmail.com", expiry_str="2026-11-18T12:00:00Z")
+            self.assertTrue(ok)
+            self.assertGreater(len(captured_inputs), 0)
+
+            # 校验写入 Linux Secret Service 的 payload 结构 100% 对齐 macOS Keychain 纯净标准
+            payload = json.loads(captured_inputs[0])
+            self.assertEqual(payload["auth_method"], "consumer")
+            self.assertIn("token", payload)
+            self.assertEqual(payload["token"]["access_token"], "test_at")
+            self.assertEqual(payload["token"]["refresh_token"], "test_rt")
+            self.assertEqual(payload["token"]["token_type"], "Bearer")
+            self.assertEqual(payload["token"]["expiry"], "2026-11-18T12:00:00Z")
+
+            # 严格断言：绝不包含多余元数据字段，杜绝触发 React 前端误判
+            self.assertNotIn("id_token_email", payload)
+            self.assertNotIn("writer_id", payload)
+            self.assertNotIn("expires_in", payload)
+            self.assertNotIn("id_token", payload)
+
+        # 验证 sync_local_credentials 绝不触碰 app_storage.json
+        with patch("core.switcher.atomic_write_json", return_value=True) as mock_write:
+            mgr.sync_local_credentials("cakeai888@gmail.com", "at", "rt", time.time() + 3600)
+            written_paths = [call_args[0][0] for call_args in mock_write.call_args_list]
+            # 必须断言没有任何写操作指向 app_storage.json
+            for p in written_paths:
+                self.assertNotIn("app_storage.json", p, f"违规写入了 app_storage: {p}")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

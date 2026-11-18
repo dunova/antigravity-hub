@@ -33,8 +33,8 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.7"
-__canonical_version_tag__ = "20261111-v3.0.7-ZERO_THRESHOLD_EXHAUSTION_AND_LOW_WEEKLY_ISOLATION"
+__version__ = "3.0.8"
+__canonical_version_tag__ = "20261118-v3.0.8-PHYSICAL_MACOS_KEYCHAIN_PURITY_AND_NO_APP_STORAGE_MUTATION"
 __last_updated__ = "2026-11-11 22:00:00"
 __canonical_doctrine__ = "Antigravity Hub v3.0.7：保底告急阈值下限降至 0% 用尽再切换、两级隔离阻断 1% 低周额度抢占自动选号、TopG 与全策略统一语义"
 
@@ -1121,7 +1121,7 @@ class HubEngine:
                         logger.warning(f"切换后刷新新账号 {detected_email} 配额异常: {ex}")
                     updated = True
 
-                # 若系统钥匙串 Token 有效且未由 Hub 回补过，核验 ~/.gemini/oauth_creds.json / app_storage.json 是否滞后脱节
+                # 若系统钥匙串 Token 有效且未由 Hub 回补过，核验 ~/.gemini/oauth_creds.json 是否滞后脱节
                 if not hub_pushed_to_system and (kd_exp == 0 or kd_exp > now_ts + 60):
                     if not sync_local_needed:
                         try:
@@ -1135,12 +1135,6 @@ class HubEngine:
                                     with open(GOOGLE_ACCOUNTS_PATH, "r", encoding="utf-8") as gf:
                                         if json.load(gf).get("active") != detected_email:
                                             sync_local_needed = True
-                                if not sync_local_needed:
-                                    app_st_p = os.path.expanduser("~/.config/Antigravity/app_storage.json")
-                                    if os.path.isfile(app_st_p):
-                                        with open(app_st_p, "r", encoding="utf-8") as af:
-                                            if json.load(af).get("agy.onboarding.lastLoginUsername") != detected_email:
-                                                sync_local_needed = True
                         except Exception:
                             sync_local_needed = True
 
@@ -1346,7 +1340,7 @@ class HubEngine:
         2. ~/.gemini/oauth_creds.json (保证 agy CLI 与扩展不过期)
         3. ~/.gemini/jetski-standalone-oauth-token (语言服务优先回退凭据)
         4. ~/.gemini/google_accounts.json (活跃指针)
-        5. ~/.config/Antigravity/app_storage.json (防止 Electron 掉登录页)
+        【防掉登录页最高铁律】：严禁触碰 ~/.config/Antigravity/app_storage.json！
         """
         try:
             from core.switcher import AntigravityPhysicalManager, format_rfc3339
