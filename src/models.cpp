@@ -252,11 +252,9 @@ void AccountModel::loadFromDisk() {
         }
         item.hasClaude55 = has55;
 
-        // Gemini 4 专享解析 (严格防普通 4.6 账号被跨账号污染显示，同时支持 Ultra / 统一池 Gemini 4 权限账号)
-        const bool explicitG4Supported = a.value(QStringLiteral("gemini4_supported")).toBool(false) ||
-                                         (item.tier == QStringLiteral("ULTRA"));
+        // Gemini 4 专享解析 (严格防 4.6 账号被跨账号污染显示)
         const bool hasExplicitVer = !cModels.isEmpty() || !explicitVer.isEmpty();
-        const bool allowGemini4 = item.hasClaude55 || explicitG4Supported || !hasExplicitVer;
+        const bool allowGemini4 = item.hasClaude55 || !hasExplicitVer;
         QJsonObject g4Obj = a.value(QStringLiteral("gemini4")).toObject();
         if (g4Obj.isEmpty()) {
             g4Obj = a.value(QStringLiteral("gemini_4")).toObject();
@@ -267,8 +265,8 @@ void AccountModel::loadFromDisk() {
             item.gemini4ResetTs = parseIsoTimestamp(g4ResetIso);
             item.gemini4Reset = formatCountdown(item.gemini4ResetTs, nowEpoch);
             item.gemini4Valid = true;
-        } else if (item.hasClaude55 || explicitG4Supported) {
-            // 5.5 或已开通 Gemini 4 (如 Ultra) 账号，若无独立周记录继承统一 Gemini 周可用额度
+        } else if (item.hasClaude55) {
+            // 5.5 账号必然开通 Gemini 4，若无独立周记录继承 Gemini 周可用额度
             const QJsonObject gObj = a.value(QStringLiteral("gemini")).toObject();
             item.gemini4Quota = gObj.value(QStringLiteral("quota_weekly")).toDouble(1.0);
             const QString gResetIso = gObj.value(QStringLiteral("reset_time_weekly")).toString();
