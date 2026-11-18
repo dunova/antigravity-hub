@@ -340,19 +340,29 @@ class AntigravityPhysicalManager:
 
     def write_to_linux_secret(self, access_token: str, refresh_token: str, email: str = "", expiry_str: str = "") -> bool:
         """
-        写入 Linux Secret Service (secret-tool)，100% 对齐官方 Go 语言服务器反序列化标准与 macOS 物理纯净标准：
+        写入 Linux Secret Service (secret-tool)，100% 对齐官方 Go 语言服务器反序列化标准与上游 v5.0.3 规范：
         1. 双集合双写 (Dual Collection Sync):
            - 优先写入 '/org/freedesktop/secrets/collection/login' 集合 (供 agy CLI 及 IDE 核心语言服务检索)；
            - 同时写入默认集合 (Default Collection) 保证全系统工具统一；
         2. expiry: 必须为 RFC3339 标准纳秒/微秒时间戳；
-        3. auth_method: "consumer"；
-        4. 【物理对齐 macOS Keychain】严格去除 id_token_email / writer_id / expires_in 等非必要元数据，
-           保持 100% 极简纯净 Token 结构，坚决杜绝触发前端 React 路由误判账号突变并重定至 onboarding 界面。
+        3. expires_in: 3599 (整数)；
+        4. auth_method: "consumer"；
+        5. id_token_email: 当前账号。
         """
         if not access_token or not refresh_token:
             logger.error("❌ write_to_linux_secret: access_token 或 refresh_token 为空")
             return False
 
+        existing_writer_id = ""
+        try:
+            curr_cred = self.read_system_credential()
+            if curr_cred and isinstance(curr_cred, dict):
+                existing_writer_id = str(curr_cred.get("writer_id") or "")
+        except Exception:
+            pass
+
+        import secrets
+        final_writer_id = existing_writer_id if existing_writer_id else secrets.token_urlsafe(16)
         clean_expiry = format_rfc3339(expiry_str)
 
         payload_obj = {
@@ -360,9 +370,13 @@ class AntigravityPhysicalManager:
                 "access_token": str(access_token),
                 "token_type": "Bearer",
                 "refresh_token": str(refresh_token),
-                "expiry": clean_expiry
+                "expiry": clean_expiry,
+                "expires_in": 3599
             },
-            "auth_method": "consumer"
+            "auth_method": "consumer",
+            "id_token_email": email or "",
+            "id_token": "",
+            "writer_id": final_writer_id
         }
         raw_val = json.dumps(payload_obj)
 
@@ -487,7 +501,7 @@ class AntigravityPhysicalManager:
         2. ~/.gemini/oauth_creds.json (保证 agy CLI 与扩展不过期)
         3. ~/.gemini/jetski-standalone-oauth-token (语言服务优先回退凭据)
         4. ~/.gemini/google_accounts.json (活跃指针)
-        【防掉登录页最高铁律】：绝对严禁触碰 ~/.config/Antigravity/app_storage.json！
+        5. ~/.config/Antigravity/app_storage.json (防止 Electron 掉登录页)
         """
         exp_rfc = format_rfc3339(expiry_ts or (time.time() + 3600))
         ok_sec = False
@@ -501,13 +515,11 @@ class AntigravityPhysicalManager:
 
     def sync_local_credentials(self, email: str, access_token: str, refresh_token: str, expiry_ts: float):
         """
-        同步本地文件凭据 (对齐官方 Standalone 架构与 macOS 物理纯净标准):
+        同步本地文件凭据 (对齐官方 Standalone 架构与上游 v5.0.3 规范):
         1. ~/.gemini/jetski-standalone-oauth-token (语言服务优先回退凭据，0o600 权限)；
         2. ~/.gemini/oauth_creds.json (Gemini 官方标准凭据，毫秒时间戳保底正数，0o600 权限)；
         3. ~/.gemini/google_accounts.json (活跃指针，0o600 权限)；
-        【防掉登录页最高铁律】：绝不触碰 ~/.config/Antigravity/app_storage.json！
-        macOS 实测证明 Electron app_storage.json 属于前端私有运行时状态。篡改该文件会触发
-        storageService.onDidChange 事件，导致 React 前端误判账号突变并强跳 onboarding 登录页。
+        4. ~/.config/Antigravity/app_storage.json (注入 agy.onboarding.lastLoginUsername 杜绝掉登录页)。
         """
         now_ts = time.time()
         safe_expiry_ms = _safe_i64(expiry_ts * 1000)
@@ -516,7 +528,7 @@ class AntigravityPhysicalManager:
 
         clean_expiry_rfc = format_rfc3339(expiry_ts or (now_ts + 3600))
 
-        # 1. 写入 Standalone / 语言服务原生凭据: ~/.gemini/jetski-standalone-oauth-token (纯净 Token 结构)
+        # 1. 写入 Standalone / 语言服务原生凭据: ~/.gemini/jetski-standalone-oauth-token
         try:
             jetski_path = os.path.expanduser("~/.gemini/jetski-standalone-oauth-token")
             jetski_payload = {
@@ -524,9 +536,12 @@ class AntigravityPhysicalManager:
                     "access_token": str(access_token),
                     "token_type": "Bearer",
                     "refresh_token": str(refresh_token),
-                    "expiry": clean_expiry_rfc
+                    "expiry": clean_expiry_rfc,
+                    "expires_in": 3599
                 },
-                "auth_method": "consumer"
+                "auth_method": "consumer",
+                "id_token_email": email or "",
+                "id_token": ""
             }
             if atomic_write_json(jetski_path, jetski_payload):
                 try:
@@ -567,6 +582,19 @@ class AntigravityPhysicalManager:
                 logger.info(f"✅ 活跃账号已同步: {GOOGLE_ACCOUNTS_PATH} -> {email}")
         except Exception as e:
             logger.error(f"❌ 同步 google_accounts.json 失败: {e}")
+
+        # 4. 同步 Electron app_storage.json 的 lastLoginUsername 锁定
+        try:
+            app_storage_path = os.path.expanduser("~/.config/Antigravity/app_storage.json")
+            if os.path.isfile(app_storage_path):
+                with open(app_storage_path, "r", encoding="utf-8") as f:
+                    storage_data = json.load(f)
+                if storage_data.get("agy.onboarding.lastLoginUsername") != email:
+                    storage_data["agy.onboarding.lastLoginUsername"] = email
+                    atomic_write_json(app_storage_path, storage_data)
+                    logger.info(f"✅ Electron 登录指针已成功注入: {app_storage_path} -> {email}")
+        except Exception as e:
+            logger.warning(f"⚠️ 同步 app_storage.json 登录指针异常: {e}")
 
     def fetch_available_models(self, access_token: str) -> Tuple[str, List[str], Optional[Dict[str, Any]]]:
         """
