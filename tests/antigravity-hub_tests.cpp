@@ -73,6 +73,9 @@ private slots:
     // v3.0.7 Zero-Threshold Depletion Floor Invariants
     void v307SettingsZeroThresholdInvariants();
 
+    // v3.0.9 Ultra & Unified Gemini 4 (incl. Hydrogen) with Claude 4.6 Invariants
+    void v309UltraGemini4AndSafeSuper46Invariants();
+
     void cleanupTestCase();
 };
 
@@ -2068,6 +2071,71 @@ void AntigravityHubTests::v307SettingsZeroThresholdInvariants() {
 
     if (prevBaseUrl.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_BASE_URL");
     else qputenv("ANTIGRAVITY_HUB_BASE_URL", prevBaseUrl);
+    if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
+    else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
+}
+
+void AntigravityHubTests::v309UltraGemini4AndSafeSuper46Invariants() {
+    const QByteArray prevHubDir = qgetenv("ANTIGRAVITY_HUB_DIR");
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+    QDir(tempDir.path()).mkpath("data");
+
+    QJsonObject accountsObj;
+
+    // 1. ULTRA account with unified Gemini 4 (Carbon/Argon/Hydrogen) and Claude 4.6
+    QJsonObject cake;
+    cake["email"] = "cakeai888@gmail.com";
+    cake["name"] = "Daniel";
+    cake["tier"] = "ULTRA";
+    cake["pro"] = true;
+    cake["gemini4_supported"] = true;
+    cake["claude_version"] = "4.6";
+    cake["claude_models"] = QJsonArray({QStringLiteral("claude-sonnet-4-6"), QStringLiteral("claude-opus-4-6-thinking")});
+    QJsonObject cakeGem; cakeGem["quota_5h"] = 0.975; cakeGem["quota_weekly"] = 0.995;
+    cakeGem["reset_time_weekly"] = "2026-11-25T02:51:47Z";
+    cake["gemini"] = cakeGem;
+    QJsonObject cakeCla; cakeCla["quota_5h"] = 1.0; cakeCla["quota_weekly"] = 1.0;
+    cake["claude"] = cakeCla;
+    QJsonObject cakeG4; cakeG4["quota_weekly"] = 0.995; cakeG4["reset_time_weekly"] = "2026-11-25T02:51:47Z";
+    cake["gemini4"] = cakeG4;
+    accountsObj["cakeai888@gmail.com"] = cake;
+
+    // 2. Plain Claude 4.6 account with stale poisoned gemini4 (must still be suppressed!)
+    QJsonObject sup;
+    sup["email"] = "super46@gmail.com";
+    sup["name"] = "super46";
+    sup["tier"] = "PRO";
+    sup["claude_version"] = "4.6";
+    sup["claude_models"] = QJsonArray({QStringLiteral("claude-sonnet-4-6")});
+    QJsonObject supGem; supGem["quota_5h"] = 0.5; supGem["quota_weekly"] = 0.5; sup["gemini"] = supGem;
+    QJsonObject supCla; supCla["quota_5h"] = 1.0; supCla["quota_weekly"] = 1.0; sup["claude"] = supCla;
+    QJsonObject supG4; supG4["quota_weekly"] = 0.2757; sup["gemini4"] = supG4;
+    accountsObj["super46@gmail.com"] = sup;
+
+    QJsonObject rootDoc;
+    rootDoc["active_email"] = "cakeai888@gmail.com";
+    rootDoc["accounts"] = accountsObj;
+
+    QFile file(tempDir.filePath("data/accounts_hub.json"));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(QJsonDocument(rootDoc).toJson());
+    file.close();
+
+    AccountModel model;
+    int rowCake = model.findIndexByEmail("cakeai888@gmail.com");
+    QVERIFY(rowCake >= 0);
+    QModelIndex idxCake = model.index(rowCake, 0);
+    QCOMPARE(model.data(idxCake, AccountModel::HasClaude55Role).toBool(), false);
+    QCOMPARE(model.data(idxCake, AccountModel::Gemini4ValidRole).toBool(), true);
+    QCOMPARE(model.data(idxCake, AccountModel::Gemini4QuotaRole).toDouble(), 0.995);
+
+    int rowSup = model.findIndexByEmail("super46@gmail.com");
+    QVERIFY(rowSup >= 0);
+    QModelIndex idxSup = model.index(rowSup, 0);
+    QCOMPARE(model.data(idxSup, AccountModel::Gemini4ValidRole).toBool(), false);
+
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
 }

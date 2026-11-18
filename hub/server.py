@@ -13,6 +13,7 @@ Antigravity Hub 独立控制台与高密看板服务器 (antigravity_hub_server.
 import os
 import sys
 import json
+import gzip
 import time
 import base64
 import random
@@ -33,10 +34,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.8"
-__canonical_version_tag__ = "20261118-v3.0.8-PHYSICAL_MACOS_KEYCHAIN_PURITY_AND_NO_APP_STORAGE_MUTATION"
-__last_updated__ = "2026-11-11 22:00:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.7：保底告急阈值下限降至 0% 用尽再切换、两级隔离阻断 1% 低周额度抢占自动选号、TopG 与全策略统一语义"
+__version__ = "3.0.9"
+__canonical_version_tag__ = "20261118-v3.0.9-CCPA_PAID_TIER_LOCATION_GUARD_AND_GEMINI4_UNIFIED_QUOTA"
+__last_updated__ = "2026-11-18 13:40:00"
+__canonical_doctrine__ = "Antigravity Hub v3.0.9：内置 CCPA 付费订阅区域误判净化网关（根治 Linux v2.32 切号弹登录页）、全链路适配 Gemini 4 (Carbon/Argon/Hydrogen) 统一配额池与 Google AI Ultra 等级识别"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -97,6 +98,7 @@ GOOGLE_CLIENT_SECRET = os.environ.get(
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 QUOTA_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
 MODELS_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
+LOAD_CODE_ASSIST_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
 WARMUP_ENDPOINTS = [
     "https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent",
     "https://cloudcode-pa.googleapis.com/v1internal:generateContent"
@@ -264,12 +266,56 @@ def _safe_decode_resp(raw_bytes: bytes) -> str:
     if not raw_bytes:
         return ""
     if len(raw_bytes) >= 2 and raw_bytes[:2] == b'\x1f\x8b':
-        import gzip
         try:
             raw_bytes = gzip.decompress(raw_bytes)
         except Exception:
             pass
     return raw_bytes.decode("utf-8", errors="ignore")
+
+
+def sanitize_load_code_assist_payload(raw_bytes: bytes, is_gzip: bool = False) -> Tuple[bytes, bool]:
+    """
+    净化 /v1internal:loadCodeAssist 响应中的区域误判阻断：
+    当账号拥有合法付费订阅/标准权限 (standard-tier 或非 free-tier paidTier) 时，
+    剥离仅针对免费层的 ineligibleTiers (UNSUPPORTED_LOCATION)，对齐 macOS v2.31.0 放行逻辑；
+    对真正无资格账号原样透传，不做任何篡改。
+    """
+    if not raw_bytes:
+        return raw_bytes, False
+
+    was_gzip = bool(is_gzip) or (len(raw_bytes) >= 2 and raw_bytes[:2] == b"\x1f\x8b")
+    decoded_bytes = raw_bytes
+    if was_gzip:
+        try:
+            decoded_bytes = gzip.decompress(raw_bytes)
+        except Exception:
+            return raw_bytes, False
+
+    try:
+        j = json.loads(decoded_bytes.decode("utf-8"))
+    except Exception:
+        return raw_bytes, False
+
+    if not isinstance(j, dict):
+        return raw_bytes, False
+
+    allowed = j.get("allowedTiers") or []
+    cur_tier = j.get("currentTier")
+    paid_tier = j.get("paidTier") or {}
+    has_valid_paid_or_std = (
+        any(isinstance(t, dict) and t.get("id") == "standard-tier" for t in allowed)
+        or (isinstance(cur_tier, dict) and cur_tier.get("id") == "standard-tier")
+        or bool(isinstance(paid_tier, dict) and paid_tier.get("id") and paid_tier.get("id") != "free-tier")
+    )
+
+    if has_valid_paid_or_std and j.get("ineligibleTiers"):
+        j["ineligibleTiers"] = []
+        out_bytes = json.dumps(j).encode("utf-8")
+        if was_gzip:
+            out_bytes = gzip.compress(out_bytes)
+        return out_bytes, True
+
+    return raw_bytes, False
 
 
 def _safe_float(val: Any, default: float = 0.0) -> float:
@@ -612,7 +658,8 @@ class HubEngine:
                     acc_obj["claude_version"] = "4.6"
                     if not c_mods:
                         acc_obj["claude_models"] = ["claude-sonnet-4-6", "claude-opus-4-6-thinking"]
-                    if acc_obj.get("gemini4") is not None:
+                    allow_g4 = bool(acc_obj.get("gemini4_supported")) or (acc_obj.get("tier") == "ULTRA")
+                    if not allow_g4 and acc_obj.get("gemini4") is not None:
                         acc_obj["gemini4"] = None
                 else:
                     acc_obj["claude_version"] = "5.5"
@@ -843,7 +890,10 @@ class HubEngine:
                         q_groups = q_res.get("response", {}).get("groups", [])
                         for grp in q_groups:
                             grp_name = grp.get("displayName", "")
+                            grp_desc = grp.get("description", "")
+                            grp_meta_low = f"{grp_name} {grp_desc}".lower()
                             is_g4_grp = ("gemini 4" in grp_name.lower() or "argon" in grp_name.lower())
+                            has_g4_in_unified = any(k in grp_meta_low for k in ("gemini 4", "gemini-4", "argon", "carbon", "hydrogen"))
                             for bkt in grp.get("buckets", []):
                                 bid = bkt.get("bucketId", "")
                                 rem = bkt.get("remainingFraction")
@@ -856,6 +906,13 @@ class HubEngine:
                                         if rst:
                                             g_d["reset_time_weekly"] = str(rst)
                                             g_d["reset_time"] = str(rst)
+                                        if has_g4_in_unified:
+                                            g4_d = acc.setdefault("gemini4", {})
+                                            g4_d["quota_weekly"] = val
+                                            if rst:
+                                                g4_d["reset_time_weekly"] = str(rst)
+                                            acc["gemini4_supported"] = True
+                                            g4_from_ls_summary = True
                                         updated_any = True
                                     elif bid == "gemini-5h":
                                         g_d = acc.setdefault("gemini", {})
@@ -881,21 +938,23 @@ class HubEngine:
                                         g4_d["quota_weekly"] = val
                                         if rst:
                                             g4_d["reset_time_weekly"] = str(rst)
+                                        acc["gemini4_supported"] = True
                                         g4_from_ls_summary = True
                                         updated_any = True
                 except Exception as qe:
                     logger.debug(f"本地 language_server RetrieveUserQuotaSummary 直连探测跳过: {qe}")
 
-                # 🎯【第二真源：GetUserStatus 提取可用模型矩阵与精确 Argon 判定】
+                # 🎯【第二真源：GetUserStatus 提取可用模型矩阵与精确 Gemini 4 (Argon/Carbon/Hydrogen) 判定】
                 configs = u_status.get("cascadeModelConfigData", {}).get("clientModelConfigs", [])
                 if not configs:
                     continue
 
                 argon_found = None
+                g4_model_found = None
                 argon_disabled = False
                 c_models = []
                 for m in configs:
-                    m_id = str(m.get("modelId") or "")
+                    m_id = str(m.get("modelId") or (m.get("modelOrAlias") or {}).get("model") or "")
                     m_lbl = str(m.get("label") or "")
                     q_info = m.get("quotaInfo") or {}
                     rem = q_info.get("remainingFraction")
@@ -903,10 +962,10 @@ class HubEngine:
                     m_id_low = m_id.lower()
                     m_lbl_low = m_lbl.lower()
 
-                    if "claude" in m_id_low:
-                        c_models.append(m_id)
+                    if "claude" in m_id_low or "claude" in m_lbl_low:
+                        c_models.append(m_id if "claude" in m_id_low else m_lbl)
 
-                    # 严格聚焦 Argon 模型，彻底忽略内部未发布的 gemini-4-carbon-disabled 干扰！
+                    # 严格聚焦 Argon 与已开放 Gemini 4 模型，彻底忽略内部未发布的 gemini-4-carbon-disabled 干扰！
                     if "argon" in m_id_low or "argon" in m_lbl_low:
                         if "disabled" in m_id_low or rem is None:
                             argon_disabled = True
@@ -915,19 +974,29 @@ class HubEngine:
                                 "quota_weekly": float(rem),
                                 "reset_time_weekly": reset
                             }
+                    elif any(k in f"{m_id_low} {m_lbl_low}" for k in ("gemini 4", "gemini-4", "carbon", "hydrogen")):
+                        if "disabled" not in m_id_low and rem is not None and g4_model_found is None:
+                            g4_model_found = {
+                                "quota_weekly": float(rem),
+                                "reset_time_weekly": reset
+                            }
 
                 ls_has_55 = any(("5-5" in cm or "5.5" in cm) for cm in c_models)
-                # 只有在 RetrieveUserQuotaSummary 未明确抓取到 Argon 时，才采用 GetUserStatus 进行兜底判定
+                effective_g4 = argon_found or g4_model_found
+                if g4_from_ls_summary or effective_g4 is not None:
+                    acc["gemini4_supported"] = True
+                # 只有在 RetrieveUserQuotaSummary 未明确抓取到 Gemini 4 桶时，才采用 GetUserStatus 进行兜底判定
                 if not g4_from_ls_summary:
-                    if (argon_disabled and argon_found is None) or (c_models and not ls_has_55):
+                    if effective_g4 is not None:
+                        # 发现有效 Gemini 4 周配额，更新账号独立周额度
+                        prev_g4 = acc.get("gemini4")
+                        if prev_g4 != effective_g4:
+                            acc["gemini4"] = effective_g4
+                            updated_any = True
+                    elif (argon_disabled and not ls_has_55) or (c_models and not ls_has_55 and acc.get("tier") != "ULTRA"):
                         if acc.get("gemini4") is not None:
                             acc["gemini4"] = None
-                            updated_any = True
-                    elif argon_found is not None:
-                        # 发现有效 Argon 周配额，更新账号独立周额度
-                        prev_g4 = acc.get("gemini4")
-                        if prev_g4 != argon_found:
-                            acc["gemini4"] = argon_found
+                            acc["gemini4_supported"] = False
                             updated_any = True
 
                 if c_models:
@@ -1189,12 +1258,74 @@ class HubEngine:
             logger.error(f"Google Token 刷新失败: {e}")
             return None
 
-    def fetch_live_quota(self, access_token: str) -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
+    def probe_account_entitlement_and_g4(self, access_token: str) -> Dict[str, Any]:
+        """
+        探测账号订阅等级 (ULTRA / PRO / FREE)、cloudaicompanionProject 及是否开通 Gemini 4 (Carbon/Argon/Hydrogen)。
+        """
+        if not access_token or not str(access_token).startswith("ya29."):
+            return {}
+        result: Dict[str, Any] = {}
+        ctx = ssl.create_default_context()
+        hdrs = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "User-Agent": "antigravity/2.32.1 linux/amd64",
+        }
+        try:
+            lca_req = urllib.request.Request(
+                LOAD_CODE_ASSIST_ENDPOINT,
+                data=json.dumps({
+                    "metadata": {
+                        "ideType": "IDE_UNSPECIFIED",
+                        "platform": "PLATFORM_UNSPECIFIED",
+                        "pluginType": "GEMINI",
+                    }
+                }).encode("utf-8"),
+                headers=hdrs,
+                method="POST",
+            )
+            with urllib.request.urlopen(lca_req, timeout=8, context=ctx) as resp:
+                lca = json.loads(_safe_decode_resp(resp.read()))
+            project = str(lca.get("cloudaicompanionProject") or "aicode-consumers")
+            result["project"] = project
+            paid_id = str((lca.get("paidTier") or {}).get("id") or "").lower()
+            if "ultra" in paid_id:
+                result["tier"] = "ULTRA"
+            elif "pro" in paid_id:
+                result["tier"] = "PRO"
+            elif "free" in paid_id:
+                result["tier"] = "FREE"
+        except Exception as e:
+            logger.debug(f"探测 loadCodeAssist 订阅等级跳过: {e}")
+
+        try:
+            proj_arg = result.get("project") or "aicode-consumers"
+            fam_req = urllib.request.Request(
+                MODELS_ENDPOINT,
+                data=json.dumps({"project": proj_arg}).encode("utf-8"),
+                headers=hdrs,
+                method="POST",
+            )
+            with urllib.request.urlopen(fam_req, timeout=8, context=ctx) as resp:
+                fam = json.loads(_safe_decode_resp(resp.read()))
+            models_dict = fam.get("models") or {}
+            has_g4 = any(
+                any(k in mid.lower() for k in ("gemini-4", "hydrogen", "carbon", "argon"))
+                and "disabled" not in mid.lower()
+                for mid in models_dict.keys()
+            )
+            result["has_gemini4"] = has_g4
+        except Exception as e:
+            logger.debug(f"探测 Gemini 4 模型权限跳过: {e}")
+
+        return result
+
+    def fetch_live_quota(self, access_token: str, project: str = "aicode-consumers") -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
         """
         拉取配额，返回: (quotas, resets, validation_url)
         若触发 403 VALIDATION_REQUIRED，validation_url 会携带解封链接
         """
-        payload = json.dumps({"project": "aicode-consumers"}).encode("utf-8")
+        payload = json.dumps({"project": project or "aicode-consumers"}).encode("utf-8")
         req = urllib.request.Request(
             QUOTA_ENDPOINT,
             headers={
@@ -1215,7 +1346,10 @@ class HubEngine:
                 data = json.loads(body_str)
             for group in data.get("groups", []):
                 grp_name = group.get("displayName", "")
+                grp_desc = group.get("description", "")
+                grp_meta_low = f"{grp_name} {grp_desc}".lower()
                 is_g4_grp = ("gemini 4" in grp_name.lower() or "gemini-4" in grp_name.lower() or "argon" in grp_name.lower())
+                has_g4_in_unified = any(k in grp_meta_low for k in ("gemini 4", "gemini-4", "argon", "carbon", "hydrogen"))
                 for bucket in group.get("buckets", []):
                     b_id = bucket.get("bucketId", "")
                     rem = bucket.get("remainingFraction")
@@ -1224,7 +1358,7 @@ class HubEngine:
                         quotas[b_id] = float(rem) if rem is not None else 0.0
                         if reset:
                             resets[b_id] = str(reset)
-                        if is_g4_grp or "gemini-4" in b_id.lower() or "gemini4" in b_id.lower() or "argon" in b_id.lower():
+                        if is_g4_grp or "gemini-4" in b_id.lower() or "gemini4" in b_id.lower() or "argon" in b_id.lower() or (b_id == "gemini-weekly" and has_g4_in_unified):
                             quotas["gemini4-weekly"] = float(rem) if rem is not None else 0.0
                             if reset:
                                 resets["gemini4-weekly"] = str(reset)
@@ -1435,15 +1569,27 @@ class HubEngine:
             logger.warning(f"账号 {email} 无法获取有效 access_token，跳过配额刷新")
             return False
 
-        # 2. 向端点发起探测
-        quotas, resets, val_url = self.fetch_live_quota(at)
+        # 1.5 探测真实订阅等级 (ULTRA/PRO/FREE)、Project 与 Gemini 4 模型权限
+        ent = self.probe_account_entitlement_and_g4(at)
+        if ent.get("tier"):
+            acc["tier"] = ent["tier"]
+            acc["pro"] = (ent["tier"] in ("PRO", "ULTRA"))
+        proj = ent.get("project") or "aicode-consumers"
+
+        # 2. 向端点发起探测 (默认 project 时保持单参调用兼容测试 mock)
+        quotas, resets, val_url = self.fetch_live_quota(at) if proj == "aicode-consumers" else self.fetch_live_quota(at, project=proj)
         if not quotas and not val_url and rt:
             # 捕获 401 或无效 Token，启动强制刷新一次性自愈
             logger.warning(f"⚠️ 账号 {email} 探测配额返回空或 401，立即启动强制 Token 续签自愈...")
             new_at, ok = self.ensure_fresh_token(acc, force=True)
             if ok and new_at:
                 at = new_at
-                quotas, resets, val_url = self.fetch_live_quota(at)
+                ent = self.probe_account_entitlement_and_g4(at) or ent
+                if ent.get("tier"):
+                    acc["tier"] = ent["tier"]
+                    acc["pro"] = (ent["tier"] in ("PRO", "ULTRA"))
+                proj = ent.get("project") or "aicode-consumers"
+                quotas, resets, val_url = self.fetch_live_quota(at) if proj == "aicode-consumers" else self.fetch_live_quota(at, project=proj)
         if val_url is not None:
             # 捕获到 Google 风控拦截，立即熔断
             acc["validation_blocked"] = True
@@ -1452,6 +1598,8 @@ class HubEngine:
             self._sync_antigravity_tools_cache(acc_id, validation_blocked=True, val_url=val_url)
             logger.error(f"🚨 [风控捕获] 账号 {email} 触发 Google VALIDATION_REQUIRED，已熔断！解封地址: {val_url}")
             return False
+
+        has_g4_entitlement = bool(ent.get("has_gemini4")) or (acc.get("tier") == "ULTRA")
 
         if quotas:
             # 只要成功返回配额，立即清除 validation_blocked、validation_url 并同步持久化
@@ -1508,7 +1656,7 @@ class HubEngine:
             elif resets.get("3p-5h"):
                 acc["claude"]["reset_time"] = resets["3p-5h"]
 
-            # Gemini 4 周配额专属提取 (若开通则记录，无开通则保留既有状态)
+            # Gemini 4 周配额专属提取 (含统一池映射与 Ultra/Hydrogen 权限识别)
             g4_weekly_quota = quotas.get("gemini4-weekly")
             if g4_weekly_quota is not None:
                 if "gemini4" not in acc or not isinstance(acc.get("gemini4"), dict):
@@ -1516,6 +1664,15 @@ class HubEngine:
                 acc["gemini4"]["quota_weekly"] = g4_weekly_quota
                 if resets.get("gemini4-weekly"):
                     acc["gemini4"]["reset_time_weekly"] = resets["gemini4-weekly"]
+                acc["gemini4_supported"] = True
+            elif has_g4_entitlement:
+                if "gemini4" not in acc or not isinstance(acc.get("gemini4"), dict):
+                    acc["gemini4"] = {}
+                acc["gemini4"]["quota_weekly"] = quotas.get("gemini-weekly", acc["gemini"].get("quota_weekly", 1.0))
+                g_rst = resets.get("gemini-weekly") or acc["gemini"].get("reset_time_weekly", "")
+                if g_rst:
+                    acc["gemini4"]["reset_time_weekly"] = g_rst
+                acc["gemini4_supported"] = True
 
         # 3. 探测模型矩阵 (确定 Claude 5.5 付费Pro 徽章与可用模型)
         try:
@@ -1524,10 +1681,13 @@ class HubEngine:
             if c_mods:
                 acc["claude_models"] = c_mods
                 acc["claude_version"] = c_ver
-            # 业务真理门禁：绝不将 gemini 3.8 周配额虚假复制赋给 gemini4；非 5.5 (4.6) 且无官方 gemini4-weekly 返回时强制清零防串台
+            # 业务真理门禁：绝不将 gemini 3.8 周配额虚假复制赋给 gemini4；非 5.5 (4.6) 且无官方 Gemini 4 权限/统一池返回时强制清零防串台
             is_pro_55 = (c_ver == "5.5" or any(("5-5" in m or "5.5" in m) for m in c_mods))
-            if not is_pro_55 and not g4_from_summary:
+            if is_pro_55:
+                acc["gemini4_supported"] = True
+            elif not g4_from_summary and not has_g4_entitlement:
                 acc["gemini4"] = None
+                acc["gemini4_supported"] = False
         except Exception:
             pass
 
@@ -1950,7 +2110,7 @@ def render_table_rows(include_oob: bool = False) -> str:
         accounts = data.get("accounts", {})
 
     total_count = len(accounts)
-    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
+    pro_count = sum(1 for a in accounts.values() if a.get("tier") in ("PRO", "ULTRA"))
     avg_g = format_quota_int_pct(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     avg_c = format_quota_int_pct(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     cur_time = time.strftime("%H:%M:%S")
@@ -2028,15 +2188,16 @@ def render_table_rows(include_oob: bool = False) -> str:
         claude_ver = "5.5" if has_real_55 else "4.6"
         is_pro_55 = (claude_ver == "5.5")
 
-        # Gemini 4 配额 (业务真理: 仅 5.5 账号具备 Gemini 4；4.6 账号即使存在历史残留也强制显示 —)
+        # Gemini 4 配额 (支持 Claude 5.5 及已开通 Gemini 4 / Ultra 统一池的账号)
+        allow_g4 = is_pro_55 or bool(acc.get("gemini4_supported")) or (acc.get("tier") == "ULTRA")
         g4_info = acc.get("gemini4") or acc.get("gemini_4")
-        if is_pro_55 and g4_info and isinstance(g4_info, dict) and "quota_weekly" in g4_info and g4_info.get("quota_weekly") is not None:
+        if allow_g4 and g4_info and isinstance(g4_info, dict) and "quota_weekly" in g4_info and g4_info.get("quota_weekly") is not None:
             g4_w = _safe_float(g4_info.get("quota_weekly"))
             g4_reset_raw = g4_info.get("reset_time_weekly", "")
             g4_reset_w = format_reset_time(g4_reset_raw)
             g4_cell = render_gemini4_cell(g4_w, g4_reset_w)
-        elif is_pro_55:
-            # 5.5 账号必然开通 Gemini 4，若尚无独立周记录，继承当前账号周度可用健康配额
+        elif allow_g4:
+            # 已开通 Gemini 4 权限但暂无独立周记录时，继承统一池周度可用健康配额
             g4_w = _safe_float(acc.get("gemini", {}).get("quota_weekly", 1.0), 1.0)
             g4_reset_raw = acc.get("gemini", {}).get("reset_time_weekly", "")
             g4_reset_w = format_reset_time(g4_reset_raw)
@@ -2178,7 +2339,7 @@ def render_dashboard_html() -> str:
     total_count = len(accounts)
     c55_count = sum(1 for a in accounts.values() if any(("5-5" in m or "5.5" in m) for m in (a.get("claude_models") or [])))
     c46_count = total_count - c55_count
-    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
+    pro_count = sum(1 for a in accounts.values() if a.get("tier") in ("PRO", "ULTRA"))
     avg_g = format_quota_int_pct(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     avg_c = format_quota_int_pct(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     cur_time = time.strftime("%H:%M:%S")
@@ -5923,10 +6084,93 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         try:
             msg = format % args
-            if "/api/table" not in msg and "/api/oauth/poll" not in msg:
+            if "/api/table" not in msg and "/api/oauth/poll" not in msg and "/api/health" not in msg:
                 logger.info(f"{self.client_address[0]} - {msg}")
         except Exception:
             pass
+
+    def handle_ccpa_proxy(self, method: str):
+        hop_by_hop = {
+            "host", "content-length", "connection", "keep-alive",
+            "proxy-authenticate", "proxy-authorization", "te",
+            "trailers", "transfer-encoding", "upgrade"
+        }
+        parsed = urllib.parse.urlparse(self.path)
+        subpath = parsed.path
+        if subpath.startswith("/ccpa"):
+            subpath = subpath[len("/ccpa"):]
+
+        target_url = "https://daily-cloudcode-pa.googleapis.com" + subpath
+        if parsed.query:
+            target_url += "?" + parsed.query
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length) if content_length > 0 else None
+
+        req = urllib.request.Request(target_url, data=body, method=method)
+        for k, v in self.headers.items():
+            if k.lower() not in hop_by_hop:
+                req.add_header(k, v)
+
+        is_stream = ("stream" in subpath.lower() or "atomicagenticchat" in subpath.lower())
+        timeout_sec = 600 if is_stream else 45
+        ctx = ssl.create_default_context()
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_sec, context=ctx) as resp:
+                resp_headers = dict(resp.headers)
+
+                # 流式响应 (streamGenerateContent / AtomicAgenticChat 等) 零缓冲分块直通
+                if is_stream:
+                    self.close_connection = True
+                    self.send_response(resp.status)
+                    for k, v in resp_headers.items():
+                        if k.lower() not in hop_by_hop:
+                            self.send_header(k, v)
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    while True:
+                        chunk = resp.read1(8192) if hasattr(resp, "read1") else resp.read(4096)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                    return
+
+                raw_data = resp.read()
+                is_gzip = resp_headers.get("Content-Encoding", "").lower() == "gzip" or raw_data.startswith(b"\x1f\x8b")
+                data = raw_data
+
+                if "loadCodeAssist" in subpath:
+                    data, sanitized = sanitize_load_code_assist_payload(raw_data, is_gzip=is_gzip)
+                    if sanitized:
+                        logger.info("🛡️ [CCPA Proxy] 成功拦截并净化 loadCodeAssist 区域风控响应，放行正规付费订阅！")
+
+                self.send_response(resp.status)
+                for k, v in resp_headers.items():
+                    if k.lower() not in hop_by_hop:
+                        self.send_header(k, v)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+            logger.debug(f"CCPA Proxy 客户端提前关闭流连接: {subpath}")
+        except urllib.error.HTTPError as e:
+            err_data = e.read()
+            self.send_response(e.code)
+            for k, v in e.headers.items():
+                if k.lower() not in hop_by_hop:
+                    self.send_header(k, v)
+            self.send_header("Content-Length", str(len(err_data)))
+            self.end_headers()
+            self.wfile.write(err_data)
+        except Exception as ex:
+            logger.error(f"❌ [CCPA Proxy] 代理请求异常 ({method} {subpath}): {ex}")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(ex)}).encode("utf-8"))
 
     def do_HEAD(self):
         self.send_response(200)
@@ -5935,7 +6179,16 @@ class HubHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/static/htmx.min.js":
+        if parsed.path.startswith("/ccpa"):
+            self.handle_ccpa_proxy("GET")
+            return
+        elif parsed.path == "/api/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+            return
+        elif parsed.path == "/static/htmx.min.js":
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript; charset=utf-8")
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
@@ -6085,6 +6338,10 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path.startswith("/ccpa"):
+            self.handle_ccpa_proxy("POST")
+            return
+
         content_length = int(self.headers.get("Content-Length", 0))
         post_data = self.rfile.read(content_length).decode("utf-8")
         params = urllib.parse.parse_qs(post_data)

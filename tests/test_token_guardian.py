@@ -23,7 +23,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.switcher import AntigravityPhysicalManager, format_rfc3339
-from hub.server import HubEngine, TOKEN_REFRESH_SKEW_SECONDS
+from hub.server import HubEngine, TOKEN_REFRESH_SKEW_SECONDS, sanitize_load_code_assist_payload, render_table_rows
 
 
 class TestTokenGuardian(unittest.TestCase):
@@ -370,6 +370,102 @@ class TestTokenGuardian(unittest.TestCase):
             # 必须断言没有任何写操作指向 app_storage.json
             for p in written_paths:
                 self.assertNotIn("app_storage.json", p, f"违规写入了 app_storage: {p}")
+
+    def test_ccpa_load_code_assist_sanitizer_preserves_unpaid_and_cleans_paid(self):
+        """验证 CCPA 净化器：仅对拥有合法付费/standard-tier 的账号剥离 free-tier 地区阻断，纯无权限账号保持原样"""
+        import gzip
+
+        paid_payload = {
+            "currentTier": {"id": "standard-tier", "name": "Antigravity"},
+            "allowedTiers": [{"id": "standard-tier", "name": "Antigravity", "isDefault": True}],
+            "ineligibleTiers": [
+                {
+                    "reasonCode": "UNSUPPORTED_LOCATION",
+                    "reasonMessage": "Your current account is not eligible for Antigravity, because it is not currently available in your location.",
+                    "tierId": "free-tier",
+                    "tierName": "Antigravity"
+                }
+            ],
+            "paidTier": {"id": "g1-ultra-tier", "name": "Google AI Ultra"}
+        }
+
+        # 1. 明文 JSON 测试 (cakeai888 Ultra 场景)
+        raw_plain = json.dumps(paid_payload).encode("utf-8")
+        cleaned_plain, modified_plain = sanitize_load_code_assist_payload(raw_plain, is_gzip=False)
+        self.assertTrue(modified_plain)
+        parsed_plain = json.loads(cleaned_plain.decode("utf-8"))
+        self.assertEqual(parsed_plain["ineligibleTiers"], [])
+        self.assertEqual(parsed_plain["paidTier"]["id"], "g1-ultra-tier")
+        self.assertEqual(parsed_plain["allowedTiers"][0]["id"], "standard-tier")
+
+        # 2. Gzip 压缩载荷测试 (保持 gzip 压缩格式)
+        raw_gz = gzip.compress(raw_plain)
+        cleaned_gz, modified_gz = sanitize_load_code_assist_payload(raw_gz, is_gzip=True)
+        self.assertTrue(modified_gz)
+        self.assertTrue(cleaned_gz.startswith(b"\x1f\x8b"))
+        parsed_gz = json.loads(gzip.decompress(cleaned_gz).decode("utf-8"))
+        self.assertEqual(parsed_gz["ineligibleTiers"], [])
+
+        # 3. 纯无订阅且无 standard-tier 账号 (绝不篡改)
+        unpaid_payload = {
+            "allowedTiers": [],
+            "ineligibleTiers": [
+                {"reasonCode": "UNSUPPORTED_LOCATION", "tierId": "free-tier"}
+            ]
+        }
+        raw_unpaid = json.dumps(unpaid_payload).encode("utf-8")
+        cleaned_unpaid, modified_unpaid = sanitize_load_code_assist_payload(raw_unpaid, is_gzip=False)
+        self.assertFalse(modified_unpaid)
+        self.assertEqual(json.loads(cleaned_unpaid.decode("utf-8"))["ineligibleTiers"][0]["reasonCode"], "UNSUPPORTED_LOCATION")
+
+    def test_ultra_account_gemini4_hydrogen_retained_with_claude_46(self):
+        """验证 ULTRA / Gemini 4 (含 Hydrogen) 账号即使 Claude 为 4.6 也不被误清空 gemini4 配额，且在看板正确呈现"""
+        import tempfile
+        import hub.server as hub_server
+
+        email = "cakeai888@gmail.com"
+        acc = {
+            "id": "acc_ultra_g4",
+            "email": email,
+            "tier": "PRO",
+            "access_token": "ya29.fake_valid_ultra",
+            "refresh_token": "rt_ultra",
+            "expires_at": time.time() + 2500,
+            "gemini": {},
+            "claude": {},
+            "gemini4": None
+        }
+        ent_mock = {"project": "aicode-consumers", "tier": "ULTRA", "has_gemini4": True}
+        quotas_mock = (
+            {"gemini-5h": 0.975, "gemini-weekly": 0.995, "3p-5h": 0.9999, "3p-weekly": 1.0},
+            {"gemini-5h": "2026-11-18T07:51:47Z", "gemini-weekly": "2026-11-25T02:51:47Z"},
+            None
+        )
+        with patch.object(self.engine, "probe_account_entitlement_and_g4", return_value=ent_mock):
+            with patch.object(self.engine, "fetch_live_quota", return_value=quotas_mock):
+                with patch.object(self.engine, "fetch_available_models", return_value=("4.6", ["claude-sonnet-4-6", "claude-opus-4-6-thinking"])):
+                    with patch.object(self.engine, "_sync_antigravity_tools_cache"):
+                        ok = self.engine.refresh_single_account_quota(email, acc)
+                        self.assertTrue(ok)
+                        self.assertEqual(acc["tier"], "ULTRA")
+                        self.assertTrue(acc.get("gemini4_supported"))
+                        self.assertIsNotNone(acc.get("gemini4"))
+                        self.assertAlmostEqual(acc["gemini4"]["quota_weekly"], 0.995, places=3)
+
+        # 验证 save_accounts 保留 ULTRA + gemini4_supported 的 gemini4 字段，且 render_table_rows 正确渲染而非 "—"
+        with tempfile.TemporaryDirectory() as td:
+            fake_data = {"active_email": email, "accounts": {email: acc}}
+            with patch.object(hub_server, "ACCOUNTS_HUB_FILE", os.path.join(td, "accounts_hub.json")):
+                with patch("hub.server.atomic_write_json", return_value=True):
+                    with patch.object(self.engine, "sync_external_pools"):
+                        self.engine.save_accounts(fake_data)
+            self.assertIsNotNone(fake_data["accounts"][email]["gemini4"])
+            self.assertAlmostEqual(fake_data["accounts"][email]["gemini4"]["quota_weekly"], 0.995, places=3)
+
+            with patch.object(hub_server.ENGINE, "load_accounts", return_value=fake_data):
+                html = render_table_rows(include_oob=False)
+                self.assertIn('data-gemini4-w="0.995"', html)
+                self.assertNotIn("未开通 Gemini 4", html)
 
 
 if __name__ == "__main__":

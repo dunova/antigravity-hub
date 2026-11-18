@@ -282,7 +282,7 @@ class AntigravityPhysicalManager:
             logger.error(f"❌ Google OAuth 续签网络异常: {e}")
             return None
 
-    def fetch_live_quota(self, access_token: str) -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
+    def fetch_live_quota(self, access_token: str, project: str = "aicode-consumers") -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
         """
         探测 Google 官方配额接口：
         返回: (quotas_dict, resets_dict, validation_url)
@@ -296,7 +296,7 @@ class AntigravityPhysicalManager:
                 "User-Agent": NATIVE_OAUTH_USER_AGENT
             },
             method="POST",
-            data=b"{}"
+            data=json.dumps({"project": project or "aicode-consumers"}).encode("utf-8")
         )
         ctx = ssl.create_default_context()
         quotas = {}
@@ -307,7 +307,9 @@ class AntigravityPhysicalManager:
                 data = json.loads(body_str)
             for group in data.get("groups", []):
                 grp_name = group.get("displayName", "")
-                is_g4_grp = "gemini 4" in grp_name.lower() or "gemini-4" in grp_name.lower()
+                grp_desc = group.get("description", "")
+                grp_meta_low = f"{grp_name} {grp_desc}".lower()
+                is_g4_grp = any(k in grp_meta_low for k in ("gemini 4", "gemini-4", "argon", "carbon", "hydrogen"))
                 for bucket in group.get("buckets", []):
                     b_id = bucket.get("bucketId", "")
                     rem = bucket.get("remainingFraction")
@@ -316,7 +318,7 @@ class AntigravityPhysicalManager:
                         quotas[b_id] = float(rem) if rem is not None else 0.0
                         if reset:
                             resets[b_id] = str(reset)
-                        if is_g4_grp or "gemini-4" in b_id.lower() or "gemini4" in b_id.lower():
+                        if is_g4_grp and b_id == "gemini-weekly" or ("gemini-4" in b_id.lower() or "gemini4" in b_id.lower()):
                             quotas["gemini4-weekly"] = float(rem) if rem is not None else 0.0
                             if reset:
                                 resets["gemini4-weekly"] = str(reset)
@@ -603,7 +605,7 @@ class AntigravityPhysicalManager:
                         has_55 = True
                     elif "4-6" in m_id_low or "4.6" in m_id_low:
                         has_46 = True
-                if "gemini-4" in m_id_low or "argon" in m_id_low:
+                if any(k in m_id_low for k in ("gemini-4", "argon", "carbon", "hydrogen")) and "disabled" not in m_id_low:
                     qi = m_obj.get("quotaInfo", {})
                     if qi and qi.get("remainingFraction") is not None:
                         g4_info = {
