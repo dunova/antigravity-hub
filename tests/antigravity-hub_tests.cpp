@@ -81,7 +81,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("3.1.1"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.0.0"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1443,19 +1443,36 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     const QString mainContent = QString::fromUtf8(mainFile.readAll());
     mainFile.close();
 
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*940\b)"))), "Main.qml width != 940");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*minimumWidth\b)"))), "Main.qml default width must equal minimumWidth");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*920\b)"))), "Main.qml minimumWidth != 920");
-    QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth to allow Hyprland dynamic tiling");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*800\b)"))), "Main.qml height != 800");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*540\b)"))), "Main.qml minimumHeight != 540");
+    QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth to allow manual stretching & dynamic tiling");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*idealHeight\b)"))), "Main.qml default height must be adaptive idealHeight");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*360\b)"))), "Main.qml minimumHeight != 360");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*896\b)"))), "Main.qml contentWidth != 896");
 
-    // 2. Offscreen Dynamic Instantiation of Main.qml
+    // 2. Offscreen Dynamic Instantiation of Main.qml with 14 mock accounts (verify exact 920x772 adaptive fit)
     QQmlEngine engine;
     engine.addImageProvider(QStringLiteral("icons"), new IconProvider());
 
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
+    QDir(tempDir.path()).mkpath("data");
+    QJsonObject accs14;
+    for (int i = 1; i <= 14; ++i) {
+        QJsonObject a;
+        const QString em = QStringLiteral("demo%1@example.com").arg(i);
+        a["email"] = em;
+        a["tier"] = (i <= 3) ? QStringLiteral("PAID_PRO") : (i <= 5 ? QStringLiteral("FREE_PRO") : QStringLiteral("FREE"));
+        a["has_5h"] = (i <= 5);
+        accs14[em] = a;
+    }
+    QJsonObject doc14;
+    doc14["active_email"] = QStringLiteral("demo1@example.com");
+    doc14["accounts"] = accs14;
+    QFile f14(tempDir.filePath("data/accounts_hub.json"));
+    QVERIFY(f14.open(QIODevice::WriteOnly));
+    f14.write(QJsonDocument(doc14).toJson());
+    f14.close();
     qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
 
     Theme theme(tempDir.path());
@@ -1483,19 +1500,22 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     QQuickWindow *win = qobject_cast<QQuickWindow*>(rootObj.data());
     QVERIFY2(win != nullptr, "Main.qml root object is not a QQuickWindow");
 
-    QCOMPARE(win->width(), 940);
-    QCOMPARE(win->height(), 800);
+    QCOMPARE(win->width(), 920);
     QCOMPARE(win->property("minimumWidth").toInt(), 920);
-    QCOMPARE(win->property("minimumHeight").toInt(), 540);
+    QCOMPARE(win->property("minimumHeight").toInt(), 360);
     QCOMPARE(win->property("contentWidth").toInt(), 896);
+    QCOMPARE(win->height(), win->property("idealHeight").toInt());
+    QCOMPARE(win->property("rawIdealHeight").toInt(), 772);
+    QVERIFY(win->property("idealHeight").toInt() <= 772 && win->property("idealHeight").toInt() >= 360);
 
     win->show();
     QCoreApplication::processEvents();
 
-    // Resize stress test: window geometry constraints enforce fixed contentWidth
+    // Resize stress test: manual stretching works freely while preserving contentWidth baseline
     win->resize(1280, 900);
     QCoreApplication::processEvents();
     QCOMPARE(win->property("contentWidth").toInt(), 896);
+    QCOMPARE(win->property("userResizedManually").toBool(), true);
 }
 
 void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {

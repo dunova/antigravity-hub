@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.1.1"
-__canonical_version_tag__ = "20261120-v3.1.1-GLOBAL_GEMINI_AND_PAID_PRO_ROTATION"
-__last_updated__ = "2026-11-20 20:30:00"
-__canonical_doctrine__ = "Antigravity Hub v3.1.1：自动轮转三态升级（全局 Gemini / 仅付费 PRO / 已关闭），彻底移除无意义的 Claude 轮转"
+__version__ = "4.0.0"
+__canonical_version_tag__ = "20261120-v4.0.0-THREE_TIER_OFFICIAL_LAYOUT_AND_SMART_ROTATION"
+__last_updated__ = "2026-11-20 20:40:00"
+__canonical_doctrine__ = "Antigravity Hub v4.0.0：全自动三档账号分类、对齐官方 Gemini/Claude 双列、FREE 单轨周限、全局 Gemini 与付费 PRO 专享轮转、最小宽度与自适应高度窗口"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub

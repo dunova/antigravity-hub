@@ -2,17 +2,59 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Controls.Material 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 
 ApplicationWindow {
     id: appWindow
     visible: true
-    // 最佳默认宽度与内容锁定（内容 896 + 外边距 24 = 920），完美适配系统动态平铺分屏与极简防截断
+    // 默认即最小紧凑宽度（内容 896 + 左右边距 24 = 920），高度按账号数量精准自适应，允许用户自由拉伸
     readonly property int contentWidth: 896
-    width: 940
+    readonly property int baseChromeHeight: 184
+    readonly property int rowHeightPx: 42
+    readonly property int adaptiveRowCount: accountModel ? Math.max(4, Math.min(15, accountModel.count)) : 8
+    readonly property int rawIdealHeight: baseChromeHeight + adaptiveRowCount * rowHeightPx
+    readonly property int idealHeight: {
+        var maxH = (Screen && Screen.desktopAvailableHeight > 400) ? (Screen.desktopAvailableHeight - 80) : 860;
+        return Math.max(minimumHeight, Math.min(maxH, rawIdealHeight));
+    }
+    property bool userResizedManually: false
+    property bool applyingAutoGeometry: false
+
     minimumWidth: 920
-    height: 800
-    minimumHeight: 540
+    width: minimumWidth
+    minimumHeight: 360
+    height: idealHeight
     title: qsTr("Antigravity Hub")
+
+    function applyAdaptiveHeight() {
+        if (userResizedManually) return;
+        var targetH = idealHeight;
+        if (Math.abs(height - targetH) > 1) {
+            applyingAutoGeometry = true;
+            height = targetH;
+            applyingAutoGeometry = false;
+        }
+    }
+
+    onHeightChanged: {
+        if (!applyingAutoGeometry && visible && Math.abs(height - idealHeight) > 2) {
+            userResizedManually = true;
+        }
+    }
+
+    onWidthChanged: {
+        if (!applyingAutoGeometry && visible && Math.abs(width - minimumWidth) > 2) {
+            userResizedManually = true;
+        }
+    }
+
+    Connections {
+        target: accountModel
+        ignoreUnknownSignals: true
+        function onCountChanged() {
+            appWindow.applyAdaptiveHeight();
+        }
+    }
 
     // Dynamic Omarchy Design System & Typography
     color: (theme && theme.canvas) ? theme.canvas : ((theme && theme.background) ? theme.background : "#142620")

@@ -1,10 +1,10 @@
 # Maintainer: Dunova <dunova@omarchy.org>
 pkgname=antigravity-hub
-pkgver=3.0.7
+pkgver=4.0.0
 pkgrel=1
 pkgdesc='Omarchy native account manager and quota hub for Antigravity'
 arch=('x86_64' 'aarch64')
-url='https://github.com/omacom/antigravity-hub'
+url='https://github.com/dunova/antigravity-hub'
 license=('MIT')
 depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'hicolor-icon-theme')
 makedepends=('qt6-base' 'qt6-declarative' 'qt6-svg')
