@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.0.7"
-__canonical_version_tag__ = "20261111-v3.0.7-ZERO_THRESHOLD_EXHAUSTION_AND_LOW_WEEKLY_ISOLATION"
-__last_updated__ = "2026-11-11 22:00:00"
-__canonical_doctrine__ = "Antigravity Hub v3.0.7：保底告急阈值下限降至 0% 用尽再切换、两级隔离阻断 1% 低周额度抢占自动选号、TopG 与全策略统一语义"
+__version__ = "3.1.0"
+__canonical_version_tag__ = "20261120-v3.1.0-THREE_TIER_AND_OFFICIAL_QUOTA_LAYOUT"
+__last_updated__ = "2026-11-20 20:05:00"
+__canonical_doctrine__ = "Antigravity Hub v3.1.0：官方三档账号体系（付费 PRO / 免费 PRO / FREE）、对齐官方 Gemini 与 Claude 双配额列、FREE 账号单轨周限清爽展示"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -279,6 +279,44 @@ def _safe_float(val: Any, default: float = 0.0) -> float:
         return float(val)
     except Exception:
         return default
+
+
+def classify_account_tier(acc: Dict[str, Any]) -> Tuple[str, str, bool, bool]:
+    """
+    权威三档账号分类判定（100% 基于 Google 官方 API 事实，零硬编码邮箱）：
+      1. PAID_PRO (付费 PRO): 具备 5H 滑动窗口且开通 Claude 5.5 / Gemini 4 满血模型矩阵
+      2. FREE_PRO (免费 PRO): 具备 5H 滑动窗口但仅限 Claude 4.6 / Gemini 3.8 模型矩阵
+      3. FREE     (FREE):     无 5H 滑动窗口，仅有周总配额限制
+    支持可选 tier_override 手工覆写。
+    返回: (tier, tier_display, is_pro, has_5h)
+    """
+    override = str(acc.get("tier_override") or "").strip().upper()
+    if override == "PAID_PRO":
+        return "PAID_PRO", "付费 PRO", True, True
+    if override == "FREE_PRO":
+        return "FREE_PRO", "免费 PRO", True, True
+    if override == "FREE":
+        return "FREE", "FREE", False, False
+
+    raw_has_5h = acc.get("has_5h")
+    if isinstance(raw_has_5h, bool):
+        has_5h = raw_has_5h
+    else:
+        g_q5h = (acc.get("gemini") or {}).get("quota_5h")
+        c_q5h = (acc.get("claude") or {}).get("quota_5h")
+        has_5h = (g_q5h is not None) or (c_q5h is not None)
+
+    c_mods = acc.get("claude_models") or []
+    if c_mods:
+        has_real_55 = any(("5-5" in str(m) or "5.5" in str(m)) for m in c_mods)
+    else:
+        has_real_55 = (str(acc.get("claude_version") or "").strip() == "5.5")
+
+    if has_5h and has_real_55:
+        return "PAID_PRO", "付费 PRO", True, True
+    if has_5h:
+        return "FREE_PRO", "免费 PRO", True, True
+    return "FREE", "FREE", False, False
 
 
 def get_manual_override_lock() -> Optional[Dict[str, Any]]:
@@ -603,26 +641,34 @@ class HubEngine:
             for em, acc_obj in incoming_accounts.items():
                 if not acc_obj.get("id"):
                     acc_obj["id"] = str(uuid.uuid5(uuid.NAMESPACE_DNS, em))
-                if not acc_obj.get("tier"):
-                    acc_obj["tier"] = "PRO"
                 # 依真实模型矩阵严格判定 Claude 版本，杜绝虚假 5.5
                 c_mods = acc_obj.get("claude_models") or []
-                has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_mods)
+                has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_mods) if c_mods else (str(acc_obj.get("claude_version") or "") == "5.5")
                 if not has_real_55:
                     acc_obj["claude_version"] = "4.6"
                     if not c_mods:
                         acc_obj["claude_models"] = ["claude-sonnet-4-6", "claude-opus-4-6-thinking"]
-                    if acc_obj.get("gemini4") is not None:
-                        acc_obj["gemini4"] = None
                 else:
                     acc_obj["claude_version"] = "5.5"
-                    # 5.5 账号必然开通并可使用 Gemini 4
-                    if not acc_obj.get("gemini4") or not isinstance(acc_obj.get("gemini4"), dict) or acc_obj["gemini4"].get("quota_weekly") is None:
-                        g_base_w = _safe_float(acc_obj.get("gemini", {}).get("quota_weekly", 1.0), 1.0)
-                        acc_obj["gemini4"] = {
-                            "quota_weekly": g_base_w,
-                            "reset_time_weekly": acc_obj.get("gemini", {}).get("reset_time_weekly", "")
-                        }
+
+                tier, tier_display, is_pro, has_5h = classify_account_tier(acc_obj)
+                acc_obj["tier"] = tier
+                acc_obj["tier_display"] = tier_display
+                acc_obj["pro"] = is_pro
+                acc_obj["has_5h"] = has_5h
+                acc_obj["gemini4_supported"] = (tier == "PAID_PRO")
+
+                if not has_5h:
+                    # FREE 账号仅有周配额，物理杜绝 5H 虚显 100% 满额
+                    g_obj = acc_obj.setdefault("gemini", {})
+                    c_obj = acc_obj.setdefault("claude", {})
+                    g_obj["quota_5h"] = None
+                    g_obj["reset_time_5h"] = ""
+                    c_obj["quota_5h"] = None
+                    c_obj["reset_time_5h"] = ""
+
+                if tier != "PAID_PRO" and acc_obj.get("gemini4") is not None:
+                    acc_obj["gemini4"] = None
 
             if incoming_accounts:
                 self._cached_accounts_data = data
@@ -841,6 +887,8 @@ class HubEngine:
                     with urllib.request.urlopen(q_req, timeout=3) as q_resp:
                         q_res = json.loads(q_resp.read().decode("utf-8", errors="ignore"))
                         q_groups = q_res.get("response", {}).get("groups", [])
+                        ls_seen_any_bucket = False
+                        ls_seen_5h_bucket = False
                         for grp in q_groups:
                             grp_name = grp.get("displayName", "")
                             is_g4_grp = ("gemini 4" in grp_name.lower() or "argon" in grp_name.lower())
@@ -849,6 +897,7 @@ class HubEngine:
                                 rem = bkt.get("remainingFraction")
                                 rst = bkt.get("resetTime")
                                 if rem is not None:
+                                    ls_seen_any_bucket = True
                                     val = float(rem)
                                     if bid == "gemini-weekly":
                                         g_d = acc.setdefault("gemini", {})
@@ -858,6 +907,7 @@ class HubEngine:
                                             g_d["reset_time"] = str(rst)
                                         updated_any = True
                                     elif bid == "gemini-5h":
+                                        ls_seen_5h_bucket = True
                                         g_d = acc.setdefault("gemini", {})
                                         g_d["quota_5h"] = val
                                         if rst:
@@ -871,6 +921,7 @@ class HubEngine:
                                             c_d["reset_time"] = str(rst)
                                         updated_any = True
                                     elif bid == "3p-5h":
+                                        ls_seen_5h_bucket = True
                                         c_d = acc.setdefault("claude", {})
                                         c_d["quota_5h"] = val
                                         if rst:
@@ -883,6 +934,14 @@ class HubEngine:
                                             g4_d["reset_time_weekly"] = str(rst)
                                         g4_from_ls_summary = True
                                         updated_any = True
+                        if ls_seen_any_bucket:
+                            acc["has_5h"] = ls_seen_5h_bucket
+                            if not ls_seen_5h_bucket:
+                                acc.setdefault("gemini", {})["quota_5h"] = None
+                                acc["gemini"]["reset_time_5h"] = ""
+                                acc.setdefault("claude", {})["quota_5h"] = None
+                                acc["claude"]["reset_time_5h"] = ""
+                            updated_any = True
                 except Exception as qe:
                     logger.debug(f"本地 language_server RetrieveUserQuotaSummary 直连探测跳过: {qe}")
 
@@ -1469,52 +1528,66 @@ class HubEngine:
                 logger.info(f"🎉 [风控自愈复权] 账号 {email} 探测配额成功，已自动清除 validation_blocked！")
             self._sync_antigravity_tools_cache(acc_id, validation_blocked=False)
 
-            g_5h = quotas.get("gemini-5h", acc["gemini"].get("quota_5h", 1.0))
-            acc["gemini"]["quota_5h"] = g_5h
-            acc["gemini"]["quota_weekly"] = quotas.get("gemini-weekly", acc["gemini"].get("quota_weekly", 1.0))
-            if resets.get("gemini-5h"):
-                g_res = resets["gemini-5h"]
-                is_floating = False
-                try:
-                    if "T" in g_res:
-                        clean_iso = g_res.replace("Z", "+00:00")
-                        t_ts = datetime.datetime.fromisoformat(clean_iso).timestamp()
-                        if abs(t_ts - time.time() - 18000) < 120 and g_5h >= 0.999:
-                            is_floating = True
-                except Exception:
-                    pass
-                # 只有非浮动假数据，或者本地完全没有重置时间时，才采信端点返回
-                if not is_floating or not acc["gemini"].get("reset_time_5h"):
-                    acc["gemini"]["reset_time_5h"] = g_res
+            acc.setdefault("gemini", {})
+            acc.setdefault("claude", {})
 
+            # 权威物理门禁：以官方 retrieveUserQuotaSummary 是否返回 5h 桶决定 has_5h，彻底消除 FREE 账号虚显 5H 100% 满额
+            has_5h_bucket = ("gemini-5h" in quotas) or ("3p-5h" in quotas)
+            acc["has_5h"] = has_5h_bucket
+
+            acc["gemini"]["quota_weekly"] = quotas.get("gemini-weekly", acc["gemini"].get("quota_weekly", 1.0))
             if resets.get("gemini-weekly"):
                 acc["gemini"]["reset_time_weekly"] = resets["gemini-weekly"]
                 acc["gemini"]["reset_time"] = resets["gemini-weekly"]
 
-            c_5h = quotas.get("3p-5h", acc["claude"].get("quota_5h", 1.0))
-            acc["claude"]["quota_5h"] = c_5h
-            acc["claude"]["quota_weekly"] = quotas.get("3p-weekly", acc["claude"].get("quota_weekly", 1.0))
-            if resets.get("3p-5h"):
-                c_res = resets["3p-5h"]
-                c_floating = False
-                try:
-                    if "T" in c_res:
-                        clean_iso = c_res.replace("Z", "+00:00")
-                        t_ts = datetime.datetime.fromisoformat(clean_iso).timestamp()
-                        if abs(t_ts - time.time() - 18000) < 120 and c_5h >= 0.999:
-                            c_floating = True
-                except Exception:
-                    pass
-                if not c_floating or not acc["claude"].get("reset_time_5h"):
-                    acc["claude"]["reset_time_5h"] = c_res
+            if has_5h_bucket and "gemini-5h" in quotas:
+                g_5h = quotas["gemini-5h"]
+                acc["gemini"]["quota_5h"] = g_5h
+                if resets.get("gemini-5h"):
+                    g_res = resets["gemini-5h"]
+                    is_floating = False
+                    try:
+                        if "T" in g_res:
+                            clean_iso = g_res.replace("Z", "+00:00")
+                            t_ts = datetime.datetime.fromisoformat(clean_iso).timestamp()
+                            if abs(t_ts - time.time() - 18000) < 120 and g_5h >= 0.999:
+                                is_floating = True
+                    except Exception:
+                        pass
+                    if not is_floating or not acc["gemini"].get("reset_time_5h"):
+                        acc["gemini"]["reset_time_5h"] = g_res
+            elif not has_5h_bucket:
+                acc["gemini"]["quota_5h"] = None
+                acc["gemini"]["reset_time_5h"] = ""
 
+            acc["claude"]["quota_weekly"] = quotas.get("3p-weekly", acc["claude"].get("quota_weekly", 1.0))
             if resets.get("3p-weekly"):
                 acc["claude"]["reset_time_weekly"] = resets["3p-weekly"]
                 acc["claude"]["reset_time"] = resets["3p-weekly"]
-            elif resets.get("3p-5h"):
-                acc["claude"]["reset_time"] = resets["3p-5h"]
 
-            # Gemini 4 周配额专属提取 (若开通则记录，无开通则保留既有状态)
+            if has_5h_bucket and "3p-5h" in quotas:
+                c_5h = quotas["3p-5h"]
+                acc["claude"]["quota_5h"] = c_5h
+                if resets.get("3p-5h"):
+                    c_res = resets["3p-5h"]
+                    c_floating = False
+                    try:
+                        if "T" in c_res:
+                            clean_iso = c_res.replace("Z", "+00:00")
+                            t_ts = datetime.datetime.fromisoformat(clean_iso).timestamp()
+                            if abs(t_ts - time.time() - 18000) < 120 and c_5h >= 0.999:
+                                c_floating = True
+                    except Exception:
+                        pass
+                    if not c_floating or not acc["claude"].get("reset_time_5h"):
+                        acc["claude"]["reset_time_5h"] = c_res
+                if not resets.get("3p-weekly") and resets.get("3p-5h"):
+                    acc["claude"]["reset_time"] = resets["3p-5h"]
+            elif not has_5h_bucket:
+                acc["claude"]["quota_5h"] = None
+                acc["claude"]["reset_time_5h"] = ""
+
+            # Gemini 4 周配额专属提取 (若官方返回则记录，绝不伪造复制)
             g4_weekly_quota = quotas.get("gemini4-weekly")
             if g4_weekly_quota is not None:
                 if "gemini4" not in acc or not isinstance(acc.get("gemini4"), dict):
@@ -1523,16 +1596,20 @@ class HubEngine:
                 if resets.get("gemini4-weekly"):
                     acc["gemini4"]["reset_time_weekly"] = resets["gemini4-weekly"]
 
-        # 3. 探测模型矩阵 (确定 Claude 5.5 付费Pro 徽章与可用模型)
+        # 3. 探测模型矩阵并按权威规则校准三档等级 (付费 PRO / 免费 PRO / FREE)
         try:
             g4_from_summary = (quotas.get("gemini4-weekly") is not None) if quotas else False
             c_ver, c_mods = self.fetch_available_models(at)
             if c_mods:
                 acc["claude_models"] = c_mods
                 acc["claude_version"] = c_ver
-            # 业务真理门禁：绝不将 gemini 3.8 周配额虚假复制赋给 gemini4；非 5.5 (4.6) 且无官方 gemini4-weekly 返回时强制清零防串台
-            is_pro_55 = (c_ver == "5.5" or any(("5-5" in m or "5.5" in m) for m in c_mods))
-            if not is_pro_55 and not g4_from_summary:
+            tier, tier_display, is_pro, has_5h = classify_account_tier(acc)
+            acc["tier"] = tier
+            acc["tier_display"] = tier_display
+            acc["pro"] = is_pro
+            acc["has_5h"] = has_5h
+            acc["gemini4_supported"] = (tier == "PAID_PRO")
+            if tier != "PAID_PRO" and not g4_from_summary:
                 acc["gemini4"] = None
         except Exception:
             pass
@@ -1822,32 +1899,19 @@ def render_gemini4_cell(weekly_pct: Optional[float], reset_weekly_info: str = ""
     """
 
 
-def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "", reset_weekly_info: str = "", model_type: str = "gemini", claude_ver: str = "") -> str:
+def render_tier_badge_html(tier: str, tier_display: str) -> str:
+    """渲染三档账号类别徽标 (付费 PRO / 免费 PRO / FREE)"""
+    if tier == "PAID_PRO":
+        return f'<span class="badge font-mono" style="background:#FEF3C7;color:#B45309;border:2px solid #D97706;padding:1px 6px;font-weight:900;" title="付费 PRO：Gemini 4 + Claude 5.5 + 5H/周双限">{tier_display}</span>'
+    if tier == "FREE_PRO":
+        return f'<span class="badge font-mono" style="background:#E0F2FE;color:#0369A1;border:2px solid #0284C7;padding:1px 6px;font-weight:900;" title="免费 PRO：Gemini 3.8 + Claude 4.6 + 5H/周双限">{tier_display}</span>'
+    return f'<span class="badge font-mono" style="background:#F3F4F6;color:#4B5563;border:2px solid #9CA3AF;padding:1px 6px;font-weight:700;" title="FREE 免费账号：仅周限制（无 5H 滑动限制）">{tier_display}</span>'
+
+
+def render_quota_cell(h5_pct: Optional[float], weekly_pct: float, reset_5h_info: str = "", reset_weekly_info: str = "", model_type: str = "gemini", claude_ver: str = "", has_5h: bool = True) -> str:
     raw_w = max(0.0, min(1.0, float(weekly_pct or 0.0)))
-    raw_5h = max(0.0, min(1.0, float(h5_pct or 0.0)))
     val_w = format_quota_int_pct(raw_w)
-
-    # 核心物理约束：以原始浮点门禁判定周耗尽（防止 0.4% 四舍五入为 0% 时误判周枯竭），周耗尽则 5H 自然归零
-    is_weekly_exhausted = (raw_w <= 0.0001)
-    if is_weekly_exhausted:
-        val_5h = 0
-    else:
-        val_5h = format_quota_int_pct(raw_5h)
-
-    c_5h = "#16A34A" if val_5h >= 50 else ("#EA580C" if val_5h >= 15 else "#DC2626")
     c_w = "#16A34A" if val_w >= 50 else ("#EA580C" if val_w >= 15 else "#DC2626")
-    
-    # 5小时恢复倒计时与状态呈现 (5h 滑动窗口至多 5 小时，凡 >=99.9% 满血或被误填多天周倒计时一律呈现满额，拒绝 5d 扎堆假象):
-    if is_weekly_exhausted:
-        tip = f"周度总配额已耗尽 (0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
-        reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
-    elif raw_5h >= 0.999 or (reset_5h_info and ("d" in reset_5h_info or reset_5h_info in ("--", "已就绪", "就绪"))):
-        reset_5h_html = '<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额满血可用">满额</span>'
-    elif reset_5h_info:
-        # 只要有真实 5h 内倒计时，直接诚实呈现时间胶囊
-        reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
-    else:
-        reset_5h_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
 
     # 周度重置倒计时呈现 (彻底杜绝“就绪”假象，有倒计时显倒计时，无倒计时显满额)：
     if reset_weekly_info and reset_weekly_info not in ("--", "已就绪", "就绪"):
@@ -1862,12 +1926,37 @@ def render_quota_cell(h5_pct: float, weekly_pct: float, reset_5h_info: str = "",
 
     cell_title = ""
     if model_type == "claude":
-        if claude_ver == "5.5":
-            cell_title = ' title="Claude 5.5"'
-        else:
-            cell_title = ' title="Claude"'
+        cell_title = ' title="Claude 5.5"' if claude_ver == "5.5" else ' title="Claude"'
     elif model_type == "gemini":
-        cell_title = ' title="Gemini 2.5"'
+        cell_title = ' title="Gemini"'
+
+    # 方案 A：FREE 账号无 5H 滑动窗口，单轨居中展示 W 周配额，彻底消除虚假 5H 满额噪音
+    if not has_5h:
+        return f"""
+    <div class="q-cell q-cell-weekly-only"{cell_title}>
+        <div class="q-row">
+            <span class="q-lbl {lbl_w_cls}">周</span>
+            <div class="q-track"><div class="q-fill" style="width: {min(100, max(0, val_w))}%; background: {c_w};"></div></div>
+            <span class="q-val font-mono" style="color: {c_w};">{val_w}%</span>
+            <div class="q-slot">{reset_w_html}</div>
+        </div>
+    </div>
+    """
+
+    raw_5h = max(0.0, min(1.0, float(h5_pct if h5_pct is not None else 0.0)))
+    is_weekly_exhausted = (raw_w <= 0.0001)
+    val_5h = 0 if is_weekly_exhausted else format_quota_int_pct(raw_5h)
+    c_5h = "#16A34A" if val_5h >= 50 else ("#EA580C" if val_5h >= 15 else "#DC2626")
+
+    if is_weekly_exhausted:
+        tip = f"周度总配额已耗尽 (0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
+        reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
+    elif raw_5h >= 0.999 or (reset_5h_info and ("d" in reset_5h_info or reset_5h_info in ("--", "已就绪", "就绪"))):
+        reset_5h_html = '<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额满血可用">满额</span>'
+    elif reset_5h_info:
+        reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
+    else:
+        reset_5h_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
 
     return f"""
     <div class="q-cell"{cell_title}>
@@ -2028,75 +2117,63 @@ def render_table_rows(include_oob: bool = False) -> str:
         warmup_iso = acc_warmup.get("locked_reset_iso", "")
         warmup_model = acc_warmup.get("model_warmed", "")
 
-        # Claude 配额与真实模型版本 (依全局实测模型矩阵精准判定，彻底杜绝虚假 5.5)
+        # 三档账号类别与真实模型判定
+        acc_tier, acc_tier_display, _is_pro, acc_has_5h = classify_account_tier(acc)
+        tier_rank = 0 if acc_tier == "PAID_PRO" else (1 if acc_tier == "FREE_PRO" else 2)
+        tier_badge_html = render_tier_badge_html(acc_tier, acc_tier_display)
+
         c_models = acc.get("claude_models") or []
         has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_models) if c_models else (acc.get("claude_version") == "5.5")
         claude_ver = "5.5" if has_real_55 else "4.6"
-        is_pro_55 = (claude_ver == "5.5")
 
-        # Gemini 4 配额 (业务真理: 仅 5.5 账号具备 Gemini 4；4.6 账号即使存在历史残留也强制显示 —)
-        g4_info = acc.get("gemini4") or acc.get("gemini_4")
-        if is_pro_55 and g4_info and isinstance(g4_info, dict) and "quota_weekly" in g4_info and g4_info.get("quota_weekly") is not None:
-            g4_w = _safe_float(g4_info.get("quota_weekly"))
-            g4_reset_raw = g4_info.get("reset_time_weekly", "")
-            g4_reset_w = format_reset_time(g4_reset_raw)
-            g4_cell = render_gemini4_cell(g4_w, g4_reset_w)
-        elif is_pro_55:
-            # 5.5 账号必然开通 Gemini 4，若尚无独立周记录，继承当前账号周度可用健康配额
-            g4_w = _safe_float(acc.get("gemini", {}).get("quota_weekly", 1.0), 1.0)
-            g4_reset_raw = acc.get("gemini", {}).get("reset_time_weekly", "")
-            g4_reset_w = format_reset_time(g4_reset_raw)
-            g4_cell = render_gemini4_cell(g4_w, g4_reset_w)
+        # Gemini 配额 (官方统一 Gemini 分组：Pro 双轨 5H+W，FREE 单轨 W)
+        g_w = _safe_float(acc.get("gemini", {}).get("quota_weekly", 1.0), 1.0)
+        if not acc_has_5h:
+            g_5h = None
+            g_reset_5h = ""
         else:
-            g4_w = None
-            g4_cell = render_gemini4_cell(None)
-
-        # Gemini 3.8 配额 (极光天蓝)
-        g_w = acc.get("gemini", {}).get("quota_weekly", 1.0)
-        # 短板约束：若周配额已耗尽 (<=0.0)，5H 配额物理上必然归零，杜绝虚假满血
-        g_5h = 0.0 if g_w <= 0.0001 else acc.get("gemini", {}).get("quota_5h", 1.0)
-        g_reset_raw = acc.get("gemini", {}).get("reset_time_5h", "")
-        is_g_floating = False
-        try:
-            if "T" in g_reset_raw:
-                t_dt = datetime.datetime.fromisoformat(g_reset_raw.replace("Z", "+00:00"))
-                if abs(t_dt.timestamp() - time.time() - 18000) < 120 and g_5h >= 0.999:
-                    is_g_floating = True
-        except Exception:
-            pass
-        if (not g_reset_raw or g_reset_raw == "--" or is_g_floating) and warmup_iso:
-            g_reset_raw = warmup_iso
-        g_reset_5h = format_reset_time(g_reset_raw)
+            raw_g5h = acc.get("gemini", {}).get("quota_5h")
+            g_5h = 0.0 if g_w <= 0.0001 else _safe_float(raw_g5h, 1.0)
+            g_reset_raw = acc.get("gemini", {}).get("reset_time_5h", "")
+            is_g_floating = False
+            try:
+                if "T" in g_reset_raw:
+                    t_dt = datetime.datetime.fromisoformat(g_reset_raw.replace("Z", "+00:00"))
+                    if abs(t_dt.timestamp() - time.time() - 18000) < 120 and g_5h >= 0.999:
+                        is_g_floating = True
+            except Exception:
+                pass
+            if (not g_reset_raw or g_reset_raw == "--" or is_g_floating) and warmup_iso:
+                g_reset_raw = warmup_iso
+            g_reset_5h = format_reset_time(g_reset_raw)
         g_reset_w = format_reset_time(acc.get("gemini", {}).get("reset_time_weekly", acc.get("gemini", {}).get("reset_time", "")))
-        g_cell = render_quota_cell(g_5h, g_w, g_reset_5h, g_reset_w, model_type="gemini")
+        g_cell = render_quota_cell(g_5h, g_w, g_reset_5h, g_reset_w, model_type="gemini", has_5h=acc_has_5h)
 
-        # Claude 配额与真实模型版本 (依全局实测模型矩阵精准判定，彻底杜绝虚假 5.5)
-        c_models = acc.get("claude_models") or []
-        has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_models)
-        claude_ver = "5.5" if has_real_55 else "4.6"
-        c_w = acc.get("claude", {}).get("quota_weekly", 1.0)
-        c_5h = 0.0 if c_w <= 0.0001 else acc.get("claude", {}).get("quota_5h", 1.0)
-        c_reset_raw = acc.get("claude", {}).get("reset_time_5h", "")
-        is_c_floating = False
-        try:
-            if "T" in c_reset_raw:
-                t_dt = datetime.datetime.fromisoformat(c_reset_raw.replace("Z", "+00:00"))
-                if abs(t_dt.timestamp() - time.time() - 18000) < 120 and c_5h >= 0.999:
-                    is_c_floating = True
-        except Exception:
-            pass
-        c_warmup_iso = acc_warmup.get("locked_reset_iso_claude", warmup_iso)
-        if (not c_reset_raw or c_reset_raw == "--" or is_c_floating) and c_warmup_iso:
-            c_reset_raw = c_warmup_iso
-        c_reset_5h = format_reset_time(c_reset_raw)
+        # Claude 配额 (官方统一 Claude 分组：Pro 双轨 5H+W，FREE 单轨 W)
+        c_w = _safe_float(acc.get("claude", {}).get("quota_weekly", 1.0), 1.0)
+        if not acc_has_5h:
+            c_5h = None
+            c_reset_5h = ""
+        else:
+            raw_c5h = acc.get("claude", {}).get("quota_5h")
+            c_5h = 0.0 if c_w <= 0.0001 else _safe_float(raw_c5h, 1.0)
+            c_reset_raw = acc.get("claude", {}).get("reset_time_5h", "")
+            is_c_floating = False
+            try:
+                if "T" in c_reset_raw:
+                    t_dt = datetime.datetime.fromisoformat(c_reset_raw.replace("Z", "+00:00"))
+                    if abs(t_dt.timestamp() - time.time() - 18000) < 120 and c_5h >= 0.999:
+                        is_c_floating = True
+            except Exception:
+                pass
+            c_warmup_iso = acc_warmup.get("locked_reset_iso_claude", warmup_iso)
+            if (not c_reset_raw or c_reset_raw == "--" or is_c_floating) and c_warmup_iso:
+                c_reset_raw = c_warmup_iso
+            c_reset_5h = format_reset_time(c_reset_raw)
         c_reset_w = format_reset_time(acc.get("claude", {}).get("reset_time_weekly", acc.get("claude", {}).get("reset_time", "")))
-        c_cell = render_quota_cell(c_5h, c_w, c_reset_5h, c_reset_w, model_type="claude", claude_ver=claude_ver)
+        c_cell = render_quota_cell(c_5h, c_w, c_reset_5h, c_reset_w, model_type="claude", claude_ver=claude_ver, has_5h=acc_has_5h)
 
-        # 彻底去除邮箱域名后缀，只保留账号英文字符，告别 ... 截断
         short_name = email.split("@")[0] if "@" in email else email
-
-        # 用户明确指示：只要有 gemini4 必然是 5.5，无需额外贴 5.5 标签增加视觉干扰
-        pro_tag_html = "" 
 
         row = f"""
         <tr class="account-row {active_class}" 
@@ -2104,24 +2181,24 @@ def render_table_rows(include_oob: bool = False) -> str:
             style="background-color: {row_bg};"
             data-email="{email}"
             data-orig-idx="{idx}"
+            data-tier="{acc_tier}"
+            data-tier-rank="{tier_rank}"
             data-claude-ver="{claude_ver}"
-            data-gemini-5h="{g_5h}"
+            data-gemini-5h="{g_5h if g_5h is not None else -1}"
             data-gemini-w="{g_w}"
-            data-claude-5h="{c_5h}"
+            data-claude-5h="{c_5h if c_5h is not None else -1}"
             data-claude-w="{c_w}"
-            data-gemini4-w="{g4_w if g4_w is not None else ''}"
             data-is-active="{'1' if is_active else '0'}">
             <td class="col-center col-check" style="background-color: {row_bg};"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
             <td class="col-center font-mono num-col" style="background-color: {row_bg};">{num_html}</td>
             <td class="col-status" style="background-color: {row_bg};"><div class="status-cell-wrap">{badge_html}</div></td>
+            <td class="col-center col-tier" style="background-color: {row_bg};">{tier_badge_html}</td>
             <td class="col-email" style="background-color: {row_bg};">
                 <div class="email-cell-inner">
                     <span class="email-text font-mono" onclick="copyText('{email}')" title="点击复制: {email}" data-raw-email="{email}" data-short-name="{short_name}">{short_name}</span>
-                    {pro_tag_html}
                 </div>
             </td>
-            <td class="col-quota col-quota-g4" style="background-color: {row_bg};">{g4_cell}</td>
-            <td class="col-quota col-quota-g38" style="background-color: {row_bg};">{g_cell}</td>
+            <td class="col-quota col-quota-gemini" style="background-color: {row_bg};">{g_cell}</td>
             <td class="col-quota col-quota-claude" style="background-color: {row_bg};">{c_cell}</td>
             <td class="col-actions" style="background-color: {row_bg};">
                 <div class="actions-wrap">
@@ -2724,8 +2801,8 @@ def render_dashboard_html() -> str:
 
         .th-num {{ background: #FFFFFF; text-align: center; }}
         .th-status {{ background: #38BDF8; text-align: center; }}
+        .th-tier {{ background: #FBBF24; text-align: center; }}
         .th-email {{ background: #FDE047; text-align: left; padding-left: 6px; }}
-        .th-gemini4 {{ background: #C084FC; text-align: center; }}
         .th-gemini {{ background: #7DD3FC; text-align: center; }}
         .th-claude {{ background: #FB923C; text-align: center; }}
         .th-warmup {{ background: #C084FC; text-align: center; }}
@@ -4055,30 +4132,30 @@ def render_dashboard_html() -> str:
         <div class="table-wrap">
             <table>
                 <colgroup>
-                    <col style="width: 26px;">   <!-- 批量勾选复选框 (26px 居中) -->
-                    <col style="width: 28px;">   <!-- # 序号+拖拽手柄 (28px 居中) -->
-                    <col style="width: 66px;">   <!-- 状态 (66px) -->
-                    <col style="width: 104px;">  <!-- 账号 + 5.5 徽章 (104px 紧凑 Mono) -->
-                    <col style="width: 19%;">    <!-- Gemini 4 (周额度) (自适应 ~182px-212px) -->
-                    <col style="width: 21%;">    <!-- Gemini 3.8 (自适应 ~194px-218px) -->
-                    <col style="width: 21%;">    <!-- Claude (自适应 ~194px-218px) -->
-                    <col style="width: 130px;">  <!-- 操作 (130px) -->
+                    <col style="width: 26px;">   <!-- 批量勾选复选框 -->
+                    <col style="width: 28px;">   <!-- # 序号+拖拽手柄 -->
+                    <col style="width: 66px;">   <!-- 状态 -->
+                    <col style="width: 84px;">   <!-- 账号类别 (付费 PRO / 免费 PRO / FREE) -->
+                    <col style="width: 118px;">  <!-- 账号 -->
+                    <col style="width: 28%;">    <!-- Gemini 官方配额 -->
+                    <col style="width: 28%;">    <!-- Claude 官方配额 -->
+                    <col style="width: 130px;">  <!-- 操作 -->
                 </colgroup>
                 <thead>
                     <tr>
                         <th class="col-center th-check" title="全选 / 反选"><input type="checkbox" id="master-select-cb" class="neo-checkbox" onchange="toggleMasterSelect(this)"></th>
                         <th class="col-center th-num">#</th>
                         <th class="col-center th-status">状态</th>
-                        <th class="th-email">账号</th>
-                        <th class="th-gemini4 th-sortable" onclick="cycleGemini4Sort()" title="点击排序 Gemini 4 额度">
+                        <th class="col-center th-tier th-sortable" onclick="cycleTierSort()" title="点击按账号类别排序">
                             <div class="th-sort-inner">
-                                <span>Gemini 4</span>
-                                <span id="sort-gemini4-badge" class="sort-badge font-mono" style="display:none;"></span>
+                                <span>类别</span>
+                                <span id="sort-tier-badge" class="sort-badge font-mono" style="display:none;"></span>
                             </div>
                         </th>
-                        <th class="th-gemini th-sortable" onclick="cycleGeminiSort()" title="点击排序 Gemini 3.8 额度">
+                        <th class="th-email">账号</th>
+                        <th class="th-gemini th-sortable" onclick="cycleGeminiSort()" title="点击排序 Gemini 额度">
                             <div class="th-sort-inner">
-                                <span>Gemini 3.8</span>
+                                <span>Gemini</span>
                                 <span id="sort-gemini-badge" class="sort-badge font-mono" style="display:none;"></span>
                             </div>
                         </th>
@@ -5190,19 +5267,19 @@ def render_dashboard_html() -> str:
         let __cachedTbodyHTML = '';
         let currentSortMode = 'default'; // 'default' | 'gemini4_w_desc' | 'gemini_w_asc' | 'gemini_5h_asc' | 'claude_w_asc' | 'claude_5h_asc'
 
-        // 🔀 更新 Gemini 4 / Gemini 3.8 / Claude 表头排序角标指示器
+        // 🔀 更新 类别 / Gemini / Claude 表头排序角标指示器
         function updateSortBadges() {{
-            const g4Badge = document.getElementById('sort-gemini4-badge');
+            const tierBadge = document.getElementById('sort-tier-badge');
             const gBadge = document.getElementById('sort-gemini-badge');
             const cBadge = document.getElementById('sort-claude-badge');
 
-            if (g4Badge) {{
-                if (currentSortMode === 'gemini4_w_desc') {{
-                    g4Badge.textContent = '周多→少';
-                    g4Badge.style.display = 'inline-flex';
+            if (tierBadge) {{
+                if (currentSortMode === 'tier_asc') {{
+                    tierBadge.textContent = '付费优先';
+                    tierBadge.style.display = 'inline-flex';
                 }} else {{
-                    g4Badge.textContent = '';
-                    g4Badge.style.display = 'none';
+                    tierBadge.textContent = '';
+                    tierBadge.style.display = 'none';
                 }}
             }}
 
@@ -5239,11 +5316,11 @@ def render_dashboard_html() -> str:
             }}
         }}
 
-        // 🎯 Gemini 4 表头循环点击排序：周额度 (多→少) → 恢复默认
-        function cycleGemini4Sort() {{
-            if (currentSortMode !== 'gemini4_w_desc') {{
-                currentSortMode = 'gemini4_w_desc';
-                showToast("📊 已按 Gemini 4 周额度 (从多到少) 降序排列", "info");
+        // 🎯 类别表头循环点击排序：付费 PRO → 免费 PRO → FREE → 恢复默认
+        function cycleTierSort() {{
+            if (currentSortMode !== 'tier_asc') {{
+                currentSortMode = 'tier_asc';
+                showToast("📊 已按账号类别（付费 PRO → 免费 PRO → FREE）排序", "info");
             }} else {{
                 currentSortMode = 'default';
                 showToast("🔄 已恢复账号列表默认排序", "info");
@@ -5351,12 +5428,10 @@ def render_dashboard_html() -> str:
                 if (currentSortMode !== 'default') {{
                     let valA = 0;
                     let valB = 0;
-                    if (currentSortMode === 'gemini4_w_desc') {{
-                        const rawA = a.getAttribute('data-gemini4-w');
-                        const rawB = b.getAttribute('data-gemini4-w');
-                        valA = (rawA !== '' && rawA !== null) ? parseFloat(rawA) : -1.0;
-                        valB = (rawB !== '' && rawB !== null) ? parseFloat(rawB) : -1.0;
-                        if (valA !== valB) return valB - valA;
+                    if (currentSortMode === 'tier_asc') {{
+                        valA = parseInt(a.getAttribute('data-tier-rank') || '2', 10);
+                        valB = parseInt(b.getAttribute('data-tier-rank') || '2', 10);
+                        if (valA !== valB) return valA - valB;
                     }} else if (currentSortMode === 'gemini_5h_desc') {{
                         valA = parseFloat(a.getAttribute('data-gemini-5h') || '0');
                         valB = parseFloat(b.getAttribute('data-gemini-5h') || '0');

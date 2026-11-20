@@ -12,18 +12,17 @@ Item {
     // =========================================================================
     readonly property int availColsWidth: Math.max(876, Math.floor(width) - 20)
     readonly property int extraColsWidth: Math.max(0, availColsWidth - 876)
-    readonly property int extraAccWidth: Math.round(extraColsWidth * 0.22)
-    readonly property int extraG4Width: Math.round(extraColsWidth * 0.20)
-    readonly property int extraG38Width: Math.round(extraColsWidth * 0.29)
-    readonly property int extraClaudeWidth: Math.max(0, extraColsWidth - extraAccWidth - extraG4Width - extraG38Width)
+    readonly property int extraAccWidth: Math.round(extraColsWidth * 0.24)
+    readonly property int extraGeminiWidth: Math.round(extraColsWidth * 0.38)
+    readonly property int extraClaudeWidth: Math.max(0, extraColsWidth - extraAccWidth - extraGeminiWidth)
 
     readonly property int colCheckWidth: 24
     readonly property int colIndexWidth: 24
-    readonly property int colStatusWidth: 66
-    readonly property int colAccountWidth: 142 + extraAccWidth
-    readonly property int colG4Width: 148 + extraG4Width
-    readonly property int colG38Width: 204 + extraG38Width
-    readonly property int colClaudeWidth: 204 + extraClaudeWidth
+    readonly property int colStatusWidth: 64
+    readonly property int colTierWidth: 78
+    readonly property int colAccountWidth: 154 + extraAccWidth
+    readonly property int colGeminiWidth: 234 + extraGeminiWidth
+    readonly property int colClaudeWidth: 234 + extraClaudeWidth
     readonly property int colActionWidth: 64
     readonly property int rowHeight: 42
     readonly property int pageSize: 15
@@ -445,7 +444,67 @@ Item {
                     }
                 }
 
-                // Col 4: 账号 (支持点击按账号字母序排序，与数据行用户名左边缘 16px 对齐)
+                // Hairline between Col 3 (Status) and Col 4 (Tier)
+                Rectangle {
+                    width: 1
+                    Layout.preferredWidth: 1
+                    Layout.minimumWidth: 1
+                    Layout.maximumWidth: 1
+                    Layout.fillHeight: true
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 6
+                    color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                }
+
+                // Col 4: 账号类别 (付费 PRO / 免费 PRO / FREE，支持点击按等级排序)
+                Rectangle {
+                    Layout.preferredWidth: colTierWidth
+                    Layout.minimumWidth: colTierWidth
+                    Layout.maximumWidth: colTierWidth
+                    Layout.fillHeight: true
+                    color: "transparent"
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        Text {
+                            text: qsTr("Tier")
+                            font.family: theme.uiFont
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            renderType: Text.NativeRendering
+                            color: (proxyModel && proxyModel.sortField === "tier") ?
+                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
+                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
+                        }
+
+                        Text {
+                            visible: proxyModel ? (proxyModel.sortField === "tier") : false
+                            text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
+                            font.pixelSize: 11
+                            renderType: Text.NativeRendering
+                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (!proxyModel) return;
+                            if (proxyModel.sortField !== "tier") {
+                                proxyModel.setSortRule("tier", Qt.AscendingOrder);
+                            } else if (proxyModel.sortOrder === Qt.AscendingOrder) {
+                                proxyModel.setSortRule("tier", Qt.DescendingOrder);
+                            } else {
+                                proxyModel.setSortRule("default", Qt.DescendingOrder);
+                            }
+                        }
+                    }
+                }
+
+                // Col 5: 账号 (支持点击按账号字母序排序，与数据行用户名左边缘 16px 对齐)
                 Rectangle {
                     Layout.preferredWidth: colAccountWidth
                     Layout.minimumWidth: colAccountWidth
@@ -496,7 +555,7 @@ Item {
                     }
                 }
 
-                // Hairline between Col 4 and Col 5
+                // Hairline between Col 5 (Account) and Col 6 (Gemini)
                 Rectangle {
                     width: 1
                     Layout.preferredWidth: 1
@@ -508,74 +567,11 @@ Item {
                     color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                 }
 
-                // Col 5: Gemini 4 (用户最高铁律门禁：严格命名为 Gemini 4，彻底切除周标签)
+                // Col 6: Gemini 官方配额表头 (Pro 双轨 5H+W / FREE 单轨 W)
                 Rectangle {
-                    Layout.preferredWidth: colG4Width
-                    Layout.minimumWidth: colG4Width
-                    Layout.maximumWidth: colG4Width
-                    Layout.fillHeight: true
-                    color: "transparent"
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 10
-                        spacing: 4
-
-                        Text {
-                            text: qsTr("Gemini 4") // MANDATORY: STRICTLY "Gemini 4"
-                            font.family: theme.uiFont
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            renderType: Text.NativeRendering
-                            elide: Text.ElideRight
-                            color: (proxyModel && proxyModel.sortField === "gemini4") ?
-                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
-                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
-                        }
-
-                        Text {
-                            visible: proxyModel ? (proxyModel.sortField === "gemini4") : false
-                            text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
-                            font.pixelSize: 11
-                            renderType: Text.NativeRendering
-                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (!proxyModel) return;
-                            if (proxyModel.sortField !== "gemini4") {
-                                proxyModel.setSortRule("gemini4", Qt.DescendingOrder);
-                            } else if (proxyModel.sortOrder === Qt.DescendingOrder) {
-                                proxyModel.setSortRule("gemini4", Qt.AscendingOrder);
-                            } else {
-                                proxyModel.setSortRule("default", Qt.DescendingOrder);
-                            }
-                        }
-                    }
-                }
-
-                // Hairline between Col 5 and Col 6
-                Rectangle {
-                    width: 1
-                    Layout.preferredWidth: 1
-                    Layout.minimumWidth: 1
-                    Layout.maximumWidth: 1
-                    Layout.fillHeight: true
-                    Layout.topMargin: 6
-                    Layout.bottomMargin: 6
-                    color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
-                }
-
-                // Col 6: Gemini 3.8 双维配额表头
-                Rectangle {
-                    Layout.preferredWidth: colG38Width
-                    Layout.minimumWidth: colG38Width
-                    Layout.maximumWidth: colG38Width
+                    Layout.preferredWidth: colGeminiWidth
+                    Layout.minimumWidth: colGeminiWidth
+                    Layout.maximumWidth: colGeminiWidth
                     Layout.fillHeight: true
                     color: "transparent"
 
@@ -586,19 +582,19 @@ Item {
                         spacing: 4
 
                         Text {
-                            text: qsTr("Gemini 3.8")
+                            text: qsTr("Gemini")
                             font.family: theme.uiFont
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
                             elide: Text.ElideRight
-                            color: (proxyModel && proxyModel.sortField === "gemini38_w") ?
+                            color: (proxyModel && (proxyModel.sortField === "gemini38_w" || proxyModel.sortField === "gemini_w")) ?
                                    ((theme && theme.accent) ? theme.accent : "#7daea3") :
                                    ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
                         }
 
                         Text {
-                            visible: proxyModel ? (proxyModel.sortField === "gemini38_w") : false
+                            visible: proxyModel ? (proxyModel.sortField === "gemini38_w" || proxyModel.sortField === "gemini_w") : false
                             text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
                             font.pixelSize: 11
                             renderType: Text.NativeRendering
@@ -954,11 +950,11 @@ Item {
                 readonly property bool isManualLockedRow: (model.isActive || false) && ((model.manualLockRemaining || 0) > 0)
                 readonly property bool isRowHovered: rowMouse.containsMouse ||
                     statusPillMouse.containsMouse ||
+                    tierBadgeMouse.containsMouse ||
                     dragMouse.containsMouse ||
                     nameMouse.containsMouse ||
                     pinTopMouse.containsMouse ||
                     rowCheckBox.hovered ||
-                    g4EmptyMouse.containsMouse ||
                     btnSwitchMouse.containsMouse ||
                     btnUnblockMouse.containsMouse ||
                     btnInUseMouse.containsMouse
@@ -1208,11 +1204,96 @@ Item {
                         }
                     }
 
+                    // Hairline between Col 3 (Status) and Col 4 (Tier)
+                    Rectangle {
+                        width: 1
+                        Layout.preferredWidth: 1
+                        Layout.minimumWidth: 1
+                        Layout.maximumWidth: 1
+                        Layout.fillHeight: true
+                        Layout.topMargin: 6
+                        Layout.bottomMargin: 6
+                        radius: 0
+                        color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                    }
+
                     // -------------------------------------------------
-                    // Col 4: 账号名称 (纯净用户名，拖拽手柄 ⠿ + 悬浮[置顶]按钮 + 点击复制邮箱)
+                    // Col 4: 独立显著账号类别列 (付费 PRO / 免费 PRO / FREE)
                     // -------------------------------------------------
                     Item {
-                        id: col4AccountItem
+                        Layout.preferredWidth: colTierWidth
+                        Layout.minimumWidth: colTierWidth
+                        Layout.maximumWidth: colTierWidth
+                        Layout.fillHeight: true
+                        clip: true
+
+                        Rectangle {
+                            id: tierBadge
+                            anchors.centerIn: parent
+                            width: 66
+                            height: 20
+                            radius: 0
+                            color: model.tier === "PAID_PRO" ?
+                                   ((theme && theme.mode === "light") ? "#FEF3C7" : Qt.alpha("#F59E0B", 0.20)) :
+                                   (model.tier === "FREE_PRO" ?
+                                       ((theme && theme.mode === "light") ? "#E0F2FE" : Qt.alpha("#06B6D4", 0.18)) :
+                                       ((theme && theme.mode === "light") ? "#F3F4F6" : Qt.alpha("#9CA3AF", 0.10)))
+                            border.width: 1
+                            border.color: model.tier === "PAID_PRO" ?
+                                          ((theme && theme.mode === "light") ? "#D97706" : "#F59E0B") :
+                                          (model.tier === "FREE_PRO" ?
+                                              ((theme && theme.mode === "light") ? "#0284C7" : "#22D3EE") :
+                                              ((theme && theme.mode === "light") ? "#D1D5DB" : "#4B5563"))
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                Rectangle {
+                                    width: 4
+                                    height: 4
+                                    radius: 0
+                                    visible: model.tier === "PAID_PRO" || model.tier === "FREE_PRO"
+                                    color: model.tier === "PAID_PRO" ? "#F59E0B" : "#22D3EE"
+                                }
+
+                                Text {
+                                    text: model.tier === "PAID_PRO" ? qsTr("Paid Pro") :
+                                          (model.tier === "FREE_PRO" ? qsTr("Free Pro") : qsTr("Free"))
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    font.weight: (model.tier === "FREE") ? Font.DemiBold : Font.Bold
+                                    renderType: Text.NativeRendering
+                                    color: model.tier === "PAID_PRO" ?
+                                           ((theme && theme.mode === "light") ? "#B45309" : "#FBBF24") :
+                                           (model.tier === "FREE_PRO" ?
+                                               ((theme && theme.mode === "light") ? "#0369A1" : "#67E8F9") :
+                                               ((theme && theme.mode === "light") ? "#6B7280" : "#9CA3AF"))
+                                }
+                            }
+
+                            MouseArea {
+                                id: tierBadgeMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                ToolTip.visible: containsMouse
+                                ToolTip.text: model.tier === "PAID_PRO" ?
+                                              qsTr("Paid Pro: Gemini 4 + Claude 5.5 + 5H & Weekly quota") :
+                                              (model.tier === "FREE_PRO" ?
+                                                  qsTr("Free Pro: Gemini 3.8 + Claude 4.6 + 5H & Weekly quota") :
+                                                  qsTr("Free account: Weekly quota only (no 5H limit)"))
+                                onClicked: {
+                                    listView.currentIndex = index;
+                                }
+                            }
+                        }
+                    }
+
+                    // -------------------------------------------------
+                    // Col 5: 账号名称 (纯净用户名，拖拽手柄 ⠿ + 悬浮[置顶]按钮 + 点击复制邮箱)
+                    // -------------------------------------------------
+                    Item {
+                        id: col5AccountItem
                         Layout.preferredWidth: colAccountWidth
                         Layout.minimumWidth: colAccountWidth
                         Layout.maximumWidth: colAccountWidth
@@ -1266,7 +1347,7 @@ Item {
                             }
                         }
 
-                        // 2. 账号纯净用户名 (截断与复制)
+                        // 2. 账号纯净用户名
                         Text {
                             id: accountNameText
                             anchors.left: dragHandle.right
@@ -1381,7 +1462,7 @@ Item {
                         }
                     }
 
-                    // Hairline between Col 4 and Col 5
+                    // Hairline between Col 5 (Account) and Col 6 (Gemini)
                     Rectangle {
                         width: 1
                         Layout.preferredWidth: 1
@@ -1395,114 +1476,12 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 5: Gemini 4 配额单元格 (彻底移除 周 徽标，严格裁剪零溢出)
+                    // Col 6: Gemini 官方配额单元格 (方案 A：Pro 双轨 5H+W，FREE 单轨 W 居中)
                     // -------------------------------------------------
                     Item {
-                        Layout.preferredWidth: colG4Width
-                        Layout.minimumWidth: colG4Width
-                        Layout.maximumWidth: colG4Width
-                        Layout.fillHeight: true
-                        clip: true
-
-                        // 账号无 Gemini 4 权限：优雅呈现中线 —
-                        Text {
-                            anchors.centerIn: parent
-                            visible: !model.gemini4Valid
-                            text: "—"
-                            font.family: theme.monoFont
-                            font.pixelSize: 14
-                            renderType: Text.NativeRendering
-                            color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#9CA3AF"
-                            ToolTip.visible: g4EmptyMouse.containsMouse
-                            ToolTip.text: qsTr("No Gemini 4 access")
-
-                            MouseArea {
-                                id: g4EmptyMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                            }
-                        }
-
-                        // 账号具备 Gemini 4 额度：单轨纯净进度条
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 10
-                            visible: model.gemini4Valid
-                            spacing: 5
-
-                            // 1. 原生平滑进度条 (高对比纯直角长方形)
-                            Rectangle {
-                                Layout.fillWidth: true
-                                implicitWidth: 48
-                                Layout.minimumWidth: 16
-                                Layout.preferredHeight: 5
-                                height: 5
-                                radius: 0
-                                color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    radius: 0
-                                    width: (model.gemini4Quota <= 0.0001) ? 0 :
-                                           Math.min(parent.width, Math.max(4, parent.width * (model.gemini4Quota || 0.0)))
-                                    color: accountListView.getQuotaColor(model.gemini4Quota)
-
-                                    Behavior on width { NumberAnimation { duration: 250 } }
-                                }
-                            }
-
-                            // 2. Monospace 百分比数值（四舍五入整数，32px 紧凑右对齐）
-                            Text {
-                                Layout.preferredWidth: 32
-                                text: accountListView.formatQuotaPct(model.gemini4Quota)
-                                font.family: theme.monoFont
-                                font.pixelSize: 12
-                                font.weight: Font.DemiBold
-                                renderType: Text.NativeRendering
-                                horizontalAlignment: Text.AlignRight
-                                color: accountListView.getQuotaColor(model.gemini4Quota)
-                            }
-
-                            // 3. 重置倒计时槽位 (12px 统一字体字号 + 52px 右对齐，紧致清晰)
-                            Text {
-                                Layout.preferredWidth: 52
-                                Layout.leftMargin: 2
-                                text: (model.gemini4Reset === "即将恢复") ? qsTr("即将恢复") :
-                                      ((model.gemini4Reset === "--" || !model.gemini4Reset) ? "—" : model.gemini4Reset)
-                                font.family: theme.monoFont
-                                font.pixelSize: 12
-                                font.weight: Font.DemiBold
-                                renderType: Text.NativeRendering
-                                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
-                                horizontalAlignment: Text.AlignRight
-                                elide: Text.ElideNone
-                            }
-                        }
-                    }
-
-                    // Hairline between Col 5 and Col 6
-                    Rectangle {
-                        width: 1
-                        Layout.preferredWidth: 1
-                        Layout.minimumWidth: 1
-                        Layout.maximumWidth: 1
-                        Layout.fillHeight: true
-                        Layout.topMargin: 6
-                        Layout.bottomMargin: 6
-                        radius: 0
-                        color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
-                    }
-
-                    // -------------------------------------------------
-                    // Col 6: Gemini 3.8 双维配额单元格 (带周耗尽 0% 熔断，严格裁剪+边距+紧凑均衡)
-                    // -------------------------------------------------
-                    Item {
-                        Layout.preferredWidth: colG38Width
-                        Layout.minimumWidth: colG38Width
-                        Layout.maximumWidth: colG38Width
+                        Layout.preferredWidth: colGeminiWidth
+                        Layout.minimumWidth: colGeminiWidth
+                        Layout.maximumWidth: colGeminiWidth
                         Layout.fillHeight: true
                         clip: true
 
@@ -1516,8 +1495,9 @@ Item {
                             anchors.bottomMargin: 2
                             spacing: 3
 
-                            // 上轨: 5小时滑动窗口
+                            // 上轨: 5小时滑动窗口 (仅 Pro 账号显示；FREE 账号彻底隐藏，单轨 W 居中)
                             RowLayout {
+                                visible: model.has5h
                                 Layout.fillWidth: true
                                 spacing: 5
 
@@ -1699,8 +1679,9 @@ Item {
                             anchors.bottomMargin: 2
                             spacing: 3
 
-                            // 上轨: 5小时滑动窗口
+                            // 上轨: 5小时滑动窗口 (仅 Pro 账号显示；FREE 账号彻底隐藏，单轨 W 居中)
                             RowLayout {
+                                visible: model.has5h
                                 Layout.fillWidth: true
                                 spacing: 5
 
@@ -2000,11 +1981,13 @@ Item {
                 anchors.rightMargin: 12
                 spacing: 12
 
-                // 左侧: 全池统计信息 (共 %1 个账号 · 可用 %2 · 显示 %3)
+                // 左侧: 全池三档统计信息
                 Text {
-                    text: qsTr("共 %1 个账号 · 可用 %2 · 显示 %3")
+                    text: qsTr("共 %1 个账号 · 付费PRO %2 · 免费PRO %3 · FREE %4 · 显示 %5")
                           .arg((accountModel && typeof accountModel.count !== "undefined") ? accountModel.count : (accountModel ? accountModel.rowCount() : 0))
-                          .arg(accountListView.availableCount)
+                          .arg(accountModel ? (accountModel.paidProCount || 0) : 0)
+                          .arg(accountModel ? (accountModel.freeProCount || 0) : 0)
+                          .arg(accountModel ? (accountModel.freeCount || 0) : 0)
                           .arg(accountListView.displayedCount)
                     font.family: theme.uiFont
                     font.pixelSize: 11

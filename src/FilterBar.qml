@@ -38,7 +38,7 @@ Item {
         // -------------------------------------------------------------
         Rectangle {
             id: searchBox
-            Layout.preferredWidth: 230
+            Layout.preferredWidth: 184
             Layout.preferredHeight: 32
             radius: 0
             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
@@ -169,7 +169,7 @@ Item {
                     required property var modelData
                     property bool isActive: proxyModel ? (proxyModel.statusTab === modelData.key) : (modelData.key === "all")
 
-                    implicitWidth: tabRow.implicitWidth + 24
+                    implicitWidth: tabRow.implicitWidth + 18
                     implicitHeight: 30
                     radius: 0
 
@@ -220,6 +220,81 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             if (proxyModel) proxyModel.statusTab = modelData.key;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 竖向分隔线 (状态筛选 | 账号类别快筛)
+        Rectangle {
+            width: 1
+            Layout.preferredWidth: 1
+            Layout.preferredHeight: 18
+            color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+        }
+
+        // -------------------------------------------------------------
+        // 2.5. 三档账号类别快筛胶囊组 (付费 PRO / 免费 PRO / FREE)
+        // -------------------------------------------------------------
+        RowLayout {
+            spacing: 4
+
+            Repeater {
+                model: [
+                    { key: "PAID_PRO", label: qsTr("Paid Pro"), color: (theme && theme.mode === "light") ? "#D97706" : "#F59E0B", textCol: (theme && theme.mode === "light") ? "#B45309" : "#FBBF24" },
+                    { key: "FREE_PRO", label: qsTr("Free Pro"), color: (theme && theme.mode === "light") ? "#0284C7" : "#22D3EE", textCol: (theme && theme.mode === "light") ? "#0369A1" : "#67E8F9" },
+                    { key: "FREE", label: qsTr("Free"), color: (theme && theme.mode === "light") ? "#6B7280" : "#9CA3AF", textCol: (theme && theme.mode === "light") ? "#4B5563" : "#D1D5DB" }
+                ]
+
+                delegate: Rectangle {
+                    id: tierCapsule
+                    required property var modelData
+                    property bool isSelected: proxyModel ? (proxyModel.tierFilter === modelData.key) : false
+
+                    implicitWidth: tierPillRow.implicitWidth + 14
+                    implicitHeight: 30
+                    radius: 0
+                    color: isSelected ? Qt.alpha(modelData.color, 0.22) :
+                           (tierPillMouse.containsMouse ? Qt.alpha(modelData.color, 0.10) : "transparent")
+                    border.width: 1
+                    border.color: isSelected ? modelData.color :
+                                  (tierPillMouse.containsMouse ? modelData.color :
+                                  ((theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff"))
+
+                    RowLayout {
+                        id: tierPillRow
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Rectangle {
+                            width: 5
+                            height: 5
+                            radius: 0
+                            color: modelData.color
+                        }
+
+                        Text {
+                            text: modelData.label
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            font.weight: tierCapsule.isSelected ? Font.Bold : Font.DemiBold
+                            renderType: Text.NativeRendering
+                            color: tierCapsule.isSelected ? modelData.textCol :
+                                   ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#CBD5E1")
+                        }
+                    }
+
+                    MouseArea {
+                        id: tierPillMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        ToolTip.visible: containsMouse
+                        ToolTip.text: qsTr("Filter by tier: %1").arg(modelData.label)
+                        onClicked: {
+                            if (!proxyModel) return;
+                            proxyModel.tierFilter = (proxyModel.tierFilter === modelData.key) ? "" : modelData.key;
                         }
                     }
                 }

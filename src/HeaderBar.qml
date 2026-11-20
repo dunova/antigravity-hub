@@ -147,7 +147,38 @@ Rectangle {
                     renderType: Text.NativeRendering
                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     elide: Text.ElideRight
-                    Layout.maximumWidth: 130
+                    Layout.maximumWidth: 120
+                }
+
+                // Active Account Tier Micro-Badge (Paid Pro / Free Pro / Free)
+                Rectangle {
+                    id: activeTierPill
+                    readonly property string tierCode: (accountModel && accountModel.activeTier) ? accountModel.activeTier : ""
+                    visible: tierCode.length > 0
+                    height: 16
+                    implicitWidth: activeTierText.implicitWidth + 8
+                    radius: 0
+                    color: tierCode === "PAID_PRO" ? ((theme && theme.mode === "light") ? "#FEF3C7" : Qt.alpha("#F59E0B", 0.22)) :
+                           (tierCode === "FREE_PRO" ? ((theme && theme.mode === "light") ? "#E0F2FE" : Qt.alpha("#06B6D4", 0.20)) :
+                           ((theme && theme.mode === "light") ? "#F3F4F6" : Qt.alpha("#9CA3AF", 0.14)))
+                    border.width: 1
+                    border.color: tierCode === "PAID_PRO" ? ((theme && theme.mode === "light") ? "#D97706" : "#F59E0B") :
+                                  (tierCode === "FREE_PRO" ? ((theme && theme.mode === "light") ? "#0284C7" : "#22D3EE") :
+                                  ((theme && theme.mode === "light") ? "#9CA3AF" : "#6B7280"))
+
+                    Text {
+                        id: activeTierText
+                        anchors.centerIn: parent
+                        text: activeTierPill.tierCode === "PAID_PRO" ? qsTr("Paid Pro") :
+                              (activeTierPill.tierCode === "FREE_PRO" ? qsTr("Free Pro") : qsTr("Free"))
+                        font.family: theme.monoFont
+                        font.pixelSize: 9
+                        font.weight: Font.Bold
+                        renderType: Text.NativeRendering
+                        color: activeTierPill.tierCode === "PAID_PRO" ? ((theme && theme.mode === "light") ? "#B45309" : "#FBBF24") :
+                               (activeTierPill.tierCode === "FREE_PRO" ? ((theme && theme.mode === "light") ? "#0369A1" : "#67E8F9") :
+                               ((theme && theme.mode === "light") ? "#4B5563" : "#D1D5DB"))
+                    }
                 }
             }
 

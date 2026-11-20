@@ -73,12 +73,15 @@ private slots:
     // v3.0.7 Zero-Threshold Depletion Floor Invariants
     void v307SettingsZeroThresholdInvariants();
 
+    // v3.1.0 Three-Tier Classification & Official Gemini/Claude Single-Track Invariants
+    void v310ThreeTierClassificationAndFreeSingleTrackInvariants();
+
     void cleanupTestCase();
 };
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("3.0.7"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("3.1.0"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1373,9 +1376,19 @@ void AntigravityHubTests::accountListViewVisualDenoisingInvariants() {
     QVERIFY2(!content.contains(QStringLiteral("[5.5]")),
              "MANDATORY DENOISING VIOLATION: '[5.5]' badge found in AccountListView.qml");
 
-    // 2. Column 5 header must strictly be "Gemini 4", purged of "(周)"
-    QVERIFY2(content.contains(QStringLiteral("text: qsTr(\"Gemini 4\")")),
-             "MANDATORY DENOISING VIOLATION: Column header does not strictly match qsTr(\"Gemini 4\")");
+    // 2. Official v3.1.0 column headers: Tier + Gemini + Claude (Gemini 4 / Gemini 3.8 split removed)
+    QVERIFY2(content.contains(QStringLiteral("text: qsTr(\"Tier\")")),
+             "Column 4 header must be qsTr(\"Tier\")");
+    QVERIFY2(content.contains(QStringLiteral("text: qsTr(\"Gemini\")")),
+             "Column 6 header must strictly match official qsTr(\"Gemini\")");
+    QVERIFY2(content.contains(QStringLiteral("text: qsTr(\"Claude\")")),
+             "Column 7 header must strictly match official qsTr(\"Claude\")");
+    QVERIFY2(!content.contains(QStringLiteral("qsTr(\"Gemini 3.8\")")),
+             "Obsolete separate Gemini 3.8 header must be removed");
+    QVERIFY2(!content.contains(QStringLiteral("qsTr(\"Gemini 4\")")),
+             "Obsolete separate Gemini 4 header must be removed");
+    QVERIFY2(content.contains(QStringLiteral("visible: model.has5h")),
+             "Plan A: 5H track must be hidden for FREE accounts (visible: model.has5h)");
     QVERIFY2(!content.contains(QStringLiteral("(周)")),
              "MANDATORY DENOISING VIOLATION: '(周)' found in AccountListView.qml");
     QVERIFY2(!content.contains(QStringLiteral("(周额度)")),
@@ -1488,19 +1501,19 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     const QString content = QString::fromUtf8(file.readAll());
     file.close();
 
-    // Verify responsive base column widths and row height (v3.0.6 rebalanced integer layout)
+    // Verify responsive base column widths and row height (v3.1.0 official Tier + Gemini + Claude layout)
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolCheckWidth\s*:\s*24\b)"))), "colCheckWidth != 24");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolIndexWidth\s*:\s*24\b)"))), "colIndexWidth != 24");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolStatusWidth\s*:\s*66\b)"))), "colStatusWidth != 66");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*142\b)"))), "colAccountWidth base != 142");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG4Width\s*:\s*148\b)"))), "colG4Width base != 148");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolG38Width\s*:\s*204\b)"))), "colG38Width base != 204");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*204\b)"))), "colClaudeWidth base != 204");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolStatusWidth\s*:\s*64\b)"))), "colStatusWidth != 64");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolTierWidth\s*:\s*78\b)"))), "colTierWidth != 78");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*154\b)"))), "colAccountWidth base != 154");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolGeminiWidth\s*:\s*234\b)"))), "colGeminiWidth base != 234");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*234\b)"))), "colClaudeWidth base != 234");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*64\b)"))), "colActionWidth != 64");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\browHeight\s*:\s*42\b)"))), "rowHeight != 42");
 
-    // Exact arithmetic base sum check: 24 + 24 + 66 + 142 + 148 + 204 + 204 + 64 == 876 (+ 20px overhead = 896px)
-    const int baseColumnWidth = 24 + 24 + 66 + 142 + 148 + 204 + 204 + 64;
+    // Exact arithmetic base sum check: 24 + 24 + 64 + 78 + 154 + 234 + 234 + 64 == 876 (+ 20px overhead = 896px)
+    const int baseColumnWidth = 24 + 24 + 64 + 78 + 154 + 234 + 234 + 64;
     QCOMPARE(baseColumnWidth, 876);
 
     // Verify interactive & collision-prevention guards in AccountListView.qml
@@ -1523,9 +1536,9 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colCheckWidth")), "Header Col 1 missing preferredWidth");
     QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colIndexWidth")), "Header Col 2 missing preferredWidth");
     QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colStatusWidth")), "Header Col 3 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Header Col 4 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colG4Width")), "Header Col 5 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colG38Width")), "Header Col 6 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colTierWidth")), "Header Col 4 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Header Col 5 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colGeminiWidth")), "Header Col 6 missing preferredWidth");
     QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Header Col 7 missing preferredWidth");
     QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Header Col 8 missing preferredWidth");
 
@@ -1539,9 +1552,9 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colCheckWidth")), "Delegate Col 1 missing preferredWidth");
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colIndexWidth")), "Delegate Col 2 missing preferredWidth");
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colStatusWidth")), "Delegate Col 3 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Delegate Col 4 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colG4Width")), "Delegate Col 5 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colG38Width")), "Delegate Col 6 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colTierWidth")), "Delegate Col 4 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Delegate Col 5 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colGeminiWidth")), "Delegate Col 6 missing preferredWidth");
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Delegate Col 7 missing preferredWidth");
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Delegate Col 8 missing preferredWidth");
 
@@ -1583,9 +1596,9 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     const int sum896 = listObj->property("colCheckWidth").toInt() +
                          listObj->property("colIndexWidth").toInt() +
                          listObj->property("colStatusWidth").toInt() +
+                         listObj->property("colTierWidth").toInt() +
                          listObj->property("colAccountWidth").toInt() +
-                         listObj->property("colG4Width").toInt() +
-                         listObj->property("colG38Width").toInt() +
+                         listObj->property("colGeminiWidth").toInt() +
                          listObj->property("colClaudeWidth").toInt() +
                          listObj->property("colActionWidth").toInt();
     QCOMPARE(sum896, 876);
@@ -1595,14 +1608,14 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     const int sum1872 = listObj->property("colCheckWidth").toInt() +
                           listObj->property("colIndexWidth").toInt() +
                           listObj->property("colStatusWidth").toInt() +
+                          listObj->property("colTierWidth").toInt() +
                           listObj->property("colAccountWidth").toInt() +
-                          listObj->property("colG4Width").toInt() +
-                          listObj->property("colG38Width").toInt() +
+                          listObj->property("colGeminiWidth").toInt() +
                           listObj->property("colClaudeWidth").toInt() +
                           listObj->property("colActionWidth").toInt();
     QCOMPARE(sum1872, 1852);
-    QVERIFY(listObj->property("colG4Width").toInt() > 300);
-    QVERIFY(listObj->property("colG38Width").toInt() > 450);
+    QVERIFY(listObj->property("colGeminiWidth").toInt() > 550);
+    QVERIFY(listObj->property("colClaudeWidth").toInt() > 550);
 
     // 3. Runtime verification of integer half-up percentage rounding helper formatQuotaPct
     auto invokePct = [&](double ratio) -> QString {
@@ -2068,6 +2081,113 @@ void AntigravityHubTests::v307SettingsZeroThresholdInvariants() {
 
     if (prevBaseUrl.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_BASE_URL");
     else qputenv("ANTIGRAVITY_HUB_BASE_URL", prevBaseUrl);
+    if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
+    else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
+}
+
+void AntigravityHubTests::v310ThreeTierClassificationAndFreeSingleTrackInvariants() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QByteArray prevHubDir = qgetenv("ANTIGRAVITY_HUB_DIR");
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    QDir(tempDir.path()).mkpath("data");
+    const QString accountsFile = tempDir.filePath("data/accounts_hub.json");
+
+    QJsonObject accountsObj;
+
+    // 1. PAID_PRO (has_5h=true, Claude 5.5)
+    QJsonObject paidAcc;
+    paidAcc["email"] = "paidpro@gmail.com";
+    paidAcc["has_5h"] = true;
+    paidAcc["claude_version"] = "5.5";
+    paidAcc["claude_models"] = QJsonArray({QStringLiteral("claude-opus-5-5-high")});
+    QJsonObject pGem; pGem["quota_5h"] = 0.80; pGem["quota_weekly"] = 0.70; paidAcc["gemini"] = pGem;
+    QJsonObject pCla; pCla["quota_5h"] = 1.00; pCla["quota_weekly"] = 0.90; paidAcc["claude"] = pCla;
+    accountsObj["paidpro@gmail.com"] = paidAcc;
+
+    // 2. FREE_PRO (has_5h=true, Claude 4.6)
+    QJsonObject freeProAcc;
+    freeProAcc["email"] = "freepro@gmail.com";
+    freeProAcc["has_5h"] = true;
+    freeProAcc["claude_version"] = "4.6";
+    freeProAcc["claude_models"] = QJsonArray({QStringLiteral("claude-sonnet-4-6")});
+    QJsonObject fpGem; fpGem["quota_5h"] = 0.95; fpGem["quota_weekly"] = 0.60; freeProAcc["gemini"] = fpGem;
+    QJsonObject fpCla; fpCla["quota_5h"] = 1.00; fpCla["quota_weekly"] = 1.00; freeProAcc["claude"] = fpCla;
+    accountsObj["freepro@gmail.com"] = freeProAcc;
+
+    // 3. FREE (has_5h=false, quota_5h=null, healthy weekly=0.80)
+    QJsonObject freeAcc;
+    freeAcc["email"] = "freeonly@gmail.com";
+    freeAcc["has_5h"] = false;
+    freeAcc["claude_version"] = "4.6";
+    freeAcc["claude_models"] = QJsonArray({QStringLiteral("claude-sonnet-4-6")});
+    QJsonObject fGem; fGem["quota_5h"] = QJsonValue::Null; fGem["quota_weekly"] = 0.80; freeAcc["gemini"] = fGem;
+    QJsonObject fCla; fCla["quota_5h"] = QJsonValue::Null; fCla["quota_weekly"] = 1.00; freeAcc["claude"] = fCla;
+    accountsObj["freeonly@gmail.com"] = freeAcc;
+
+    QJsonObject rootDoc;
+    rootDoc["active_email"] = "paidpro@gmail.com";
+    rootDoc["accounts_order"] = QJsonArray({
+        QStringLiteral("freeonly@gmail.com"),
+        QStringLiteral("freepro@gmail.com"),
+        QStringLiteral("paidpro@gmail.com")
+    });
+    rootDoc["accounts"] = accountsObj;
+
+    QFile file(accountsFile);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(QJsonDocument(rootDoc).toJson());
+    file.close();
+
+    AccountModel model;
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.paidProCount(), 1);
+    QCOMPARE(model.freeProCount(), 1);
+    QCOMPARE(model.freeCount(), 1);
+    QCOMPARE(model.activeTier(), QStringLiteral("PAID_PRO"));
+
+    const int rowPaid = model.findIndexByEmail("paidpro@gmail.com");
+    const int rowFreePro = model.findIndexByEmail("freepro@gmail.com");
+    const int rowFree = model.findIndexByEmail("freeonly@gmail.com");
+    QVERIFY(rowPaid >= 0 && rowFreePro >= 0 && rowFree >= 0);
+
+    QCOMPARE(model.data(model.index(rowPaid, 0), AccountModel::TierRole).toString(), QStringLiteral("PAID_PRO"));
+    QCOMPARE(model.data(model.index(rowPaid, 0), AccountModel::Has5hRole).toBool(), true);
+    QCOMPARE(model.data(model.index(rowFreePro, 0), AccountModel::TierRole).toString(), QStringLiteral("FREE_PRO"));
+    QCOMPARE(model.data(model.index(rowFreePro, 0), AccountModel::Has5hRole).toBool(), true);
+    QCOMPARE(model.data(model.index(rowFree, 0), AccountModel::TierRole).toString(), QStringLiteral("FREE"));
+    QCOMPARE(model.data(model.index(rowFree, 0), AccountModel::Has5hRole).toBool(), false);
+    QCOMPARE(model.data(model.index(rowFree, 0), AccountModel::Gemini38Quota5hRole).toDouble(), 0.0);
+
+    AccountFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+
+    // Crucial anti-regression: healthy FREE account (has5h=false, g5h=0.0, gW=0.80) must NOT appear in "warning" tab!
+    proxy.setStatusTab("warning");
+    QCOMPARE(proxy.filteredCount(), 0);
+
+    // Tier filter tests
+    proxy.setStatusTab("all");
+    proxy.setTierFilter("PAID_PRO");
+    QCOMPARE(proxy.filteredCount(), 1);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::EmailRole).toString(), QStringLiteral("paidpro@gmail.com"));
+
+    proxy.setTierFilter("FREE_PRO");
+    QCOMPARE(proxy.filteredCount(), 1);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::EmailRole).toString(), QStringLiteral("freepro@gmail.com"));
+
+    proxy.setTierFilter("FREE");
+    QCOMPARE(proxy.filteredCount(), 1);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::EmailRole).toString(), QStringLiteral("freeonly@gmail.com"));
+
+    // Tier sorting test: PAID_PRO -> FREE_PRO -> FREE
+    proxy.setTierFilter("");
+    proxy.setSortRule("tier", Qt::AscendingOrder);
+    QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::TierRole).toString(), QStringLiteral("PAID_PRO"));
+    QCOMPARE(proxy.data(proxy.index(1, 0), AccountModel::TierRole).toString(), QStringLiteral("FREE_PRO"));
+    QCOMPARE(proxy.data(proxy.index(2, 0), AccountModel::TierRole).toString(), QStringLiteral("FREE"));
+
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
 }

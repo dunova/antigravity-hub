@@ -219,10 +219,98 @@ void AccountModel::loadFromDisk() {
 
         item.email = a.value(QStringLiteral("email")).toString(it.key());
         item.id = a.value(QStringLiteral("id")).toString();
-        item.tier = a.value(QStringLiteral("tier")).toString(QStringLiteral("PRO"));
-        item.pro = a.value(QStringLiteral("pro")).toBool(true);
         item.isBlocked = a.value(QStringLiteral("validation_blocked")).toBool(false);
         item.validationUrl = a.value(QStringLiteral("validation_url")).toString();
+
+        const QString overrideTier = a.value(QStringLiteral("tier_override")).toString().trimmed().toUpper();
+        const QString tierRaw = a.value(QStringLiteral("tier")).toString().trimmed().toUpper();
+        const QString explicitVer = a.value(QStringLiteral("claude_version")).toString().trimmed();
+        const QJsonObject geminiObj = a.value(QStringLiteral("gemini")).toObject();
+        const QJsonObject claudeObj = a.value(QStringLiteral("claude")).toObject();
+
+        bool hasReal55 = false;
+        const QJsonArray cModels = a.value(QStringLiteral("claude_models")).toArray();
+        if (!cModels.isEmpty()) {
+            for (const auto &mv : cModels) {
+                const QString ms = mv.toString();
+                if (ms.contains(QStringLiteral("5-5")) || ms.contains(QStringLiteral("5.5"))) {
+                    hasReal55 = true;
+                    break;
+                }
+            }
+        } else if (explicitVer == QStringLiteral("5.5")) {
+            hasReal55 = true;
+        }
+
+        // 权威物理判定 has5h：以官方接口是否返回 5h 桶为唯一真源
+        bool has5h = false;
+        if (a.contains(QStringLiteral("has_5h")) && a.value(QStringLiteral("has_5h")).isBool()) {
+            has5h = a.value(QStringLiteral("has_5h")).toBool();
+        } else if (tierRaw == QStringLiteral("PAID_PRO") || tierRaw == QStringLiteral("FREE_PRO")) {
+            has5h = true;
+        } else if (tierRaw == QStringLiteral("FREE")) {
+            has5h = false;
+        } else {
+            const QJsonValue g5Val = geminiObj.value(QStringLiteral("quota_5h"));
+            const QJsonValue c5Val = claudeObj.value(QStringLiteral("quota_5h"));
+            has5h = (!g5Val.isUndefined() && !g5Val.isNull()) || (!c5Val.isUndefined() && !c5Val.isNull());
+        }
+
+        // 权威三档分类（零硬编码邮箱）：
+        // 1. PAID_PRO (付费 PRO): 有 5H 且开通 Claude 5.5 / Gemini 4 满血权限
+        // 2. FREE_PRO (免费 PRO): 有 5H 但仅 Claude 4.6 / Gemini 3.8
+        // 3. FREE     (FREE):     无 5H，仅周限制
+        bool isPaidPro = false;
+        bool isFreePro = false;
+
+        if (overrideTier == QStringLiteral("PAID_PRO")) {
+            isPaidPro = true;
+            has5h = true;
+        } else if (overrideTier == QStringLiteral("FREE_PRO")) {
+            isFreePro = true;
+            has5h = true;
+        } else if (overrideTier == QStringLiteral("FREE")) {
+            has5h = false;
+        } else if (tierRaw == QStringLiteral("PAID_PRO")) {
+            isPaidPro = true;
+            has5h = true;
+        } else if (tierRaw == QStringLiteral("FREE_PRO")) {
+            isFreePro = true;
+            has5h = true;
+        } else if (tierRaw == QStringLiteral("FREE")) {
+            has5h = false;
+        } else if (has5h) {
+            const bool hasValidG4Field = (a.contains(QStringLiteral("gemini4")) && a.value(QStringLiteral("gemini4")).isObject()) ||
+                                         (a.contains(QStringLiteral("gemini_4")) && a.value(QStringLiteral("gemini_4")).isObject());
+            if (hasReal55 || (explicitVer != QStringLiteral("4.6") && hasValidG4Field)) {
+                isPaidPro = true;
+            } else {
+                isFreePro = true;
+            }
+        }
+
+        if (isPaidPro) {
+            item.tier = QStringLiteral("PAID_PRO");
+            item.tierDisplay = QStringLiteral("付费 PRO");
+            item.tierRank = 0;
+            item.pro = true;
+            item.has5h = true;
+            item.hasClaude55 = true;
+        } else if (isFreePro) {
+            item.tier = QStringLiteral("FREE_PRO");
+            item.tierDisplay = QStringLiteral("免费 PRO");
+            item.tierRank = 1;
+            item.pro = true;
+            item.has5h = true;
+            item.hasClaude55 = false;
+        } else {
+            item.tier = QStringLiteral("FREE");
+            item.tierDisplay = QStringLiteral("FREE");
+            item.tierRank = 2;
+            item.pro = false;
+            item.has5h = false;
+            item.hasClaude55 = false;
+        }
 
         // 账号名与脱敏名 (剥离 @ 后缀保留纯净用户名作为账号列标识)
         item.username = item.email.contains('@') ? item.email.section('@', 0, 0) : item.email;
@@ -236,87 +324,82 @@ void AccountModel::loadFromDisk() {
         item.shortName = item.username;
         item.maskedName = computeMaskedName(item.shortName);
 
-        // Claude 版本与模型矩阵探测
-        const QJsonArray cModels = a.value(QStringLiteral("claude_models")).toArray();
-        const QString explicitVer = a.value(QStringLiteral("claude_version")).toString();
-        bool has55 = false;
-        for (const QJsonValue &v : cModels) {
-            const QString mStr = v.toString();
-            if (mStr.contains(QStringLiteral("5-5")) || mStr.contains(QStringLiteral("5.5"))) {
-                has55 = true;
-                break;
+        // Gemini 4 专享解析 (仅付费pro账号具备 Gemini 4 权限；免费pro和免费账号严格显示为无权限)
+        if (isPaidPro) {
+            QJsonObject g4Obj = a.value(QStringLiteral("gemini4")).toObject();
+            if (g4Obj.isEmpty()) {
+                g4Obj = a.value(QStringLiteral("gemini_4")).toObject();
             }
-        }
-        if (cModels.isEmpty() && explicitVer == QStringLiteral("5.5")) {
-            has55 = true;
-        }
-        item.hasClaude55 = has55;
-
-        // Gemini 4 专享解析 (严格防 4.6 账号被跨账号污染显示)
-        const bool hasExplicitVer = !cModels.isEmpty() || !explicitVer.isEmpty();
-        const bool allowGemini4 = item.hasClaude55 || !hasExplicitVer;
-        QJsonObject g4Obj = a.value(QStringLiteral("gemini4")).toObject();
-        if (g4Obj.isEmpty()) {
-            g4Obj = a.value(QStringLiteral("gemini_4")).toObject();
-        }
-        if (allowGemini4 && !g4Obj.isEmpty() && g4Obj.contains(QStringLiteral("quota_weekly"))) {
-            item.gemini4Quota = g4Obj.value(QStringLiteral("quota_weekly")).toDouble();
-            const QString g4ResetIso = g4Obj.value(QStringLiteral("reset_time_weekly")).toString();
-            item.gemini4ResetTs = parseIsoTimestamp(g4ResetIso);
-            item.gemini4Reset = formatCountdown(item.gemini4ResetTs, nowEpoch);
-            item.gemini4Valid = true;
-        } else if (item.hasClaude55) {
-            // 5.5 账号必然开通 Gemini 4，若无独立周记录继承 Gemini 周可用额度
-            const QJsonObject gObj = a.value(QStringLiteral("gemini")).toObject();
-            item.gemini4Quota = gObj.value(QStringLiteral("quota_weekly")).toDouble(1.0);
-            const QString gResetIso = gObj.value(QStringLiteral("reset_time_weekly")).toString();
-            item.gemini4ResetTs = parseIsoTimestamp(gResetIso);
-            item.gemini4Reset = formatCountdown(item.gemini4ResetTs, nowEpoch);
-            item.gemini4Valid = true;
+            if (!g4Obj.isEmpty() && g4Obj.contains(QStringLiteral("quota_weekly"))) {
+                item.gemini4Quota = g4Obj.value(QStringLiteral("quota_weekly")).toDouble();
+                const QString g4ResetIso = g4Obj.value(QStringLiteral("reset_time_weekly")).toString();
+                item.gemini4ResetTs = parseIsoTimestamp(g4ResetIso);
+                item.gemini4Reset = formatCountdown(item.gemini4ResetTs, nowEpoch);
+                item.gemini4Valid = true;
+            } else {
+                const QJsonObject gObj = a.value(QStringLiteral("gemini")).toObject();
+                item.gemini4Quota = gObj.value(QStringLiteral("quota_weekly")).toDouble(1.0);
+                const QString gResetIso = gObj.value(QStringLiteral("reset_time_weekly")).toString();
+                item.gemini4ResetTs = parseIsoTimestamp(gResetIso);
+                item.gemini4Reset = formatCountdown(item.gemini4ResetTs, nowEpoch);
+                item.gemini4Valid = true;
+            }
         } else {
             item.gemini4Quota = 0.0;
             item.gemini4Reset = QStringLiteral("--");
             item.gemini4Valid = false;
         }
 
-        // Gemini 3.8 双维解析 (带周耗尽短路)
-        const QJsonObject geminiObj = a.value(QStringLiteral("gemini")).toObject();
+        // Gemini 配额解析 (带周耗尽短路；FREE 账号无 5H)
         item.gemini38QuotaW = geminiObj.value(QStringLiteral("quota_weekly")).toDouble(1.0);
         const QString gResetWIso = geminiObj.value(QStringLiteral("reset_time_weekly")).toString();
         item.gemini38ResetWTs = parseIsoTimestamp(gResetWIso);
         item.gemini38ResetW = formatCountdown(item.gemini38ResetWTs, nowEpoch);
 
-        if (item.gemini38QuotaW <= 0.0001) {
-            item.gemini38Quota5h = 0.0; // 周耗尽短路
+        if (!item.has5h) {
+            // 免费账号只有周限制，无 5H 限制
+            item.gemini38Quota5h = 0.0;
+            item.gemini38Reset5hTs = 0;
+            item.gemini38Reset5h = QStringLiteral("--");
         } else {
-            item.gemini38Quota5h = geminiObj.value(QStringLiteral("quota_5h")).toDouble(1.0);
-        }
-        const QString gReset5hIso = geminiObj.value(QStringLiteral("reset_time_5h")).toString();
-        item.gemini38Reset5hTs = parseIsoTimestamp(gReset5hIso);
-        if (item.gemini38Quota5h >= 0.999 || item.gemini38Reset5hTs > nowEpoch + 18000) {
-            item.gemini38Reset5h = QStringLiteral("满额");
-        } else {
-            item.gemini38Reset5h = formatCountdown(item.gemini38Reset5hTs, nowEpoch);
+            if (item.gemini38QuotaW <= 0.0001) {
+                item.gemini38Quota5h = 0.0; // 周耗尽短路
+            } else {
+                item.gemini38Quota5h = geminiObj.value(QStringLiteral("quota_5h")).toDouble(1.0);
+            }
+            const QString gReset5hIso = geminiObj.value(QStringLiteral("reset_time_5h")).toString();
+            item.gemini38Reset5hTs = parseIsoTimestamp(gReset5hIso);
+            if (item.gemini38Quota5h >= 0.999 || item.gemini38Reset5hTs > nowEpoch + 18000) {
+                item.gemini38Reset5h = QStringLiteral("满额");
+            } else {
+                item.gemini38Reset5h = formatCountdown(item.gemini38Reset5hTs, nowEpoch);
+            }
         }
 
-        // Claude 双维解析 (带周耗尽短路)
-        const QJsonObject claudeObj = a.value(QStringLiteral("claude")).toObject();
+        // Claude 配额解析 (带周耗尽短路；FREE 账号无 5H)
         item.claudeQuotaW = claudeObj.value(QStringLiteral("quota_weekly")).toDouble(1.0);
         const QString cResetWIso = claudeObj.value(QStringLiteral("reset_time_weekly")).toString();
         item.claudeResetWTs = parseIsoTimestamp(cResetWIso);
         item.claudeResetW = formatCountdown(item.claudeResetWTs, nowEpoch);
 
-        if (item.claudeQuotaW <= 0.0001) {
-            item.claudeQuota5h = 0.0; // 周耗尽短路
+        if (!item.has5h) {
+            // 免费账号只有周限制，无 5H 限制
+            item.claudeQuota5h = 0.0;
+            item.claudeReset5hTs = 0;
+            item.claudeReset5h = QStringLiteral("--");
         } else {
-            item.claudeQuota5h = claudeObj.value(QStringLiteral("quota_5h")).toDouble(1.0);
-        }
-        const QString cReset5hIso = claudeObj.value(QStringLiteral("reset_time_5h")).toString();
-        item.claudeReset5hTs = parseIsoTimestamp(cReset5hIso);
-        if (item.claudeQuota5h >= 0.999 || item.claudeReset5hTs > nowEpoch + 18000) {
-            item.claudeReset5h = QStringLiteral("满额");
-        } else {
-            item.claudeReset5h = formatCountdown(item.claudeReset5hTs, nowEpoch);
+            if (item.claudeQuotaW <= 0.0001) {
+                item.claudeQuota5h = 0.0; // 周耗尽短路
+            } else {
+                item.claudeQuota5h = claudeObj.value(QStringLiteral("quota_5h")).toDouble(1.0);
+            }
+            const QString cReset5hIso = claudeObj.value(QStringLiteral("reset_time_5h")).toString();
+            item.claudeReset5hTs = parseIsoTimestamp(cReset5hIso);
+            if (item.claudeQuota5h >= 0.999 || item.claudeReset5hTs > nowEpoch + 18000) {
+                item.claudeReset5h = QStringLiteral("满额");
+            } else {
+                item.claudeReset5h = formatCountdown(item.claudeReset5hTs, nowEpoch);
+            }
         }
 
         // 活跃状态与状态胶囊
@@ -405,15 +488,10 @@ void AccountModel::loadFromDisk() {
 
     beginResetModel();
     m_accounts = std::move(newItems);
-    const bool emailChanged = (m_activeEmail != activeEmail);
-    if (emailChanged) {
-        m_activeEmail = activeEmail;
-    }
+    m_activeEmail = activeEmail;
     endResetModel();
 
-    if (emailChanged) {
-        emit activeEmailChanged(m_activeEmail);
-    }
+    emit activeEmailChanged(m_activeEmail);
     emit countChanged();
 }
 
@@ -474,17 +552,23 @@ void AccountModel::onSecondTick() {
             }
         }
 
-        const QString g4R = formatCountdown(acc.gemini4ResetTs, nowEpoch);
+        const QString g4R = acc.gemini4Valid ? formatCountdown(acc.gemini4ResetTs, nowEpoch) : QStringLiteral("--");
         if (g4R != acc.gemini4Reset) { acc.gemini4Reset = g4R; anyChanged = true; }
 
-        const QString g38R5 = formatCountdown(acc.gemini38Reset5hTs, nowEpoch);
-        if (g38R5 != acc.gemini38Reset5h) { acc.gemini38Reset5h = g38R5; anyChanged = true; }
+        if (acc.has5h) {
+            const QString g38R5 = (acc.gemini38Quota5h >= 0.999 || acc.gemini38Reset5hTs > nowEpoch + 18000)
+                ? QStringLiteral("满额") : formatCountdown(acc.gemini38Reset5hTs, nowEpoch);
+            if (g38R5 != acc.gemini38Reset5h) { acc.gemini38Reset5h = g38R5; anyChanged = true; }
+        }
 
         const QString g38RW = formatCountdown(acc.gemini38ResetWTs, nowEpoch);
         if (g38RW != acc.gemini38ResetW) { acc.gemini38ResetW = g38RW; anyChanged = true; }
 
-        const QString cR5 = formatCountdown(acc.claudeReset5hTs, nowEpoch);
-        if (cR5 != acc.claudeReset5h) { acc.claudeReset5h = cR5; anyChanged = true; }
+        if (acc.has5h) {
+            const QString cR5 = (acc.claudeQuota5h >= 0.999 || acc.claudeReset5hTs > nowEpoch + 18000)
+                ? QStringLiteral("满额") : formatCountdown(acc.claudeReset5hTs, nowEpoch);
+            if (cR5 != acc.claudeReset5h) { acc.claudeReset5h = cR5; anyChanged = true; }
+        }
 
         const QString cRW = formatCountdown(acc.claudeResetWTs, nowEpoch);
         if (cRW != acc.claudeResetW) { acc.claudeResetW = cRW; anyChanged = true; }
@@ -512,6 +596,44 @@ void AccountModel::setIsMasked(bool masked) {
 int AccountModel::rowCount(const QModelIndex &parent) const {
     if (parent.isValid()) return 0;
     return m_accounts.size();
+}
+
+int AccountModel::paidProCount() const {
+    int n = 0;
+    for (const auto &a : m_accounts) {
+        if (a.tier == QStringLiteral("PAID_PRO")) ++n;
+    }
+    return n;
+}
+
+int AccountModel::freeProCount() const {
+    int n = 0;
+    for (const auto &a : m_accounts) {
+        if (a.tier == QStringLiteral("FREE_PRO")) ++n;
+    }
+    return n;
+}
+
+int AccountModel::freeCount() const {
+    int n = 0;
+    for (const auto &a : m_accounts) {
+        if (a.tier == QStringLiteral("FREE")) ++n;
+    }
+    return n;
+}
+
+QString AccountModel::activeTier() const {
+    for (const auto &a : m_accounts) {
+        if (a.isActive) return a.tier;
+    }
+    return QString();
+}
+
+QString AccountModel::activeTierDisplay() const {
+    for (const auto &a : m_accounts) {
+        if (a.isActive) return a.tierDisplay;
+    }
+    return QString();
 }
 
 QVariant AccountModel::data(const QModelIndex &index, int role) const {
@@ -579,6 +701,12 @@ QVariant AccountModel::data(const QModelIndex &index, int role) const {
         return item.validationUrl;
     case TierRole:
         return item.tier;
+    case TierDisplayRole:
+        return item.tierDisplay;
+    case TierRankRole:
+        return item.tierRank;
+    case Has5hRole:
+        return item.has5h;
     case IdRole:
         return item.id;
     default:
@@ -614,6 +742,9 @@ QHash<int, QByteArray> AccountModel::roleNames() const {
     roles[IsBlockedRole] = "isBlocked";
     roles[ValidationUrlRole] = "validationUrl";
     roles[TierRole] = "tier";
+    roles[TierDisplayRole] = "tierDisplay";
+    roles[TierRankRole] = "tierRank";
+    roles[Has5hRole] = "has5h";
     roles[IdRole] = "id";
     return roles;
 }
@@ -648,6 +779,9 @@ QVariantMap AccountModel::getAccount(int row) const {
     map[QStringLiteral("hasClaude55")] = item.hasClaude55;
     map[QStringLiteral("isBlocked")] = item.isBlocked;
     map[QStringLiteral("tier")] = item.tier;
+    map[QStringLiteral("tierDisplay")] = item.tierDisplay;
+    map[QStringLiteral("tierRank")] = item.tierRank;
+    map[QStringLiteral("has5h")] = item.has5h;
     return map;
 }
 
@@ -766,6 +900,17 @@ void AccountFilterProxyModel::setStatusTab(const QString &tab) {
     }
 }
 
+void AccountFilterProxyModel::setTierFilter(const QString &tier) {
+    const QString norm = tier.trimmed().toUpper();
+    const QString canonical = (norm == QStringLiteral("ALL")) ? QString() : norm;
+    if (m_tierFilter != canonical) {
+        m_tierFilter = canonical;
+        emit tierFilterChanged(m_tierFilter);
+        invalidate();
+        updateCounts();
+    }
+}
+
 int AccountFilterProxyModel::totalCount() const {
     return sourceModel() ? sourceModel()->rowCount() : 0;
 }
@@ -826,8 +971,17 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
     const double gW = sourceModel()->data(idx, AccountModel::Gemini38QuotaWRole).toDouble();
     const double g5h = sourceModel()->data(idx, AccountModel::Gemini38Quota5hRole).toDouble();
     const double cW = sourceModel()->data(idx, AccountModel::ClaudeQuotaWRole).toDouble();
+    const double c5h = sourceModel()->data(idx, AccountModel::ClaudeQuota5hRole).toDouble();
     const bool isBlocked = sourceModel()->data(idx, AccountModel::IsBlockedRole).toBool();
     const bool hasC55 = sourceModel()->data(idx, AccountModel::HasClaude55Role).toBool();
+    const bool has5h = sourceModel()->data(idx, AccountModel::Has5hRole).toBool();
+    const QString tier = sourceModel()->data(idx, AccountModel::TierRole).toString();
+    const QString tierDisplay = sourceModel()->data(idx, AccountModel::TierDisplayRole).toString();
+
+    // 1.5 账号类别快筛门禁 (PAID_PRO / FREE_PRO / FREE)
+    if (!m_tierFilter.isEmpty() && tier != m_tierFilter) {
+        return false;
+    }
 
     if (m_statusTab == QStringLiteral("usable")) {
         // 可用: 未风控且拥有周配额
@@ -838,9 +992,9 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
         if (gW < 0.50) return false;
         if (hasC55 && cW < 0.50) return false;
     } else if (m_statusTab == QStringLiteral("warning")) {
-        // 告急: 处于低水位但未彻底耗尽
+        // 告急: 处于低水位但未彻底耗尽 (仅对拥有 5H 桶的 Pro 账号判定 5H 低水位，避免误伤 FREE 账号)
         if (gW <= 0.0001) return false;
-        const bool isLow = (gW < 0.15 || cW < 0.15 || g5h < 0.10);
+        const bool isLow = (gW < 0.15 || cW < 0.15 || (has5h && (g5h < 0.10 || c5h < 0.10)));
         if (!isLow) return false;
     } else if (m_statusTab == QStringLiteral("exhausted")) {
         // 枯竭: 周配额彻底耗尽
@@ -855,14 +1009,19 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
 
         if (email.contains(m_filterText, Qt::CaseInsensitive) ||
             shortName.contains(m_filterText, Qt::CaseInsensitive) ||
-            name.contains(m_filterText, Qt::CaseInsensitive)) {
+            name.contains(m_filterText, Qt::CaseInsensitive) ||
+            tier.contains(m_filterText, Qt::CaseInsensitive) ||
+            tierDisplay.contains(m_filterText, Qt::CaseInsensitive)) {
             return true;
         }
 
         // 标签穿透支持
-        if (m_filterText == QStringLiteral("5.5") && hasC55) return true;
-        if (m_filterText == QStringLiteral("4.6") && !hasC55) return true;
-        if (m_filterText == QStringLiteral("active") && sourceModel()->data(idx, AccountModel::IsActiveRole).toBool()) return true;
+        const QString lowerFilter = m_filterText.toLower();
+        if (lowerFilter == QStringLiteral("5.5") && hasC55) return true;
+        if (lowerFilter == QStringLiteral("4.6") && !hasC55) return true;
+        if (lowerFilter == QStringLiteral("active") && sourceModel()->data(idx, AccountModel::IsActiveRole).toBool()) return true;
+        if ((lowerFilter == QStringLiteral("paid") || lowerFilter == QStringLiteral("付费")) && tier == QStringLiteral("PAID_PRO")) return true;
+        if ((lowerFilter == QStringLiteral("pro")) && (tier == QStringLiteral("PAID_PRO") || tier == QStringLiteral("FREE_PRO"))) return true;
 
         return false;
     }
@@ -893,15 +1052,19 @@ bool AccountFilterProxyModel::lessThan(const QModelIndex &sourceLeft, const QMod
         const int a = statusRank(sourceLeft);
         const int b = statusRank(sourceRight);
         if (a != b) return a < b;
+    } else if (m_sortField == QStringLiteral("tier")) {
+        const int a = sourceModel()->data(sourceLeft, AccountModel::TierRankRole).toInt();
+        const int b = sourceModel()->data(sourceRight, AccountModel::TierRankRole).toInt();
+        if (a != b) return a < b;
     } else if (m_sortField == QStringLiteral("gemini4")) {
         const double a = sourceModel()->data(sourceLeft, AccountModel::Gemini4QuotaRole).toDouble();
         const double b = sourceModel()->data(sourceRight, AccountModel::Gemini4QuotaRole).toDouble();
         if (a != b) return a < b;
-    } else if (m_sortField == QStringLiteral("gemini38_5h")) {
+    } else if (m_sortField == QStringLiteral("gemini38_5h") || m_sortField == QStringLiteral("gemini_5h")) {
         const double a = sourceModel()->data(sourceLeft, AccountModel::Gemini38Quota5hRole).toDouble();
         const double b = sourceModel()->data(sourceRight, AccountModel::Gemini38Quota5hRole).toDouble();
         if (a != b) return a < b;
-    } else if (m_sortField == QStringLiteral("gemini38_w")) {
+    } else if (m_sortField == QStringLiteral("gemini38_w") || m_sortField == QStringLiteral("gemini_w")) {
         const double a = sourceModel()->data(sourceLeft, AccountModel::Gemini38QuotaWRole).toDouble();
         const double b = sourceModel()->data(sourceRight, AccountModel::Gemini38QuotaWRole).toDouble();
         if (a != b) return a < b;

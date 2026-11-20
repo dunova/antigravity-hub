@@ -23,7 +23,10 @@ struct AccountItem {
     QString shortName;
     QString maskedName;
     QString tier;
+    QString tierDisplay;
+    int tierRank = 2;           // 0 = PAID_PRO, 1 = FREE_PRO, 2 = FREE
     bool pro = false;
+    bool has5h = false;
     bool isActive = false;
     bool isBlocked = false;
     QString validationUrl;
@@ -61,8 +64,13 @@ struct AccountItem {
 class AccountModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QString activeEmail READ activeEmail NOTIFY activeEmailChanged)
+    Q_PROPERTY(QString activeTier READ activeTier NOTIFY activeEmailChanged)
+    Q_PROPERTY(QString activeTierDisplay READ activeTierDisplay NOTIFY activeEmailChanged)
     Q_PROPERTY(int totalAccounts READ totalAccounts NOTIFY countChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(int paidProCount READ paidProCount NOTIFY countChanged)
+    Q_PROPERTY(int freeProCount READ freeProCount NOTIFY countChanged)
+    Q_PROPERTY(int freeCount READ freeCount NOTIFY countChanged)
     Q_PROPERTY(bool isMasked READ isMasked WRITE setIsMasked NOTIFY isMaskedChanged)
 
 public:
@@ -93,6 +101,9 @@ public:
         IsBlockedRole,
         ValidationUrlRole,
         TierRole,
+        TierDisplayRole,
+        TierRankRole,
+        Has5hRole,
         IdRole
     };
     Q_ENUM(AccountRoles)
@@ -103,10 +114,15 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int totalAccounts() const { return rowCount(); }
     Q_INVOKABLE int count() const { return rowCount(); }
+    int paidProCount() const;
+    int freeProCount() const;
+    int freeCount() const;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
     QString activeEmail() const { return m_activeEmail; }
+    QString activeTier() const;
+    QString activeTierDisplay() const;
     bool isMasked() const { return m_isMasked; }
     Q_INVOKABLE void setIsMasked(bool masked);
 
@@ -160,6 +176,7 @@ class AccountFilterProxyModel : public QSortFilterProxyModel {
     Q_OBJECT
     Q_PROPERTY(QString filterText READ filterText WRITE setFilterText NOTIFY filterTextChanged)
     Q_PROPERTY(QString statusTab READ statusTab WRITE setStatusTab NOTIFY statusTabChanged)
+    Q_PROPERTY(QString tierFilter READ tierFilter WRITE setTierFilter NOTIFY tierFilterChanged)
     Q_PROPERTY(int totalCount READ totalCount NOTIFY countsChanged)
     Q_PROPERTY(int filteredCount READ filteredCount NOTIFY countsChanged)
     Q_PROPERTY(int count READ filteredCount NOTIFY countsChanged)
@@ -175,6 +192,9 @@ public:
 
     QString statusTab() const { return m_statusTab; }
     void setStatusTab(const QString &tab);
+
+    QString tierFilter() const { return m_tierFilter; }
+    void setTierFilter(const QString &tier);
 
     int totalCount() const;
     int filteredCount() const;
@@ -194,6 +214,7 @@ public:
 signals:
     void filterTextChanged(const QString &text);
     void statusTabChanged(const QString &tab);
+    void tierFilterChanged(const QString &tier);
     void countsChanged();
     void sortFieldChanged(const QString &field);
     void sortOrderChanged(Qt::SortOrder order);
@@ -208,6 +229,7 @@ private slots:
 private:
     QString m_filterText;
     QString m_statusTab = QStringLiteral("all"); // "all", "usable", "plentiful", "warning", "exhausted"
+    QString m_tierFilter;                         // "", "PAID_PRO", "FREE_PRO", "FREE"
     QString m_sortField = QStringLiteral("default");
     Qt::SortOrder m_sortOrder = Qt::DescendingOrder;
 };
