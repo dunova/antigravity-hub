@@ -249,8 +249,14 @@ void BackendController::toggleRotation()
             QJsonObject obj = doc.object();
             m_rotationMode = obj.value(QStringLiteral("mode")).toString(QStringLiteral("gemini"));
             emit rotationModeChanged();
+            QString modeLabel = tr("Off");
+            if (m_rotationMode == QStringLiteral("gemini")) {
+                modeLabel = tr("Global Gemini");
+            } else if (m_rotationMode == QStringLiteral("paid_pro")) {
+                modeLabel = tr("Paid Pro Only");
+            }
             emit notificationRequested(tr("Rotation Mode"),
-                                      tr("Mode changed to: %1").arg(m_rotationMode), false);
+                                      tr("Mode changed to: %1").arg(modeLabel), false);
         }
     });
 }

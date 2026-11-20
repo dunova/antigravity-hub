@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "3.1.0"
-__canonical_version_tag__ = "20261120-v3.1.0-THREE_TIER_AND_OFFICIAL_QUOTA_LAYOUT"
-__last_updated__ = "2026-11-20 20:05:00"
-__canonical_doctrine__ = "Antigravity Hub v3.1.0：官方三档账号体系（付费 PRO / 免费 PRO / FREE）、对齐官方 Gemini 与 Claude 双配额列、FREE 账号单轨周限清爽展示"
+__version__ = "3.1.1"
+__canonical_version_tag__ = "20261120-v3.1.1-GLOBAL_GEMINI_AND_PAID_PRO_ROTATION"
+__last_updated__ = "2026-11-20 20:30:00"
+__canonical_doctrine__ = "Antigravity Hub v3.1.1：自动轮转三态升级（全局 Gemini / 仅付费 PRO / 已关闭），彻底移除无意义的 Claude 轮转"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -368,12 +368,12 @@ def clear_manual_override_lock() -> bool:
 
 def get_auto_rotation_config() -> Dict[str, Any]:
     """
-    【全局自动轮换配置】读取自动轮换三态模式配置。
+    【全局自动轮换配置】读取自动轮换三态模式配置（彻底移除 Claude 轮转）。
     三态模式:
-      - 'gemini': 自动轮转 Gemini (仅关注 Gemini 额度)
-      - 'claude': 自动轮转 Claude (仅关注 Claude 额度)
-      - 'off':    彻底关闭轮转功能 (看门狗完全冻结)
-    兼容旧字段 enabled 与 policy。
+      - 'gemini':   默认，全局 Gemini 轮转 (付费 PRO + 免费 PRO + FREE 全池参与)
+      - 'paid_pro': 付费 PRO 轮转 (仅限 PAID_PRO 付费账号参与 Gemini 轮转)
+      - 'off':      彻底关闭轮转功能 (看门狗完全冻结)
+    历史遗留的 'claude' / 'claude_first' 自动平滑降级至默认 'gemini'。
     """
     cfg = {"mode": "gemini", "enabled": True, "policy": "gemini_first", "updated_at": 0}
     if os.path.exists(AUTO_ROTATION_CONFIG_PATH):
@@ -385,43 +385,44 @@ def get_auto_rotation_config() -> Dict[str, Any]:
         except Exception:
             pass
 
-    if "mode" in cfg and cfg["mode"] in ("gemini", "claude", "off"):
-        m = cfg["mode"]
+    raw_mode = str(cfg.get("mode") or "").strip().lower()
+    if raw_mode in ("gemini", "paid_pro", "off"):
+        m = raw_mode
+    elif not cfg.get("enabled", True):
+        m = "off"
+    elif cfg.get("policy") == "paid_pro_only":
+        m = "paid_pro"
     else:
-        if not cfg.get("enabled", True):
-            m = "off"
-        elif cfg.get("policy") in ("claude_first", "claude"):
-            m = "claude"
-        else:
-            m = "gemini"
+        m = "gemini"
+
     cfg["mode"] = m
     cfg["enabled"] = (m != "off")
-    cfg["policy"] = "claude_first" if m == "claude" else "gemini_first"
+    cfg["policy"] = "paid_pro_only" if m == "paid_pro" else "gemini_first"
     return cfg
 
 
 def set_auto_rotation_config(mode: str = "gemini", enabled: Optional[bool] = None, policy: Optional[str] = None) -> Dict[str, Any]:
     """
-    【全局自动轮换配置】持久化原子保存自动轮换三态模式。
-    支持显式传入 mode ('gemini' | 'claude' | 'off')，亦兼容旧参数 enabled/policy。
+    【全局自动轮换配置】持久化原子保存自动轮换三态模式 ('gemini' | 'paid_pro' | 'off')。
     """
-    if mode not in ("gemini", "claude", "off"):
+    norm_mode = str(mode or "").strip().lower()
+    if norm_mode not in ("gemini", "paid_pro", "off"):
         if enabled is False:
-            mode = "off"
-        elif policy in ("claude_first", "claude"):
-            mode = "claude"
+            norm_mode = "off"
+        elif policy == "paid_pro_only":
+            norm_mode = "paid_pro"
         else:
-            mode = "gemini"
+            norm_mode = "gemini"
 
     cfg = {
-        "mode": mode,
-        "enabled": (mode != "off"),
-        "policy": "claude_first" if mode == "claude" else "gemini_first",
+        "mode": norm_mode,
+        "enabled": (norm_mode != "off"),
+        "policy": "paid_pro_only" if norm_mode == "paid_pro" else "gemini_first",
         "updated_at": int(time.time()),
         "updated_by": "hub_ui"
     }
     atomic_write_json(AUTO_ROTATION_CONFIG_PATH, cfg)
-    logger.info(f"💾 [轮换配置持久化] 三态模式已保存: mode={mode} (enabled={cfg['enabled']}, policy={cfg['policy']}) -> {AUTO_ROTATION_CONFIG_PATH}")
+    logger.info(f"💾 [轮换配置持久化] 三态模式已保存: mode={norm_mode} (enabled={cfg['enabled']}, policy={cfg['policy']}) -> {AUTO_ROTATION_CONFIG_PATH}")
     return cfg
 
 def get_hub_settings() -> Dict[str, Any]:
@@ -1757,21 +1758,28 @@ class HubEngine:
 
 
 
-    def switch_top_gemini_account(self) -> Tuple[bool, str, str]:
+    def switch_top_gemini_account(self, rot_mode: Optional[str] = None) -> Tuple[bool, str, str]:
         """
-        针对 Gemini 专项优化：找出全池 Gemini 有效剩余配额最充沛的健康账号并秒级物理切换。
-        严格剔除风控/禁用/无Token账号，并将 >=1.5% (显示>=2%) 健康池与 1% 残丝池物理分级隔离，
-        防止仅剩 1% 周额度的账号凭 5h=100% 抢占 TopG 选号。
+        针对 Gemini 专项优化：找出有效剩余配额最充沛的健康账号并秒级物理切换。
+        - 当处于 paid_pro 模式时，仅在付费 PRO (PAID_PRO) 账号中选优；
+        - 当处于 gemini / off 模式时，全池（含 FREE 单周限账号）统一选优；
+        - 严格剔除风控/禁用/无Token账号，并将 >=1.5% (显示>=2%) 健康池与 1% 残丝池物理分级隔离。
         返回: (success: bool, msg: str, target_email: str)
         """
         data = self.load_accounts()
         accounts = data.get("accounts", {})
         active_email = data.get("active_email", "")
+        effective_mode = rot_mode if rot_mode is not None else get_auto_rotation_config().get("mode", "gemini")
+        paid_pro_only = (effective_mode == "paid_pro")
 
         candidates = []
         for email, acc in accounts.items():
             if not isinstance(acc, dict):
                 continue
+            if paid_pro_only:
+                acc_tier, _, _, _ = classify_account_tier(acc)
+                if acc_tier != "PAID_PRO":
+                    continue
             if acc.get("validation_blocked") or acc.get("disabled"):
                 continue
             if "refresh_token" in acc or "token" in acc:
@@ -1782,7 +1790,14 @@ class HubEngine:
 
             g_info = acc.get("gemini") or {}
             g_w = _safe_float(g_info.get("quota_weekly", 0.0), 0.0)
-            g_5h = 0.0 if g_w <= 0.0001 else _safe_float(g_info.get("quota_5h", 0.0), 0.0)
+            raw_5h = g_info.get("quota_5h")
+            has_5h = acc.get("has_5h")
+            if g_w <= 0.0001:
+                g_5h = 0.0
+            elif has_5h is False or raw_5h is None:
+                g_5h = 1.0
+            else:
+                g_5h = _safe_float(raw_5h, 0.0)
             if g_w <= 0.0001 or g_5h <= 0.0001:
                 continue
 
@@ -1797,6 +1812,8 @@ class HubEngine:
             candidates.append((email, tier, eff, g_w, g_5h))
 
         if not candidates:
+            if paid_pro_only:
+                return False, "当前为付费 PRO 轮转模式，未检测到可用的付费 PRO 账号", ""
             return False, "全池未检测到可用的 Gemini 账号", ""
 
         # 按健康层级、有效可用配额 min(5h, w)、周配额、5h 配额降序
@@ -2229,19 +2246,19 @@ def render_rotation_button_html(oob: bool = False) -> str:
 
     if mode == "gemini":
         btn_cls = "btn-rotation-gemini"
-        btn_text = "Gemini"
+        btn_text = "全局 Gemini"
         btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>'
-        btn_title = "轮转模式: Gemini (耗尽自动切号，点击切换为 Claude 轮转)"
-    elif mode == "claude":
+        btn_title = "轮转模式: 全局 Gemini (全池参与耗尽自动切号，点击切换为仅付费 PRO 轮转)"
+    elif mode == "paid_pro":
         btn_cls = "btn-rotation-claude"
-        btn_text = "Claude"
+        btn_text = "付费 PRO"
         btn_icon = '<polygon points="5 3 19 12 5 21 5 3"/>'
-        btn_title = "轮转模式: Claude (耗尽自动切号，点击关闭自动轮转)"
+        btn_title = "轮转模式: 仅付费 PRO (只在付费 PRO 账号间自动轮转，点击关闭自动轮转)"
     else:  # 'off'
         btn_cls = "btn-rotation-off"
         btn_text = "已关闭"
         btn_icon = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>'
-        btn_title = "轮转模式: 已关闭 (看门狗已冻结，点击开启 Gemini 轮转)"
+        btn_title = "轮转模式: 已关闭 (看门狗已冻结，点击开启全局 Gemini 轮转)"
 
     oob_attr = ' hx-swap-oob="outerHTML:#btn-rotation-toggle"' if oob else ''
     return f"""<button id="btn-rotation-toggle"{oob_attr} class="btn btn-top {btn_cls} font-mono"
@@ -4217,8 +4234,8 @@ def render_dashboard_html() -> str:
                         <div class="cfg-label">自动轮换模式</div>
                         <div class="cfg-field">
                             <select id="cfg-rot-mode" class="neo-select font-mono">
-                                <option value="gemini">Gemini (耗尽自动切号)</option>
-                                <option value="claude">Claude (耗尽自动切号)</option>
+                                <option value="gemini">全局 Gemini (全池耗尽自动切号)</option>
+                                <option value="paid_pro">付费 PRO (仅付费 PRO 账号轮转)</option>
                                 <option value="off">关闭自动轮换</option>
                             </select>
                         </div>
@@ -5226,7 +5243,7 @@ def render_dashboard_html() -> str:
             }}
         }}
 
-        // 🔄 三态循环切换自动轮换开关直通函数 (Gemini ➔ Claude ➔ 关闭 ➔ Gemini)
+        // 🔄 三态循环切换自动轮换开关直通函数 (全局 Gemini ➔ 仅付费 PRO ➔ 关闭 ➔ 全局 Gemini)
         async function cycleAutoRotation(btn) {{
             btn.disabled = true;
             try {{
@@ -5235,24 +5252,24 @@ def render_dashboard_html() -> str:
                 }});
                 if (!resp.ok) throw new Error("HTTP " + resp.status);
                 const res = await resp.json();
-                const mode = res.mode || (res.enabled ? (res.policy === 'claude_first' ? 'claude' : 'gemini') : 'off');
+                const mode = res.mode || (res.enabled ? (res.policy === 'paid_pro_only' ? 'paid_pro' : 'gemini') : 'off');
                 btn.setAttribute('data-mode', mode);
 
                 if (mode === 'gemini') {{
                     btn.className = "btn btn-top btn-rotation-gemini font-mono";
-                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>⚡ 轮转: Gemini';
-                    btn.title = "当前模式：自动轮转 Gemini（仅关注 Gemini 额度，耗尽自动切号，忽略 Claude 额度；点击切换为 Claude 轮转）";
-                    showToast("⚡ 已切换为【自动轮转 Gemini】：仅监控 Gemini 额度，耗尽自动切号", "success");
-                }} else if (mode === 'claude') {{
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>全局 Gemini';
+                    btn.title = "当前模式：全局 Gemini 轮转（全池账号参与耗尽自动切号；点击切换为仅付费 PRO 轮转）";
+                    showToast("⚡ 已切换为【全局 Gemini 轮转】：全池账号参与自动切号", "success");
+                }} else if (mode === 'paid_pro') {{
                     btn.className = "btn btn-top btn-rotation-claude font-mono";
-                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>⚡ 轮转: Claude';
-                    btn.title = "当前模式：自动轮转 Claude（仅关注 Claude 额度，耗尽自动切号，忽略 Gemini 额度；点击彻底关闭轮转）";
-                    showToast("⚡ 已切换为【自动轮转 Claude】：仅监控 Claude 额度，耗尽自动切号", "info");
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>付费 PRO';
+                    btn.title = "当前模式：仅付费 PRO 轮转（只在付费 PRO 账号间自动切号，保留 Gemini 4 体验；点击关闭轮转）";
+                    showToast("👑 已切换为【付费 PRO 轮转】：仅在付费 PRO 账号间自动切号", "info");
                 }} else {{
                     btn.className = "btn btn-top btn-rotation-off font-mono";
-                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>🚫 轮转: 关闭';
-                    btn.title = "当前模式：彻底关闭自动轮转（看门狗已冻结，不自动切号；点击开启 Gemini 轮转）";
-                    showToast("🚫 已彻底关闭自动轮转：看门狗已冻结，不会自动切号，可放心手动使用", "warning");
+                    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px; margin-right:3px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>已关闭';
+                    btn.title = "当前模式：彻底关闭自动轮转（看门狗已冻结，不自动切号；点击开启全局 Gemini 轮转）";
+                    showToast("🚫 已彻底关闭自动轮转：看门狗已冻结，不会自动切号", "warning");
                 }}
             }} catch (err) {{
                 showToast("❌ 切换轮换状态失败: " + err.message, "error");
@@ -6263,12 +6280,12 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             except Exception:
                 pass
 
-            if req_mode in ("gemini", "claude", "off"):
+            if req_mode in ("gemini", "paid_pro", "off"):
                 next_mode = req_mode
             else:
                 if cur_mode == "gemini":
-                    next_mode = "claude"
-                elif cur_mode == "claude":
+                    next_mode = "paid_pro"
+                elif cur_mode == "paid_pro":
                     next_mode = "off"
                 else:
                     next_mode = "gemini"

@@ -81,7 +81,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("3.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("3.1.1"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1426,6 +1426,10 @@ void AntigravityHubTests::accountListViewVisualDenoisingInvariants() {
              "MANDATORY DENOISING VIOLATION: Bolt logo found in HeaderBar topg capsule");
     QVERIFY2(!headerContent.contains(QStringLiteral("name: \"sparkle\"")),
              "MANDATORY DENOISING VIOLATION: Sparkle logo found in HeaderBar prewarm capsule");
+    QVERIFY2(headerContent.contains(QStringLiteral("\"paid_pro\"")),
+             "v3.1.1 HeaderBar missing paid_pro auto-rotation mode");
+    QVERIFY2(!headerContent.contains(QStringLiteral("currentMode === \"claude\"")),
+             "v3.1.1 HeaderBar must not retain obsolete claude auto-rotation mode");
 }
 
 // -----------------------------------------------------------------------------

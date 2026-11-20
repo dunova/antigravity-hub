@@ -107,55 +107,145 @@ class TestRotatorPrecision(unittest.TestCase):
         )
 
     def test_manual_lock_blocks_soft_threshold_but_yields_on_weekly_exhaustion(self):
-        """人工锁对同一活跃账号有效：软阈值 (5% 下剩 2%) 暂缓切号；周额度真归零 (Claude 5h=1.0, w=0.0) 立即破锁"""
+        """人工锁对同一活跃账号有效：软阈值 (5% 下剩 2.5%) 暂缓切号；周额度真归零 (Gemini 5h=1.0, w=0.0) 立即破锁"""
         _write_json(
             os.path.join(self.data_dir, "auto_rotation_config.json"),
-            {"mode": "claude", "enabled": True, "policy": "claude_first"},
+            {"mode": "gemini", "enabled": True, "policy": "gemini_first"},
         )
         _write_json(
             os.path.join(self.data_dir, "data", "hub_settings.json"),
             {
                 "rotation_strategy": "highest-quota",
-                "gemini_threshold": 0.0,
-                "claude_threshold": 0.05,
+                "gemini_threshold": 0.05,
+                "claude_threshold": 0.0,
             },
         )
         _write_json(
             os.path.join(self.data_dir, "manual_override_lock.json"),
-            {"manual_account": "c1@test.com", "locked_until": int(time.time()) + 600},
+            {"manual_account": "g1@test.com", "locked_until": int(time.time()) + 600},
         )
         accounts = {
-            "c1@test.com": {
-                "email": "c1@test.com",
+            "g1@test.com": {
+                "email": "g1@test.com",
                 "refresh_token": "rt1",
-                "gemini": {"quota_5h": 1.0, "quota_weekly": 1.0},
-                "claude": {"quota_5h": 0.025, "quota_weekly": 0.20},
+                "tier": "PAID_PRO",
+                "has_5h": True,
+                "gemini": {"quota_5h": 0.025, "quota_weekly": 0.20},
+                "claude": {"quota_5h": 0.0, "quota_weekly": 0.0},
             },
-            "c2@test.com": {
-                "email": "c2@test.com",
+            "g2@test.com": {
+                "email": "g2@test.com",
                 "refresh_token": "rt2",
-                "gemini": {"quota_5h": 1.0, "quota_weekly": 1.0},
-                "claude": {"quota_5h": 1.0, "quota_weekly": 0.80},
+                "tier": "PAID_PRO",
+                "has_5h": True,
+                "gemini": {"quota_5h": 1.0, "quota_weekly": 0.80},
+                "claude": {"quota_5h": 0.0, "quota_weekly": 0.0},
             },
         }
         accounts_path = os.path.join(self.data_dir, "data", "accounts_hub.json")
-        _write_json(accounts_path, {"active_email": "c1@test.com", "accounts": accounts})
+        _write_json(accounts_path, {"active_email": "g1@test.com", "accounts": accounts})
 
         rotator = AntigravityQuotaRotator(data_dir=self.data_dir)
         rotator.switcher.ensure_fresh_token = MagicMock(return_value=(None, False))
         rotator.switcher.switch_account = MagicMock(return_value=(True, "ok"))
 
-        # Claude 5h=2.5% < 5% 阈值，但尚未彻底耗尽且处于人工锁保护期内 -> 暂缓切号
+        # Gemini 5h=2.5% < 5% 阈值，但尚未彻底耗尽且处于人工锁保护期内 -> 暂缓切号 (Claude 0% 不影响 Gemini 轮转)
         self.assertFalse(rotator.check_and_rotate_once())
         rotator.switcher.switch_account.assert_not_called()
 
-        # Claude 原始 JSON 5h=1.0 但周额度=0.0 -> 周耗尽短路强制破锁切换
-        accounts["c1@test.com"]["claude"] = {"quota_5h": 1.0, "quota_weekly": 0.0}
-        _write_json(accounts_path, {"active_email": "c1@test.com", "accounts": accounts})
+        # Gemini 原始 JSON 5h=1.0 但周额度=0.0 -> 周耗尽短路强制破锁切换
+        accounts["g1@test.com"]["gemini"] = {"quota_5h": 1.0, "quota_weekly": 0.0}
+        _write_json(accounts_path, {"active_email": "g1@test.com", "accounts": accounts})
         self.assertTrue(rotator.check_and_rotate_once())
         rotator.switcher.switch_account.assert_called_once_with(
-            "c2@test.com", force_hot_switch=True, inject_recovery=True
+            "g2@test.com", force_hot_switch=True, inject_recovery=True
         )
+
+    def test_paid_pro_only_mode_and_legacy_claude_fallback_and_free_null_5h(self):
+        """paid_pro 模式严格只选 PAID_PRO 账号；历史 claude 模式回退至 gemini；FREE (quota_5h=None) 在全局模式正常参与轮转与 TopG"""
+        accounts = {
+            "paid_active@test.com": {
+                "email": "paid_active@test.com",
+                "refresh_token": "rt0",
+                "tier": "PAID_PRO",
+                "has_5h": True,
+                "claude_version": "5.5",
+                "gemini": {"quota_5h": 0.0, "quota_weekly": 0.20},
+            },
+            "free_pro_full@test.com": {
+                "email": "free_pro_full@test.com",
+                "refresh_token": "rt1",
+                "tier": "FREE_PRO",
+                "has_5h": True,
+                "claude_version": "4.6",
+                "gemini": {"quota_5h": 1.0, "quota_weekly": 1.0},
+            },
+            "free_full@test.com": {
+                "email": "free_full@test.com",
+                "refresh_token": "rt2",
+                "tier": "FREE",
+                "has_5h": False,
+                "claude_version": "4.6",
+                "gemini": {"quota_5h": None, "quota_weekly": 1.0},
+            },
+            "paid_standby@test.com": {
+                "email": "paid_standby@test.com",
+                "refresh_token": "rt3",
+                "tier": "PAID_PRO",
+                "has_5h": True,
+                "claude_version": "5.5",
+                "gemini": {"quota_5h": 0.60, "quota_weekly": 0.50},
+            },
+        }
+        rotator = AntigravityQuotaRotator(depletion_threshold=0.0, data_dir=self.data_dir)
+
+        # 1. paid_pro 模式：尽管 free_pro_full 和 free_full 都是 100%，仍严格只切往 paid_standby
+        self.assertEqual(
+            rotator.pick_best_standby_account(accounts, "paid_active@test.com", rot_mode="paid_pro"),
+            "paid_standby@test.com",
+        )
+
+        # 2. paid_pro 模式下若无其他可用 PAID_PRO 账号，返回 None，绝不降级切到免费 PRO / FREE
+        no_other_paid = {k: v for k, v in accounts.items() if k != "paid_standby@test.com"}
+        self.assertIsNone(
+            rotator.pick_best_standby_account(no_other_paid, "paid_active@test.com", rot_mode="paid_pro")
+        )
+
+        # 3. 全局 gemini 模式：FREE (quota_5h=None, weekly=1.0) 正常参与选号
+        free_only_standby = {
+            "paid_active@test.com": accounts["paid_active@test.com"],
+            "free_full@test.com": accounts["free_full@test.com"],
+        }
+        self.assertEqual(
+            rotator.pick_best_standby_account(free_only_standby, "paid_active@test.com", rot_mode="gemini"),
+            "free_full@test.com",
+        )
+
+        # 4. 历史残留 mode="claude" 自动降级为 "gemini"
+        _write_json(
+            os.path.join(self.data_dir, "auto_rotation_config.json"),
+            {"mode": "claude", "enabled": True, "policy": "claude_first"},
+        )
+        rot_mode, _, _ = rotator._load_runtime_settings()
+        self.assertEqual(rot_mode, "gemini")
+
+        # 5. TopG 在 paid_pro 模式下也只选付费 PRO，在 gemini 模式下可正常选中 FREE (quota_5h=None)
+        accounts_path = os.path.join(self.data_dir, "data", "accounts_hub.json")
+        _write_json(accounts_path, {"active_email": "paid_active@test.com", "accounts": accounts})
+        with patch.object(hub_server, "ACCOUNTS_HUB_FILE", accounts_path):
+            eng = HubEngine()
+            eng.switch_account = MagicMock(return_value=(True, "ok"))
+            ok_p, _, tgt_p = eng.switch_top_gemini_account(rot_mode="paid_pro")
+            self.assertTrue(ok_p)
+            self.assertEqual(tgt_p, "paid_standby@test.com")
+
+        _write_json(accounts_path, {"active_email": "paid_active@test.com", "accounts": free_only_standby})
+        with patch.object(hub_server, "ACCOUNTS_HUB_FILE", accounts_path):
+            eng = HubEngine()
+            eng.switch_account = MagicMock(return_value=(True, "ok"))
+            ok_g, _, tgt_g = eng.switch_top_gemini_account(rot_mode="gemini")
+            self.assertTrue(ok_g)
+            self.assertEqual(tgt_g, "free_full@test.com")
 
     def test_one_percent_weekly_accounts_never_hijack_any_strategy_or_topg(self):
         """核心防呆：1% 周额度 (0.0073) 与 0% 周额度 (0.004) 账号在所有策略和 TopG 下均绝不抢占健康账号"""
@@ -265,7 +355,7 @@ class TestRotatorPrecision(unittest.TestCase):
         with patch.object(hub_server, "ACCOUNTS_HUB_FILE", accounts_path):
             eng = HubEngine()
             eng.switch_account = MagicMock(return_value=(True, "ok"))
-            ok, msg, target = eng.switch_top_gemini_account()
+            ok, msg, target = eng.switch_top_gemini_account(rot_mode="gemini")
         self.assertTrue(ok)
         self.assertEqual(target, "healthy_top@test.com")
         self.assertIn("98%", msg)

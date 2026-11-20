@@ -45,6 +45,31 @@ def _has_usable_refresh_token(acc: Dict[str, Any]) -> bool:
     return bool(str(rt or "").strip())
 
 
+def _is_paid_pro_account(acc: Dict[str, Any]) -> bool:
+    """判断账号是否为付费 PRO (PAID_PRO，具备 Gemini 4 / Claude 5.5 权限)"""
+    if not isinstance(acc, dict):
+        return False
+    override = str(acc.get("tier_override") or "").strip().upper()
+    if override:
+        return override == "PAID_PRO"
+    tier = str(acc.get("tier") or "").strip().upper()
+    if tier in ("PAID_PRO", "FREE_PRO", "FREE"):
+        return tier == "PAID_PRO"
+    raw_has_5h = acc.get("has_5h")
+    if isinstance(raw_has_5h, bool):
+        has_5h = raw_has_5h
+    else:
+        g_q5h = (acc.get("gemini") or {}).get("quota_5h")
+        c_q5h = (acc.get("claude") or {}).get("quota_5h")
+        has_5h = (g_q5h is not None) or (c_q5h is not None)
+    c_mods = acc.get("claude_models") or []
+    if c_mods:
+        has_55 = any(("5-5" in str(m) or "5.5" in str(m)) for m in c_mods)
+    else:
+        has_55 = (str(acc.get("claude_version") or "").strip() == "5.5")
+    return bool(has_5h and has_55)
+
+
 class AntigravityQuotaRotator:
     """配额看门狗与自动轮转守护进程"""
 
@@ -63,7 +88,7 @@ class AntigravityQuotaRotator:
         self.last_full_refresh_ts: float = 0.0
 
     def _load_runtime_settings(self) -> Tuple[str, float, str]:
-        """读取轮换模式、对应模型告急阈值与自动选号策略（与 hub_settings.json / auto_rotation_config.json 保持一致）"""
+        """读取轮换模式 (gemini | paid_pro | off)、Gemini 告急阈值与自动选号策略（彻底移除 Claude 轮转）"""
         rot_mode = "gemini"
         rot_cfg_path = os.path.join(self.data_dir, "auto_rotation_config.json")
         if os.path.isfile(rot_cfg_path):
@@ -71,13 +96,16 @@ class AntigravityQuotaRotator:
                 with open(rot_cfg_path, "r", encoding="utf-8") as f:
                     raw_rot = json.load(f)
                 if isinstance(raw_rot, dict):
-                    m = raw_rot.get("mode")
-                    if m in ("gemini", "claude", "off"):
+                    m = str(raw_rot.get("mode") or "").strip().lower()
+                    if m in ("gemini", "paid_pro", "off"):
                         rot_mode = m
                     elif not raw_rot.get("enabled", True):
                         rot_mode = "off"
-                    elif raw_rot.get("policy") in ("claude_first", "claude"):
-                        rot_mode = "claude"
+                    elif raw_rot.get("policy") == "paid_pro_only":
+                        rot_mode = "paid_pro"
+                    else:
+                        # 历史遗留 'claude' 等模式平滑回退至默认全局 Gemini 轮转
+                        rot_mode = "gemini"
             except Exception as ex:
                 logger.debug(f"读取 auto_rotation_config.json 异常: {ex}")
 
@@ -94,10 +122,7 @@ class AntigravityQuotaRotator:
                     hub_cfg = json.load(f)
                 if isinstance(hub_cfg, dict):
                     strategy = str(hub_cfg.get("rotation_strategy") or "highest-quota").strip() or "highest-quota"
-                    if rot_mode == "claude":
-                        thresh = _safe_float(hub_cfg.get("claude_threshold", thresh), thresh)
-                    else:
-                        thresh = _safe_float(hub_cfg.get("gemini_threshold", thresh), thresh)
+                    thresh = _safe_float(hub_cfg.get("gemini_threshold", thresh), thresh)
             except Exception as ex:
                 logger.debug(f"读取 hub_settings.json 异常: {ex}")
 
@@ -145,11 +170,14 @@ class AntigravityQuotaRotator:
             self.depletion_threshold if depletion_thresh is None else depletion_thresh,
             0.0,
         )
-        bucket_key = "claude" if rot_mode == "claude" else "gemini"
+        paid_pro_only = (rot_mode == "paid_pro")
 
         candidates: List[Dict[str, Any]] = []
         for email, acc in accounts.items():
             if not isinstance(acc, dict) or email == current_email:
+                continue
+
+            if paid_pro_only and not _is_paid_pro_account(acc):
                 continue
 
             if self.exhausted_cooldown_map.get(email, 0) > now_ts:
@@ -161,8 +189,14 @@ class AntigravityQuotaRotator:
             if not _has_usable_refresh_token(acc):
                 continue
 
-            quota_info = acc.get(bucket_key) or {}
-            k_5h = _safe_float(quota_info.get("quota_5h", 1.0), 1.0)
+            quota_info = acc.get("gemini") or {}
+            # FREE 账号无 5H 限制 (quota_5h 为 None 或 has_5h=False)，5h 维度视作 1.0，由周配额单独约束
+            has_5h = acc.get("has_5h")
+            raw_5h = quota_info.get("quota_5h")
+            if has_5h is False or raw_5h is None:
+                k_5h = 1.0
+            else:
+                k_5h = _safe_float(raw_5h, 1.0)
             k_wk = _safe_float(quota_info.get("quota_weekly", 1.0), 1.0)
 
             # 周耗尽短路 & 0% (<0.5%) 残余屏蔽
@@ -302,26 +336,29 @@ class AntigravityQuotaRotator:
                     active_acc["validation_url"] = val_url
                     self.switcher.save_hub_accounts(hub_data)
                 elif quotas:
-                    active_acc.setdefault("gemini", {})["quota_5h"] = quotas.get("gemini-5h", 1.0)
-                    active_acc["gemini"]["quota_weekly"] = quotas.get("gemini-weekly", 1.0)
-                    if "3p-5h" in quotas:
-                        active_acc.setdefault("claude", {})["quota_5h"] = quotas["3p-5h"]
+                    has_5h_bkt = ("gemini-5h" in quotas) or ("3p-5h" in quotas)
+                    active_acc["has_5h"] = has_5h_bkt
+                    active_acc.setdefault("gemini", {})["quota_weekly"] = quotas.get("gemini-weekly", 1.0)
+                    active_acc["gemini"]["quota_5h"] = quotas["gemini-5h"] if has_5h_bkt and "gemini-5h" in quotas else None
                     if "3p-weekly" in quotas:
                         active_acc.setdefault("claude", {})["quota_weekly"] = quotas["3p-weekly"]
+                    if has_5h_bkt and "3p-5h" in quotas:
+                        active_acc.setdefault("claude", {})["quota_5h"] = quotas["3p-5h"]
+                    elif not has_5h_bkt:
+                        active_acc.setdefault("claude", {})["quota_5h"] = None
                     if "gemini4-weekly" in quotas:
                         active_acc.setdefault("gemini4", {})["quota_weekly"] = quotas["gemini4-weekly"]
                     self.switcher.save_hub_accounts(hub_data)
 
         active_acc = accounts[active_email]
         g_info = active_acc.get("gemini") or {}
-        c_info = active_acc.get("claude") or {}
-        g_5h = _safe_float(g_info.get("quota_5h", 1.0), 1.0)
-        g_wk = _safe_float(g_info.get("quota_weekly", 1.0), 1.0)
-        c_5h = _safe_float(c_info.get("quota_5h", 1.0), 1.0)
-        c_wk = _safe_float(c_info.get("quota_weekly", 1.0), 1.0)
-
-        check_5h = c_5h if rot_mode == "claude" else g_5h
-        check_wk = c_wk if rot_mode == "claude" else g_wk
+        has_5h = active_acc.get("has_5h")
+        raw_g_5h = g_info.get("quota_5h")
+        if has_5h is False or raw_g_5h is None:
+            check_5h = 1.0
+        else:
+            check_5h = _safe_float(raw_g_5h, 1.0)
+        check_wk = _safe_float(g_info.get("quota_weekly", 1.0), 1.0)
         if check_wk <= EXHAUSTED_EPS:
             check_5h = 0.0
 

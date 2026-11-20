@@ -396,7 +396,7 @@ Rectangle {
             }
         }
 
-        // 4. Gemini Rotation Mode Capsule
+        // 4. Gemini Rotation Mode Capsule (3-state: Global Gemini -> Paid Pro Only -> Off)
         Rectangle {
             id: rotationCapsule
             height: 30
@@ -406,12 +406,14 @@ Rectangle {
 
             property string currentMode: backend ? backend.rotationMode : "gemini"
 
-            color: rotMouse.containsMouse ?
-                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
-                   ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
+            color: {
+                if (rotMouse.containsMouse) return (theme && theme.surface3) ? theme.surface3 : "#3c3836";
+                if (currentMode === "paid_pro") return (theme && theme.mode === "light") ? "#FEF3C7" : Qt.alpha("#F59E0B", 0.15);
+                return (theme && theme.surface2) ? theme.surface2 : "#1c1c1c";
+            }
             border.color: {
                 if (currentMode === "gemini") return (theme && theme.accent) ? theme.accent : "#7daea3";
-                if (currentMode === "claude") return (theme && theme.warningText && theme.warningText.charAt(0) === '#') ? theme.warningText : ((theme && theme.accent) ? theme.accent : "#d19a66");
+                if (currentMode === "paid_pro") return (theme && theme.mode === "light") ? "#D97706" : "#F59E0B";
                 return (theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff";
             }
             border.width: 1
@@ -420,17 +422,23 @@ Rectangle {
                 id: geminiText
                 anchors.centerIn: parent
                 text: {
-                    if (rotationCapsule.currentMode === "gemini") return qsTr("Gemini");
-                    if (rotationCapsule.currentMode === "claude") return qsTr("Claude");
+                    if (rotationCapsule.currentMode === "gemini") return qsTr("Global Gemini");
+                    if (rotationCapsule.currentMode === "paid_pro") return qsTr("Paid Pro Only");
                     return qsTr("Off");
                 }
                 font.family: theme.uiFont
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
                 renderType: Text.NativeRendering
-                color: (rotationCapsule.currentMode === "gemini") ?
-                       ((theme && theme.accentText) ? theme.accentText : ((theme && theme.text1) ? theme.text1 : "#FFFFFF")) :
-                       ((theme && theme.text1) ? theme.text1 : "#FFFFFF")
+                color: {
+                    if (rotationCapsule.currentMode === "gemini") {
+                        return (theme && theme.accentText) ? theme.accentText : ((theme && theme.text1) ? theme.text1 : "#FFFFFF");
+                    }
+                    if (rotationCapsule.currentMode === "paid_pro") {
+                        return (theme && theme.mode === "light") ? "#B45309" : "#FBBF24";
+                    }
+                    return (theme && theme.text1) ? theme.text1 : "#FFFFFF";
+                }
             }
 
             MouseArea {
@@ -439,7 +447,11 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
                 ToolTip.visible: containsMouse
-                ToolTip.text: qsTr("Auto-rotation mode: %1").arg(rotationCapsule.currentMode)
+                ToolTip.text: {
+                    if (rotationCapsule.currentMode === "gemini") return qsTr("Auto-rotation: Global Gemini (all accounts, click for Paid Pro only)");
+                    if (rotationCapsule.currentMode === "paid_pro") return qsTr("Auto-rotation: Paid Pro Only (click to turn off)");
+                    return qsTr("Auto-rotation: Off (click to enable Global Gemini)");
+                }
                 onClicked: {
                     if (backend) backend.toggleRotation();
                 }
