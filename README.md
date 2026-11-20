@@ -5,15 +5,14 @@
 </p>
 
 <p align="center">
-  <strong>专为 Google Antigravity 打造的 Omarchy 原生 C++17 / Qt6 QML 多账号配额看板、三档分级调度与无感自动轮转中枢</strong>
+  <strong>Google Antigravity 多账号无感轮转中枢（Linux / macOS 双平台）：零反代原生钥匙串热切、全自动三档分级、全局 Gemini 与付费 PRO 专享看门狗</strong>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Release-v4.0.0-F59E0B?style=flat-square&logo=github" alt="Release v4.0.0" />
-  <img src="https://img.shields.io/badge/C++-17-00599C?style=flat-square&logo=c%2B%2B" alt="C++17" />
-  <img src="https://img.shields.io/badge/Framework-Qt%206%20QML-41CD52?style=flat-square&logo=qt" alt="Qt6 QML" />
-  <img src="https://img.shields.io/badge/Platform-Omarchy%20%7C%20Wayland%20%7C%20Linux-111827?style=flat-square" alt="Platform" />
-  <img src="https://img.shields.io/badge/Design-Omarchy%20Flat%20%7C%20Zero--Radius-1c1c1e?style=flat-square" alt="Style" />
+  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-111827?style=flat-square&logo=linux" alt="Linux and macOS" />
+  <img src="https://img.shields.io/badge/Desktop-C%2B%2B17%20%2B%20Qt6%20QML-41CD52?style=flat-square&logo=qt" alt="Qt6 QML" />
+  <img src="https://img.shields.io/badge/Mode-Zero%20Proxy%20%7C%20Native%20Keychain-0EA5E9?style=flat-square" alt="Zero Proxy" />
   <img src="https://img.shields.io/badge/Tests-35%20Automated%20Passing-10B981?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/License-MIT-2563EB?style=flat-square" alt="License" />
 </p>
@@ -136,15 +135,32 @@ antigravity-hub/
 
 ---
 
-## 🛠️ 构建、测试与安装
+## 🛠️ 快速开始（Linux / macOS 双平台）
 
-### 1. 安装依赖（Arch Linux / Omarchy）
+### macOS（零依赖，30 秒开箱即用）
+
+无需安装任何第三方 Python 包，原生对接 macOS Keychain (`security`) 与官方 Antigravity 客户端：
+
+```bash
+git clone https://github.com/dunova/antigravity-hub.git
+cd antigravity-hub
+
+# 一键启动配额看门狗 + 本地管理看板并自动打开浏览器 (http://127.0.0.1:18088)
+python3 start_hub.py --port 18088 --open-browser
+
+# 可选：首次运行一键从 macOS Keychain 吸纳当前已登录的 Antigravity 账号
+python3 start_hub.py --sync-active
+```
+
+### Linux（Arch / Omarchy 原生 C++17 + Qt6 桌面端 + 本地守护中枢）
+
+#### 1. 安装编译依赖
 
 ```bash
 sudo pacman -S --needed base-devel qt6-base qt6-declarative qt6-svg hicolor-icon-theme python
 ```
 
-### 2. 编译与运行全部自动化测试
+#### 2. 编译与运行全部自动化测试
 
 ```bash
 git clone https://github.com/dunova/antigravity-hub.git
@@ -158,7 +174,7 @@ cd antigravity-hub
 python3 -m unittest tests/test_rotator_precision.py
 ```
 
-### 3. 本地安装与启动
+#### 3. 本地安装与启动
 
 ```bash
 # 安装至用户目录 (~/.local/bin/antigravity-hub 与桌面入口，无需 sudo)
