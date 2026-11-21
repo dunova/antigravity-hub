@@ -102,6 +102,7 @@
   "Depleted": "Depleted",
   "周耗尽": "Depleted",
   "满额": "Full",
+  "待预热": "Pending",
   "即将恢复": "Soon",
   "Locked": "Locked",
   "Manual protection locked: %1 left": "Manual protection locked: %1 left",

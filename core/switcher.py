@@ -179,6 +179,11 @@ class AntigravityPhysicalManager:
         self.data_dir = data_dir
         self.hub_dir = os.path.join(self.data_dir, "data")
         self.accounts_file = os.path.join(self.hub_dir, "accounts_hub.json")
+        self.warmup_schedule_file = (
+            WARMUP_SCHEDULE_FILE
+            if os.path.abspath(os.path.expanduser(self.data_dir)) == os.path.abspath(os.path.expanduser(BASE_DATA_DIR))
+            else os.path.join(self.hub_dir, "warmup_schedule.json")
+        )
         os.makedirs(self.hub_dir, exist_ok=True)
 
     def load_hub_accounts(self) -> Dict[str, Any]:
@@ -282,12 +287,13 @@ class AntigravityPhysicalManager:
             logger.error(f"❌ Google OAuth 续签网络异常: {e}")
             return None
 
-    def fetch_live_quota(self, access_token: str) -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
+    def fetch_live_quota(self, access_token: str, project: str = "aicode-consumers") -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
         """
         探测 Google 官方配额接口：
         返回: (quotas_dict, resets_dict, validation_url)
         若触发 403 VALIDATION_REQUIRED，返回 validation_url；
         """
+        payload = json.dumps({"project": project or "aicode-consumers"}).encode("utf-8")
         req = urllib.request.Request(
             QUOTA_ENDPOINT,
             headers={
@@ -296,7 +302,7 @@ class AntigravityPhysicalManager:
                 "User-Agent": NATIVE_OAUTH_USER_AGENT
             },
             method="POST",
-            data=b"{}"
+            data=payload
         )
         ctx = ssl.create_default_context()
         quotas = {}
@@ -819,35 +825,117 @@ class AntigravityPhysicalManager:
 
     def load_warmup_schedule(self) -> Dict[str, Any]:
         """读取持久化各账号预热调度账本"""
-        if os.path.exists(WARMUP_SCHEDULE_FILE):
+        sched_path = getattr(self, "warmup_schedule_file", WARMUP_SCHEDULE_FILE)
+        if os.path.exists(sched_path):
             try:
-                with open(WARMUP_SCHEDULE_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                with open(sched_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        return data
             except Exception:
                 pass
         return {}
 
     def save_warmup_schedule(self, sched: Dict[str, Any]) -> bool:
         """原子写入各账号预热调度账本"""
-        return atomic_write_json(WARMUP_SCHEDULE_FILE, sched)
+        sched_path = getattr(self, "warmup_schedule_file", WARMUP_SCHEDULE_FILE)
+        return atomic_write_json(sched_path, sched)
 
-    def send_real_warmup_ping(self, access_token: str, model: str = "gemini-2.5-flash") -> Dict[str, Any]:
+    @staticmethod
+    def _account_has_5h(acc: Dict[str, Any]) -> bool:
+        """判断账号是否具备 5 小时滑动配额桶（FREE 账号恒返回 False）"""
+        if not isinstance(acc, dict):
+            return False
+        raw_has_5h = acc.get("has_5h")
+        if isinstance(raw_has_5h, bool):
+            return raw_has_5h
+        override = str(acc.get("tier_override") or "").strip().upper()
+        if override in ("PAID_PRO", "FREE_PRO"):
+            return True
+        if override == "FREE":
+            return False
+        tier = str(acc.get("tier") or "").strip().upper()
+        if tier in ("PAID_PRO", "FREE_PRO"):
+            return True
+        if tier == "FREE":
+            return False
+        return (acc.get("gemini") or {}).get("quota_5h") is not None
+
+    @staticmethod
+    def _pick_bucket_warmup_models(acc: Dict[str, Any], bucket: str) -> List[str]:
+        """根据账号可用模型矩阵返回触发指定 5h 桶的最小消耗模型候选列表"""
+        if bucket == "claude":
+            c_mods = acc.get("claude_models") or []
+            if c_mods:
+                has_55 = any(("5-5" in str(m) or "5.5" in str(m)) for m in c_mods)
+            else:
+                has_55 = (str(acc.get("claude_version") or "").strip() == "5.5")
+            return ["claude-sonnet-5-5-low"] if has_55 else ["claude-sonnet-4-6"]
+        return ["gemini-3.8-flash-low", "gemini-2.5-flash"]
+
+    @staticmethod
+    def _buckets_for_warmup_mode(warmup_mode: str, model_override: str = "") -> List[str]:
+        """根据预热模式或显式模型覆盖返回待检查的 5h 配额桶列表"""
+        if model_override:
+            return ["claude"] if "claude" in model_override.lower() else ["gemini"]
+        mode = str(warmup_mode or "dual").strip().lower()
+        if mode == "gemini_only":
+            return ["gemini"]
+        return ["gemini", "claude"]
+
+    @staticmethod
+    def _extract_refresh_token(acc: Dict[str, Any]) -> str:
+        tok = acc.get("token") if isinstance(acc.get("token"), dict) else {}
+        return str(acc.get("refresh_token") or tok.get("refresh_token") or "").strip()
+
+    def is_bucket_counting_down(
+        self,
+        bucket_dict: Dict[str, Any],
+        now_ts: int,
+        last_warmup_ts: int = 0
+    ) -> bool:
         """
-        【单账号官方原生真实生成预热 (L1 实测验证通过 · 官方内部 Protobuf 契约)】
-        端点: https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent
-        灾备: https://cloudcode-pa.googleapis.com/v1internal:generateContent
-        Payload: 包装在 request 内部，包含 contents 与 generationConfig，耗费约 20~40 tokens
+        判断单个 5h 桶是否已处于 Google 真实锁定的倒计时中（免打扰保护）。
         """
-        target_model = "claude-sonnet-4-6" if "claude" in model.lower() else "gemini-2.5-flash"
+        if not isinstance(bucket_dict, dict):
+            return False
+        reset_ts = self._parse_iso_to_ts(str(bucket_dict.get("reset_time_5h") or ""))
+        if reset_ts <= now_ts:
+            return False
+        rem = reset_ts - now_ts
+        if rem > 18060:
+            return False
+        q5h = _safe_float(bucket_dict.get("quota_5h"), 1.0)
+        if q5h < 0.999:
+            return True
+        if rem <= 17850:
+            return True
+        w_ts = max(int(last_warmup_ts or 0), int(bucket_dict.get("warmup_ts") or 0))
+        if w_ts > 0 and 0 <= (now_ts - w_ts) <= 300 and abs(reset_ts - (w_ts + 18000)) <= 180:
+            return True
+        return False
+
+    def send_real_warmup_ping(
+        self,
+        access_token: str,
+        model: str = "gemini-3.8-flash-low",
+        project: str = "aicode-consumers"
+    ) -> Dict[str, Any]:
+        """
+        单账号官方原生 1-token 真实生成预热（严格携带 project 字段与指定模型 ID）。
+        """
+        target_model = str(model or "gemini-3.8-flash-low").strip()
         payload = {
+            "project": str(project or "aicode-consumers"),
             "model": target_model,
             "request": {
-                "contents": [{"role": "user", "parts": [{"text": "Hello, please reply with a 20-word greeting."}]}],
-                "generationConfig": {"maxOutputTokens": 30, "temperature": 0.2}
+                "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+                "generationConfig": {"maxOutputTokens": 1, "temperature": 0.0}
             }
         }
         body = json.dumps(payload).encode("utf-8")
         ctx = ssl.create_default_context()
+        last_err = ""
 
         for ep in WARMUP_GENERATE_ENDPOINTS:
             try:
@@ -863,238 +951,413 @@ class AntigravityPhysicalManager:
                 )
                 with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
                     if resp.status == 200:
-                        resp_data = json.loads(resp.read().decode("utf-8"))
+                        resp_data = json.loads(_safe_decode_resp(resp.read()) or "{}")
                         tokens = resp_data.get("response", {}).get("usageMetadata", {})
-                        logger.info(f"   🎉 [真实预热成功] 模型: {target_model}, 消耗Tokens: {tokens}")
+                        logger.info(f"🎉 [真实预热成功] 模型: {target_model}, 端点: {ep}, 消耗Tokens: {tokens}")
                         return {"status": "success", "endpoint": ep, "model": target_model, "tokens": tokens}
             except urllib.error.HTTPError as he:
                 err_body = _safe_decode_resp(he.read())
-                logger.warning(f"   ⚠️ 预热请求 HTTP {he.code} ({ep}): {err_body[:200]}")
+                last_err = f"HTTP {he.code}: {err_body[:200]}"
+                logger.warning(f"⚠️ 预热请求 HTTP {he.code} ({target_model} @ {ep}): {err_body[:200]}")
                 if he.code == 403 and "VALIDATION_REQUIRED" in err_body:
                     return {"status": "validation_blocked", "error": err_body}
+                if he.code == 429:
+                    return {"status": "rate_limited", "error": err_body}
             except Exception as ex:
-                logger.warning(f"   ⚠️ 预热异常 ({ep}): {ex}")
-        return {"status": "failed", "endpoint": "all_failed"}
+                last_err = str(ex)
+                logger.warning(f"⚠️ 预热异常 ({target_model} @ {ep}): {ex}")
+        return {"status": "failed", "endpoint": "all_failed", "model": target_model, "error": last_err}
 
-    def warmup_single_account(self, acc: Dict[str, Any], force: bool = False, model_override: str = "") -> Dict[str, Any]:
-        """单账号官方原生真实生成预热"""
-        email = acc.get("email", "")
-        rt = acc.get("refresh_token")
-        if not rt:
-            tok = acc.get("token") or {}
-            rt = tok.get("refresh_token", "")
-        if not rt:
-            return {"email": email, "status": "no_refresh_token"}
+    def _account_pending_warmup_buckets(
+        self,
+        acc: Dict[str, Any],
+        sched_entry: Dict[str, Any],
+        now_ts: int,
+        warmup_mode: str = "dual",
+        model_override: str = "",
+        ignore_cooldown: bool = False
+    ) -> List[str]:
+        """计算账号当前需要执行真实 1-token 预热的 5h 桶列表"""
+        if not self._account_has_5h(acc):
+            return []
+        pending = []
+        for bkt in self._buckets_for_warmup_mode(warmup_mode, model_override=model_override):
+            bkt_dict = acc.get(bkt) or {}
+            w_q = _safe_float(bkt_dict.get("quota_weekly", 1.0), 1.0)
+            if w_q <= 0.0001:
+                continue
+            cd_until = int(sched_entry.get(f"{bkt}_cooldown_until", 0) or 0)
+            if not ignore_cooldown and cd_until > now_ts:
+                continue
+            last_bkt_ts = int(sched_entry.get(f"{bkt}_warmup_ts", 0) or 0)
+            if self.is_bucket_counting_down(bkt_dict, now_ts, last_warmup_ts=last_bkt_ts):
+                continue
+            pending.append(bkt)
+        return pending
 
+    def _compute_next_staggered_renewal(
+        self,
+        acc: Dict[str, Any],
+        now_ts: int,
+        stagger_sec: int = 60
+    ) -> int:
+        """基于账号现有最长在走或最早重置 5h 时刻计算带随机抖动的下次续热时间"""
+        reset_candidates = []
+        for bkt in ("gemini", "claude"):
+            r_ts = self._parse_iso_to_ts(str((acc.get(bkt) or {}).get("reset_time_5h") or ""))
+            if now_ts < r_ts <= now_ts + 18060:
+                reset_candidates.append(r_ts)
+        base_ts = min(reset_candidates) if reset_candidates else (now_ts + 18000)
+        jitter = random.randint(60, max(240, int(stagger_sec or 60) * 4))
+        return base_ts + jitter
+
+    def _write_warmed_account_state(
+        self,
+        email: str,
+        warmed_buckets: List[str],
+        warmed_models: Dict[str, str],
+        now_sec: int,
+        live_quotas: Dict[str, float],
+        live_resets: Dict[str, str],
+        stagger_sec: int = 60
+    ) -> Tuple[int, str, int, str]:
+        """将 Google 真实锁定重置时刻与配额原子同步至 warmup_schedule.json 与 accounts_hub.json"""
+        fallback_ts = now_sec + 18000
+        fallback_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(fallback_ts))
+
+        hd = self.load_hub_accounts()
+        accounts_map = hd.setdefault("accounts", {})
+        acc_entry = accounts_map.get(email)
+
+        g_iso = live_resets.get("gemini-5h") or (
+            acc_entry.get("gemini", {}).get("reset_time_5h", "") if isinstance(acc_entry, dict) else ""
+        )
+        c_iso = live_resets.get("3p-5h") or (
+            acc_entry.get("claude", {}).get("reset_time_5h", "") if isinstance(acc_entry, dict) else ""
+        )
+
+        if "gemini" in warmed_buckets:
+            g_iso = live_resets.get("gemini-5h") or fallback_iso
+        if "claude" in warmed_buckets:
+            c_iso = live_resets.get("3p-5h") or fallback_iso
+
+        g_ts = self._parse_iso_to_ts(g_iso) if g_iso else 0
+        c_ts = self._parse_iso_to_ts(c_iso) if c_iso else 0
+
+        if isinstance(acc_entry, dict):
+            g_d = acc_entry.setdefault("gemini", {})
+            c_d = acc_entry.setdefault("claude", {})
+            if "gemini-weekly" in live_quotas:
+                g_d["quota_weekly"] = live_quotas["gemini-weekly"]
+            if live_resets.get("gemini-weekly"):
+                g_d["reset_time_weekly"] = live_resets["gemini-weekly"]
+                g_d["reset_time"] = live_resets["gemini-weekly"]
+            if "gemini" in warmed_buckets:
+                if "gemini-5h" in live_quotas:
+                    g_d["quota_5h"] = live_quotas["gemini-5h"]
+                g_d["reset_time_5h"] = g_iso
+                g_d["warmup_ts"] = now_sec
+                g_d["warmup_active"] = True
+            if "3p-weekly" in live_quotas:
+                c_d["quota_weekly"] = live_quotas["3p-weekly"]
+            if live_resets.get("3p-weekly"):
+                c_d["reset_time_weekly"] = live_resets["3p-weekly"]
+                c_d["reset_time"] = live_resets["3p-weekly"]
+            if "claude" in warmed_buckets:
+                if "3p-5h" in live_quotas:
+                    c_d["quota_5h"] = live_quotas["3p-5h"]
+                c_d["reset_time_5h"] = c_iso
+                c_d["warmup_ts"] = now_sec
+                c_d["warmup_active"] = True
+            acc_entry["last_warmup_ts"] = now_sec
+            next_ts = self._compute_next_staggered_renewal(acc_entry, now_sec, stagger_sec=stagger_sec)
+            acc_entry["next_warmup_ts"] = next_ts
+            self.save_hub_accounts(hd)
+        else:
+            future_candidates = [x for x in (g_ts, c_ts) if x > now_sec]
+            base_r = min(future_candidates) if future_candidates else fallback_ts
+            next_ts = base_r + random.randint(60, max(240, int(stagger_sec or 60) * 4))
+
+        sched = self.load_warmup_schedule()
+        s_entry = sched.setdefault(email, {})
+        s_entry["email"] = email
+        s_entry["last_warmup_ts"] = now_sec
+        if "gemini" in warmed_buckets:
+            s_entry["gemini_warmup_ts"] = now_sec
+            s_entry["locked_reset_ts"] = g_ts or fallback_ts
+            s_entry["locked_reset_iso"] = g_iso or fallback_iso
+            s_entry.pop("gemini_cooldown_until", None)
+        if "claude" in warmed_buckets:
+            s_entry["claude_warmup_ts"] = now_sec
+            s_entry["locked_reset_ts_claude"] = c_ts or fallback_ts
+            s_entry["locked_reset_iso_claude"] = c_iso or fallback_iso
+            s_entry.pop("claude_cooldown_until", None)
+        s_entry["model_warmed"] = ",".join(f"{k}:{v}" for k, v in warmed_models.items())
+        s_entry["next_warmup_ts"] = next_ts
+        s_entry["status"] = "active_countdown"
+        self.save_warmup_schedule(sched)
+        return g_ts, g_iso, c_ts, c_iso
+
+    def warmup_single_account(
+        self,
+        acc: Dict[str, Any],
+        force: bool = False,
+        model_override: str = "",
+        warmup_mode: str = "dual",
+        stagger_sec: int = 60
+    ) -> Dict[str, Any]:
+        """
+        单账号官方原生 1-token 真实生成预热：
+        仅对 PRO（具备 5h 滑动窗口）且尚未启动真实倒计时的桶发送极简 ping；
+        HTTP 失败或 429 时绝不伪造锁定重置时间。
+        """
+        email = str(acc.get("email") or "").strip()
+        if not email:
+            return {"email": "", "status": "invalid_email"}
+        if not self._account_has_5h(acc):
+            return {"email": email, "status": "skipped_no_5h"}
+        if acc.get("disabled"):
+            return {"email": email, "status": "disabled"}
         if acc.get("validation_blocked"):
             logger.warning(f"🛡️ [预热风控熔断] 账号 {email} 处于 Google 验证拦截态，跳过预热")
             return {"email": email, "status": "validation_blocked"}
 
-        ping_model = model_override or "gemini-2.5-flash"
-        logger.info(f"🔥 [单账号真实生成预热] 正在为账号 {email} 执行 Token 校验与官方端点 Ping 激活 (选定模型: {ping_model})...")
+        rt = self._extract_refresh_token(acc)
+        if not rt:
+            return {"email": email, "status": "no_refresh_token"}
+
+        now_sec = int(time.time())
+        sched = self.load_warmup_schedule()
+        sched_entry = sched.get(email, {})
+
+        pending_buckets = self._account_pending_warmup_buckets(
+            acc,
+            sched_entry,
+            now_sec,
+            warmup_mode=warmup_mode,
+            model_override=model_override,
+            ignore_cooldown=force,
+        )
+        if not pending_buckets:
+            return {"email": email, "status": "already_active"}
 
         at, _ = self.ensure_fresh_token(acc)
         if not at:
             return {"email": email, "status": "refresh_failed"}
 
-        now_sec = int(time.time())
-        ping_res = self.send_real_warmup_ping(at, model=ping_model)
+        warmed_buckets: List[str] = []
+        warmed_models: Dict[str, str] = {}
+        last_error = ""
+        rate_limited = False
 
-        # 核心：计算并硬锁定 5 小时绝对重置时刻 (精确到秒)
-        locked_reset_ts = now_sec + 18000
-        locked_reset_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(locked_reset_ts))
+        for bkt in pending_buckets:
+            models = [model_override] if model_override else self._pick_bucket_warmup_models(acc, bkt)
+            for candidate_model in models:
+                logger.info(f"🔥 [单账号真实生成预热] 正在为 {email} 激活 {bkt} 5h 窗口 (模型: {candidate_model})...")
+                res = self.send_real_warmup_ping(at, model=candidate_model)
+                st = res.get("status")
+                if st == "success":
+                    warmed_buckets.append(bkt)
+                    warmed_models[bkt] = str(res.get("model") or candidate_model)
+                    break
+                if st == "validation_blocked":
+                    return {"email": email, "status": "validation_blocked", "error": res.get("error", "")}
+                if st == "rate_limited":
+                    rate_limited = True
+                    last_error = str(res.get("error") or "HTTP 429")
+                    sched_latest = self.load_warmup_schedule()
+                    se = sched_latest.setdefault(email, {"email": email})
+                    se[f"{bkt}_cooldown_until"] = now_sec + 1800
+                    self.save_warmup_schedule(sched_latest)
+                    break
+                last_error = str(res.get("error") or st or "failed")
 
-        # 更新持久化预热账本
-        sched = self.load_warmup_schedule()
-        sched[email] = {
+        if not warmed_buckets:
+            return {
+                "email": email,
+                "status": "rate_limited" if rate_limited else "failed",
+                "error": last_error,
+            }
+
+        time.sleep(1.0)
+        live_quotas, live_resets, _ = self.fetch_live_quota(at)
+        g_ts, g_iso, c_ts, c_iso = self._write_warmed_account_state(
+            email=email,
+            warmed_buckets=warmed_buckets,
+            warmed_models=warmed_models,
+            now_sec=int(time.time()),
+            live_quotas=live_quotas,
+            live_resets=live_resets,
+            stagger_sec=stagger_sec,
+        )
+
+        # 同步内存 dict 以便调用方立即观测最新值
+        if "gemini" in warmed_buckets:
+            acc.setdefault("gemini", {})["reset_time_5h"] = g_iso
+            acc["gemini"]["warmup_ts"] = now_sec
+            acc["gemini"]["warmup_active"] = True
+            if "gemini-5h" in live_quotas:
+                acc["gemini"]["quota_5h"] = live_quotas["gemini-5h"]
+        if "claude" in warmed_buckets:
+            acc.setdefault("claude", {})["reset_time_5h"] = c_iso
+            acc["claude"]["warmup_ts"] = now_sec
+            acc["claude"]["warmup_active"] = True
+            if "3p-5h" in live_quotas:
+                acc["claude"]["quota_5h"] = live_quotas["3p-5h"]
+        acc["last_warmup_ts"] = now_sec
+
+        return {
             "email": email,
-            "last_warmup_ts": now_sec,
-            "locked_reset_ts": locked_reset_ts,
-            "locked_reset_iso": locked_reset_iso,
-            "model_warmed": ping_model,
-            "status": "active_countdown"
+            "status": "success",
+            "warmed_buckets": warmed_buckets,
+            "warmed_models": warmed_models,
+            "locked_reset_ts": g_ts or c_ts,
+            "locked_reset_iso": g_iso or c_iso,
+            "locked_reset_ts_claude": c_ts,
+            "locked_reset_iso_claude": c_iso,
         }
-        self.save_warmup_schedule(sched)
-
-        # 关键联动：同步原子写回 accounts_hub.json
-        if os.path.exists(ACCOUNTS_HUB_FILE):
-            try:
-                with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as hf:
-                    hub_data = json.load(hf)
-                if email in hub_data.get("accounts", {}):
-                    acc_entry = hub_data["accounts"][email]
-                    if ping_model.startswith("claude"):
-                        acc_entry.setdefault("claude", {})["reset_time_5h"] = locked_reset_iso
-                    else:
-                        acc_entry.setdefault("gemini", {})["reset_time_5h"] = locked_reset_iso
-                    atomic_write_json(ACCOUNTS_HUB_FILE, hub_data)
-                    logger.info(f"     📑 [Hub联动] 已同步原子更新 accounts_hub.json 账号 {email} 5h 重置时刻: {locked_reset_iso}")
-            except Exception as ex:
-                logger.warning(f"同步写回 accounts_hub.json 异常: {ex}")
-
-        rem_h = (locked_reset_ts - now_sec) / 3600
-        logger.info(f"     ✅ 账号 {email} 真实预热成功！模型: {ping_model}, 官方5h周期已锁定，将于 {locked_reset_iso} ({rem_h:.2f}h后) 满血重置！")
-        return {"email": email, "status": "success", "model_warmed": ping_model, "locked_reset_ts": locked_reset_ts, "locked_reset_iso": locked_reset_iso}
 
     @staticmethod
     def _parse_iso_to_ts(iso_str: str) -> int:
         if not iso_str or "T" not in str(iso_str):
             return 0
         try:
-            import datetime
             clean_iso = str(iso_str).replace("Z", "+00:00")
             return int(datetime.datetime.fromisoformat(clean_iso).timestamp())
         except Exception:
             return 0
 
-    def rebalance_and_align_staggered_ladder(self, accounts: Optional[List[Dict[str, Any]]] = None, force: bool = False) -> Dict[str, Any]:
+    def rebalance_and_align_staggered_ladder(
+        self,
+        accounts: Optional[List[Dict[str, Any]]] = None,
+        force: bool = False,
+        stagger_sec: int = 60,
+        warmup_mode: str = "dual"
+    ) -> Dict[str, Any]:
         """
-        【摩天轮阶梯错峰流水线编排器 · 5小时无缝接力保障 (100% 纯本地零风控计算)】
-        目标：
-        1. 针对全池 N 个健康账号，在 5 小时 (18000秒 = 300分钟) 滑动窗口轴上等距打散梯次；
-        2. 梯级步长 = 18000 // N (11账号时约 1636 秒 ≈ 27.27 分钟)；
-        3. 杜绝 4h59m 扎堆与“即将恢复”死锁：真实保留各账号在走倒计时，过期/未激活账号均布至未占用阶梯槽位；
-        4. 纯本地时间轴编排，绝不向 Google 外部接口发起任何批量测试或伪造请求。
+        真随机错峰预热调度编排器（只针对具备 5h 桶的健康 PRO 账号）：
+        - force=True：立即以随机顺序与 2 至 6 秒短错峰间隔逐个向 Google 发送真实 1-token 预热请求；
+        - force=False：为未启动 5h 倒计时的 PRO 账号在 warmup_schedule.json 中分配随机错峰触发时刻，
+          绝不伪造或篡改 accounts_hub.json 的 reset_time_5h。
         """
         if accounts is None:
             hd_init = self.load_hub_accounts()
             accounts = [dict(v, email=k) for k, v in hd_init.get("accounts", {}).items()]
         if not accounts:
-            return {"status": "empty", "count": 0}
+            return {"status": "empty", "count": 0, "warmed": 0}
 
         now_ts = int(time.time())
         sched = self.load_warmup_schedule()
+        pro_accounts: List[Dict[str, Any]] = []
+        valid_pro_emails = set()
 
-        hd = {}
-        if os.path.exists(ACCOUNTS_HUB_FILE):
-            try:
-                with open(ACCOUNTS_HUB_FILE, "r", encoding="utf-8") as hf:
-                    hd = json.load(hf)
-            except Exception as ex:
-                logger.warning(f"读取 accounts_hub.json 异常: {ex}")
-
-        hub_accs = hd.get("accounts", {})
-        valid_accounts = []
-        for idx_order, a in enumerate(accounts):
-            em = a.get("email", "")
+        for a in accounts:
+            em = str(a.get("email") or "").strip()
             if not em or a.get("disabled") or a.get("validation_blocked"):
                 continue
-            a_copy = dict(a)
-            a_copy["_order"] = idx_order
-            valid_accounts.append(a_copy)
+            if not self._account_has_5h(a):
+                continue
+            if not self._extract_refresh_token(a):
+                continue
+            valid_pro_emails.add(em)
+            pro_accounts.append(a)
 
-        n = len(valid_accounts)
-        if n == 0:
-            return {"status": "no_valid_accounts", "count": 0}
+        # 清理已删除或降级为 FREE 的陈旧预热账本条目
+        stale_keys = [k for k in sched if k not in valid_pro_emails]
+        sched_dirty = bool(stale_keys)
+        for k in stale_keys:
+            sched.pop(k, None)
 
-        step_sec = max(900, 18000 // n)
-        ladder_slots = [min(18000, int(round((i + 0.5) * step_sec))) for i in range(n)]
+        if not pro_accounts:
+            if sched_dirty:
+                self.save_warmup_schedule(sched)
+            return {"status": "no_pro_accounts", "count": 0, "warmed": 0}
 
-        acc_states = []
-        for a in valid_accounts:
-            em = a["email"]
-            s = sched.get(em, {})
-            hub_entry = hub_accs.get(em, a)
-
-            # 优先识别账号在 accounts_hub.json 中真实在走的 5h 恢复窗口，其次取 warmup_schedule
-            g_iso = hub_entry.get("gemini", {}).get("reset_time_5h", "")
-            g_ts = self._parse_iso_to_ts(g_iso)
-            s_ts = int(s.get("locked_reset_ts", 0) or 0)
-            l_ts = g_ts if (g_ts > now_ts and (g_ts - now_ts) <= 18000) else s_ts
-            rem = l_ts - now_ts
-            g_q5h = _safe_float(hub_entry.get("gemini", {}).get("quota_5h", 1.0), 1.0)
-            is_consuming_g = (g_q5h < 0.999 and 60 < rem <= 18000)
-            has_valid = (l_ts > now_ts and 60 < rem <= 18000) and (not force or is_consuming_g)
-
-            # Claude 独立真实恢复窗口检测 (如活跃账号正在消费 Claude)
-            c_iso = hub_entry.get("claude", {}).get("reset_time_5h", "")
-            c_ts = self._parse_iso_to_ts(c_iso)
-            sc_ts = int(s.get("locked_reset_ts_claude", 0) or 0)
-            lc_ts = c_ts if (c_ts > now_ts and (c_ts - now_ts) <= 18000) else sc_ts
-            rem_c = lc_ts - now_ts
-            c_q5h = _safe_float(hub_entry.get("claude", {}).get("quota_5h", 1.0), 1.0)
-            is_consuming_c = (c_q5h < 0.999 and 60 < rem_c <= 18000)
-            has_valid_c = (lc_ts > now_ts and 60 < rem_c <= 18000) and (not force or is_consuming_c)
-
-            acc_states.append({
-                "email": em,
-                "acc": a,
-                "order": a["_order"],
-                "locked_reset_ts": l_ts if has_valid else 0,
-                "remaining_sec": rem if has_valid else 0,
-                "has_valid_window": has_valid,
-                "locked_reset_ts_claude": lc_ts if has_valid_c else 0,
-                "has_valid_window_claude": has_valid_c,
-            })
-
-        # 为已有有效窗口的账号优先锁定最接近的摩天轮阶梯槽位，其余过期账号按列表顺序填补剩余空槽
-        available_slot_indices = set(range(n))
-        assigned_slot_for_email: Dict[str, int] = {}
-
-        valid_window_items = sorted(
-            [x for x in acc_states if x["has_valid_window"]],
-            key=lambda x: (x["remaining_sec"], x["order"])
-        )
-        for item in valid_window_items:
-            best_slot = min(available_slot_indices, key=lambda si: abs(ladder_slots[si] - item["remaining_sec"]))
-            available_slot_indices.remove(best_slot)
-            assigned_slot_for_email[item["email"]] = best_slot
-
-        expired_items = sorted(
-            [x for x in acc_states if not x["has_valid_window"]],
-            key=lambda x: x["order"]
-        )
-        for item, slot_idx in zip(expired_items, sorted(available_slot_indices)):
-            assigned_slot_for_email[item["email"]] = slot_idx
-
-        logger.info(f"🎡 [摩天轮错峰编排] 正在为全池 {n} 个账号构建阶梯流水线 (梯级: {step_sec // 60}m {step_sec % 60}s)...")
-
-        for item in acc_states:
-            em = item["email"]
-            slot_idx = assigned_slot_for_email[em]
-            slot_target_rem = ladder_slots[slot_idx]
-
-            if item["has_valid_window"]:
-                target_ts = item["locked_reset_ts"]
+        pending_accounts: List[Dict[str, Any]] = []
+        for a in pro_accounts:
+            em = str(a.get("email") or "")
+            s_entry = sched.get(em, {})
+            pending_bkts = self._account_pending_warmup_buckets(
+                a, s_entry, now_ts, warmup_mode=warmup_mode, ignore_cooldown=force
+            )
+            if pending_bkts:
+                pending_accounts.append(a)
             else:
-                target_ts = now_ts + slot_target_rem
-            target_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(target_ts))
+                se = sched.setdefault(em, {"email": em})
+                existing_next = int(se.get("next_warmup_ts", 0) or 0)
+                if existing_next <= now_ts + 60:
+                    se["next_warmup_ts"] = self._compute_next_staggered_renewal(a, now_ts, stagger_sec=stagger_sec)
+                    se["status"] = "active_countdown"
+                    sched_dirty = True
 
-            if item["has_valid_window_claude"]:
-                target_ts_c = item["locked_reset_ts_claude"]
-            else:
-                target_ts_c = target_ts
-            target_iso_c = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(target_ts_c))
+        random.shuffle(pending_accounts)
 
-            s_entry = sched.setdefault(em, {})
-            s_entry["email"] = em
-            s_entry["ladder_slot"] = slot_idx
-            s_entry["ladder_step_sec"] = step_sec
-            s_entry["locked_reset_ts"] = target_ts
-            s_entry["locked_reset_iso"] = target_iso
-            s_entry["locked_reset_ts_claude"] = target_ts_c
-            s_entry["locked_reset_iso_claude"] = target_iso_c
-            s_entry["next_warmup_ts"] = target_ts
-            s_entry["status"] = "in_ladder"
+        if force:
+            if sched_dirty:
+                self.save_warmup_schedule(sched)
+            warmed_count = 0
+            failed_count = 0
+            logger.info(f"🎲 [手动随机错峰预热] 共 {len(pending_accounts)} 个待激活 PRO 账号（总共 {len(pro_accounts)} 个 PRO），正在依次发送真实 1-token 预热...")
+            for idx, a in enumerate(pending_accounts):
+                res = self.warmup_single_account(
+                    a, force=True, warmup_mode=warmup_mode, stagger_sec=stagger_sec
+                )
+                st = res.get("status")
+                if st == "success":
+                    warmed_count += 1
+                elif st not in ("already_active", "skipped_no_5h"):
+                    failed_count += 1
+                if idx < len(pending_accounts) - 1:
+                    time.sleep(random.uniform(2.0, 6.0))
+            return {
+                "status": "ok",
+                "count": len(pro_accounts),
+                "pending": len(pending_accounts),
+                "warmed": warmed_count,
+                "failed": failed_count,
+            }
 
-            if em in hub_accs:
-                g_dict = hub_accs[em].setdefault("gemini", {})
-                g_dict["reset_time_5h"] = target_iso
+        step_base = max(20, int(stagger_sec or 60))
+        min_step = max(15, step_base // 2)
+        max_step = max(45, int(step_base * 1.5))
+        max_horizon = max(600, len(pro_accounts) * max_step + 120)
+        cursor_ts = now_ts + random.randint(5, 25)
+        scheduled_new = 0
 
-                c_dict = hub_accs[em].setdefault("claude", {})
-                c_dict["reset_time_5h"] = target_iso_c
+        for a in pending_accounts:
+            em = str(a.get("email") or "")
+            se = sched.setdefault(em, {"email": em})
+            cur_next = int(se.get("next_warmup_ts", 0) or 0)
+            if now_ts - 60 <= cur_next <= now_ts + max_horizon:
+                cursor_ts = max(cursor_ts, cur_next + random.randint(min_step, max_step))
+                continue
+            target_next = cursor_ts if scheduled_new == 0 else (cursor_ts + random.randint(min_step, max_step))
+            cursor_ts = target_next
+            se["next_warmup_ts"] = target_next
+            se["status"] = "scheduled"
+            scheduled_new += 1
+            sched_dirty = True
 
-        if hd:
-            atomic_write_json(ACCOUNTS_HUB_FILE, hd)
-        self.save_warmup_schedule(sched)
-        logger.info(f"✅ [摩天轮错峰梯次完成] 全池 {n} 账号已完美建立 {step_sec // 60} 分钟阶梯流水线，彻底消除 4h59m 与即将恢复死锁！")
-        return {"status": "ok", "count": n, "step_sec": step_sec}
+        if sched_dirty:
+            self.save_warmup_schedule(sched)
+        logger.info(
+            f"🎲 [错峰预热排班完成] PRO 总数: {len(pro_accounts)}, 待预热: {len(pending_accounts)}, 新排班: {scheduled_new}"
+        )
+        return {
+            "status": "ok",
+            "count": len(pro_accounts),
+            "pending": len(pending_accounts),
+            "scheduled": scheduled_new,
+        }
 
-    def check_and_trigger_due_staggered_warmup(self) -> int:
+    def check_and_trigger_due_staggered_warmup(
+        self,
+        stagger_sec: int = 60,
+        warmup_mode: str = "dual"
+    ) -> int:
         """
-        【零风控摩天轮到期自动接力轮转】
-        检查是否有账号的 5h 梯次倒计时已到期 (<= 60s)；
-        若有到期账号，纯本地将其平滑轮转至摩天轮队尾槽位，绝不向 Google 发起后台批量生成请求。
+        每 30 秒巡检触发到期 PRO 账号的真实 1-token 随机错峰预热：
+        单轮仅激活 1 个最早到期的待预热 PRO 账号，绝不伪造时间。
         """
         now_ts = int(time.time())
         sched = self.load_warmup_schedule()
@@ -1103,20 +1366,68 @@ class AntigravityPhysicalManager:
         if not accounts_map:
             return 0
 
-        due_count = 0
-        for em, acc in accounts_map.items():
-            if acc.get("disabled") or acc.get("validation_blocked"):
-                continue
-            g_iso = acc.get("gemini", {}).get("reset_time_5h", "")
-            g_ts = self._parse_iso_to_ts(g_iso)
-            s_ts = int(sched.get(em, {}).get("locked_reset_ts", 0) or 0)
-            eff_ts = g_ts or s_ts
-            if eff_ts <= now_ts + 60:
-                due_count += 1
+        due_candidates: List[Tuple[int, str, Dict[str, Any]]] = []
+        has_unscheduled_pro = False
 
-        if due_count > 0:
-            acc_list = [dict(v, email=k) for k, v in accounts_map.items()]
-            self.rebalance_and_align_staggered_ladder(acc_list, force=False)
-        return due_count
+        for em, acc in accounts_map.items():
+            if not isinstance(acc, dict) or acc.get("disabled") or acc.get("validation_blocked"):
+                continue
+            if not self._account_has_5h(acc) or not self._extract_refresh_token(acc):
+                continue
+            acc_with_email = dict(acc, email=em)
+            s_entry = sched.get(em, {})
+            pending_bkts = self._account_pending_warmup_buckets(
+                acc_with_email, s_entry, now_ts, warmup_mode=warmup_mode, ignore_cooldown=False
+            )
+            if not pending_bkts:
+                continue
+            next_ts = int(s_entry.get("next_warmup_ts", 0) or 0)
+            if next_ts <= 0:
+                has_unscheduled_pro = True
+                continue
+            if next_ts <= now_ts:
+                due_candidates.append((next_ts, em, acc_with_email))
+
+        if has_unscheduled_pro:
+            acc_list = [dict(v, email=k) for k, v in accounts_map.items() if isinstance(v, dict)]
+            self.rebalance_and_align_staggered_ladder(
+                acc_list, force=False, stagger_sec=stagger_sec, warmup_mode=warmup_mode
+            )
+            sched = self.load_warmup_schedule()
+            for em, acc in accounts_map.items():
+                if not isinstance(acc, dict) or acc.get("disabled") or acc.get("validation_blocked"):
+                    continue
+                if not self._account_has_5h(acc) or not self._extract_refresh_token(acc):
+                    continue
+                if any(x[1] == em for x in due_candidates):
+                    continue
+                acc_with_email = dict(acc, email=em)
+                s_entry = sched.get(em, {})
+                if self._account_pending_warmup_buckets(acc_with_email, s_entry, now_ts, warmup_mode=warmup_mode):
+                    nt = int(s_entry.get("next_warmup_ts", 0) or 0)
+                    if 0 < nt <= now_ts:
+                        due_candidates.append((nt, em, acc_with_email))
+
+        if not due_candidates:
+            return 0
+
+        due_candidates.sort(key=lambda x: x[0])
+        _, target_email, target_acc = due_candidates[0]
+        logger.info(f"🔥 [错峰随机预热触发] PRO 账号 {target_email} 到达随机排班时刻，开始发送真实 1-token 预热...")
+        res = self.warmup_single_account(
+            target_acc, force=False, warmup_mode=warmup_mode, stagger_sec=stagger_sec
+        )
+        if res.get("status") == "success":
+            return 1
+
+        # 非成功态设置 180 秒短退避，避免 30s 巡检死循环轰炸同一失败账号
+        if res.get("status") not in ("already_active", "skipped_no_5h"):
+            sched_latest = self.load_warmup_schedule()
+            se = sched_latest.setdefault(target_email, {"email": target_email})
+            se["next_warmup_ts"] = int(time.time()) + 180 + random.randint(15, 60)
+            se["status"] = str(res.get("status") or "retry_wait")
+            self.save_warmup_schedule(sched_latest)
+        return 0
+
 
 

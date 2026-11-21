@@ -80,6 +80,15 @@ def _atomic_write_json(file_path: str, data: Any, indent: int = 2) -> bool:
         return False
 
 
+def _opt_float(val: Any, default: Optional[float] = 1.0) -> Optional[float]:
+    if val is None or val == "":
+        return default
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
 def normalize_account_record(raw: Dict[str, Any], default_email: str = "") -> Optional[Dict[str, Any]]:
     """
     将任意结构转换为 Hub 规范的 Account 字典。
@@ -104,6 +113,15 @@ def normalize_account_record(raw: Dict[str, Any], default_email: str = "") -> Op
     tier = str(raw.get("tier") or "PRO").upper()
     name = str(raw.get("name") or email.split("@")[0])
 
+    raw_has_5h = raw.get("has_5h")
+    if isinstance(raw_has_5h, bool):
+        has_5h = raw_has_5h
+    elif tier == "FREE":
+        has_5h = False
+    else:
+        has_5h = True
+    is_pro = tier in ("PAID_PRO", "FREE_PRO", "PRO")
+
     # 配额对象归一化
     gemini_data = raw.get("gemini", {})
     if not isinstance(gemini_data, dict):
@@ -112,11 +130,16 @@ def normalize_account_record(raw: Dict[str, Any], default_email: str = "") -> Op
     if not isinstance(claude_data, dict):
         claude_data = {}
 
-    return {
+    default_5h = 1.0 if has_5h else None
+    g_5h = _opt_float(gemini_data.get("quota_5h"), default_5h) if has_5h else None
+    c_5h = _opt_float(claude_data.get("quota_5h"), default_5h) if has_5h else None
+
+    rec: Dict[str, Any] = {
         "email": email,
         "name": name,
         "tier": tier,
-        "pro": (tier == "PRO"),
+        "pro": is_pro,
+        "has_5h": has_5h,
         "refresh_token": refresh_token,
         "access_token": access_token,
         "expiry_timestamp": int(raw.get("expiry_timestamp") or token_obj.get("expiry_timestamp") or (now_ts + 3600)),
@@ -129,20 +152,25 @@ def normalize_account_record(raw: Dict[str, Any], default_email: str = "") -> Op
         "validation_url": raw.get("validation_url") if raw.get("validation_blocked") else None,
         "validation_blocked_reason": raw.get("validation_blocked_reason") if raw.get("validation_blocked") else None,
         "gemini": {
-            "quota_5h": float(gemini_data.get("quota_5h", 1.0)),
-            "quota_weekly": float(gemini_data.get("quota_weekly", 1.0)),
-            "reset_time_5h": str(gemini_data.get("reset_time_5h", "")),
+            "quota_5h": g_5h,
+            "quota_weekly": float(_opt_float(gemini_data.get("quota_weekly"), 1.0) or 0.0),
+            "reset_time_5h": str(gemini_data.get("reset_time_5h", "")) if has_5h else "",
             "reset_time_weekly": str(gemini_data.get("reset_time_weekly", "")),
             "reset_time": str(gemini_data.get("reset_time", ""))
         },
         "claude": {
-            "quota_5h": float(claude_data.get("quota_5h", 1.0)),
-            "quota_weekly": float(claude_data.get("quota_weekly", 1.0)),
-            "reset_time_5h": str(claude_data.get("reset_time_5h", "")),
+            "quota_5h": c_5h,
+            "quota_weekly": float(_opt_float(claude_data.get("quota_weekly"), 1.0) or 0.0),
+            "reset_time_5h": str(claude_data.get("reset_time_5h", "")) if has_5h else "",
             "reset_time_weekly": str(claude_data.get("reset_time_weekly", "")),
             "reset_time": str(claude_data.get("reset_time", ""))
         }
     }
+    if raw.get("claude_version"):
+        rec["claude_version"] = str(raw["claude_version"])
+    if isinstance(raw.get("claude_models"), list) and raw["claude_models"]:
+        rec["claude_models"] = list(raw["claude_models"])
+    return rec
 
 
 def parse_accounts_data(raw_input: Union[str, dict, list]) -> Dict[str, Dict[str, Any]]:
@@ -231,7 +259,8 @@ def import_accounts_payload(payload: Union[str, dict, list], accounts_file: str 
                 cur["access_token"] = new_rec["access_token"]
             if new_rec.get("tier"):
                 cur["tier"] = new_rec["tier"]
-                cur["pro"] = (new_rec["tier"] == "PRO")
+                cur["pro"] = bool(new_rec.get("pro"))
+                cur["has_5h"] = bool(new_rec.get("has_5h", True))
             # 若已有配额为初始占位值 (1.0 且无 reset)，而新导入有真实配额，则更新
             if new_rec.get("gemini", {}).get("reset_time_5h") and not cur.get("gemini", {}).get("reset_time_5h"):
                 cur["gemini"] = new_rec["gemini"]

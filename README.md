@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v4.0.0 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v4.1.0 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,27 +9,35 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.0.0-F59E0B?style=flat-square&logo=github" alt="Release v4.0.0" />
+  <img src="https://img.shields.io/badge/Release-v4.1.0-F59E0B?style=flat-square&logo=github" alt="Release v4.1.0" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-111827?style=flat-square&logo=linux" alt="Linux and macOS" />
   <img src="https://img.shields.io/badge/Desktop-C%2B%2B17%20%2B%20Qt6%20QML-41CD52?style=flat-square&logo=qt" alt="Qt6 QML" />
   <img src="https://img.shields.io/badge/Mode-Zero%20Proxy%20%7C%20Native%20Keychain-0EA5E9?style=flat-square" alt="Zero Proxy" />
-  <img src="https://img.shields.io/badge/Tests-35%20Automated%20Passing-10B981?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-57%20Automated%20Passing-10B981?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/License-MIT-2563EB?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v4.0.0 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v4.1.0 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub v4.0.0 原生桌面客户端实拍（全合成演示账号）：独立「类别」列一键区分付费 PRO / 免费 PRO / FREE，对齐官方 Gemini 与 Claude 双配额列，FREE 账号单轨周限清爽呈现，支持最小默认宽度与高度自适应</em>
+  <em>图：Antigravity Hub v4.1.0 原生桌面客户端实拍（全合成演示账号）：独立「类别」列一键区分付费 PRO / 免费 PRO / FREE，对齐官方 Gemini 与 Claude 双配额列，FREE 账号单轨周限清爽呈现，支持最小默认宽度与高度自适应</em>
 </p>
 
 ---
 
-## 🚀 v4.0.0 重大版本亮点
+## 🔥 v4.1.0 重要更新（Mac Web 端全功能同步 + 真随机错峰预热）
 
-**Antigravity Hub v4.0.0** 是一次面向真实多账号生产工作流的全面重构版本，从底层配额采集、账号分级判定、自动轮转策略到桌面端窗口几何全部对齐 Google 官方接口事实：
+- **真实 1-token 随机错峰预热引擎**：修复 `v1internal:generateContent` 缺少 `project` 字段及模型 ID 失配导致预热静默失败的问题；后台随机打散顺序向未激活的健康 PRO 账号发起真实极简调用（2 至 11 Tokens），锁死 Google 官方 5H 倒计时时钟；仅具备 5H 窗口的 PRO 账号参与预热，跳过 `FREE` 账号；
+- **彻底告别「满额」遮蔽真实倒计时**：当 5H 配额因 1-token 预热触发仍为 `100%` 时，Linux Qt6 客户端与 macOS Web 端均直接透传并实时渲染真实 5H 倒计时（如 `4h 58m`），未激活周期显示 `待预热`，仅 `FREE` 无 5H 窗口账号单轨居中呈现周额度；
+- **macOS Neo-Brutalism Web 端 100% 功能同步（保留原视觉）**：`hub/server.py` 补齐顶栏活跃账号三档微标、控制栏三档快筛胶囊（`付费 PRO` / `免费 PRO` / `FREE`）与状态/搜索组合过滤、隐藏已枯竭切换、底部三档汇总，修复 `FREE` 账号 `quota_5h=null` 引发外部池同步崩溃，并严苛过滤仅含幽灵 `3p-5h` 而无 `gemini-5h` 的边缘账号防误判。
+
+---
+
+## 🚀 v4.0.0 架构核心特性
+
+**Antigravity Hub v4.x** 是面向真实多账号生产工作流的重构系列，从底层配额采集、账号分级判定、自动轮转策略到桌面端窗口几何全部对齐 Google 官方接口事实：
 
 ### 1. 全自动三档账号体系（零手工配置，显著视觉区分）
 后台自动融合 Google 官方 `retrieveUserQuotaSummary` 配额桶结构与 `fetchAvailableModels` 可用模型矩阵，将账号池精准划分为三档，无需手写白名单，新增账号自动归类：
@@ -103,8 +111,9 @@ antigravity-hub/
 │   ├── switcher.py           # 多存储原子热切号与钥匙串同步引擎
 │   └── recovery.py           # Language Server 在途会话精准快照与异步接力
 ├── tests/
-│   ├── antigravity-hub_tests.cpp  # 30 项 QtTest 离屏单元测试（模型、主题、几何与防回归）
-│   └── test_rotator_precision.py  # 5 项 Python 看门狗选号与付费 PRO 隔离精度测试
+│   ├── antigravity-hub_tests.cpp    # 31 项 QtTest 离屏单元测试（模型、主题、几何与倒计时防遮蔽）
+│   ├── test_rotator_precision.py    # Python 看门狗选号与付费 PRO 隔离精度测试
+│   └── test_warmup_and_mac_sync.py  # 真实 1-token 错峰预热与 macOS Web 端同步回归测试
 └── bin/
     ├── build                 # qmake6 单二进制编译脚本
     ├── test                  # 离屏自动化测试执行器
@@ -169,9 +178,9 @@ cd antigravity-hub
 # 编译原生二进制（产物位于 build/antigravity-hub）
 ./bin/build
 
-# 运行 30 项 Qt6 离屏单元测试 + 5 项 Python 轮转精度测试
+# 运行 31 项 Qt6 离屏单元测试 + 26 项 Python 自动化回归测试
 ./bin/test
-python3 -m unittest tests/test_rotator_precision.py
+python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 #### 3. 本地安装与启动

@@ -336,7 +336,7 @@ class AntigravityQuotaRotator:
                     active_acc["validation_url"] = val_url
                     self.switcher.save_hub_accounts(hub_data)
                 elif quotas:
-                    has_5h_bkt = ("gemini-5h" in quotas) or ("3p-5h" in quotas)
+                    has_5h_bkt = ("gemini-5h" in quotas)
                     active_acc["has_5h"] = has_5h_bkt
                     active_acc.setdefault("gemini", {})["quota_weekly"] = quotas.get("gemini-weekly", 1.0)
                     active_acc["gemini"]["quota_5h"] = quotas["gemini-5h"] if has_5h_bkt and "gemini-5h" in quotas else None

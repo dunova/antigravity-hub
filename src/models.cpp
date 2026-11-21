@@ -95,6 +95,16 @@ QString AccountModel::formatCountdown(qint64 targetEpoch, qint64 nowEpoch) {
     return QStringLiteral("< 1m");
 }
 
+static QString format5hCountdown(qint64 targetEpoch, qint64 nowEpoch) {
+    if (targetEpoch > nowEpoch && targetEpoch <= nowEpoch + 18060) {
+        return AccountModel::formatCountdown(targetEpoch, nowEpoch);
+    }
+    if (targetEpoch > 0 && targetEpoch > nowEpoch - 60 && targetEpoch <= nowEpoch) {
+        return QStringLiteral("即将恢复");
+    }
+    return QStringLiteral("待预热");
+}
+
 // ============================================================================
 // AccountModel 实现
 // ============================================================================
@@ -369,11 +379,7 @@ void AccountModel::loadFromDisk() {
             }
             const QString gReset5hIso = geminiObj.value(QStringLiteral("reset_time_5h")).toString();
             item.gemini38Reset5hTs = parseIsoTimestamp(gReset5hIso);
-            if (item.gemini38Quota5h >= 0.999 || item.gemini38Reset5hTs > nowEpoch + 18000) {
-                item.gemini38Reset5h = QStringLiteral("满额");
-            } else {
-                item.gemini38Reset5h = formatCountdown(item.gemini38Reset5hTs, nowEpoch);
-            }
+            item.gemini38Reset5h = format5hCountdown(item.gemini38Reset5hTs, nowEpoch);
         }
 
         // Claude 配额解析 (带周耗尽短路；FREE 账号无 5H)
@@ -395,11 +401,7 @@ void AccountModel::loadFromDisk() {
             }
             const QString cReset5hIso = claudeObj.value(QStringLiteral("reset_time_5h")).toString();
             item.claudeReset5hTs = parseIsoTimestamp(cReset5hIso);
-            if (item.claudeQuota5h >= 0.999 || item.claudeReset5hTs > nowEpoch + 18000) {
-                item.claudeReset5h = QStringLiteral("满额");
-            } else {
-                item.claudeReset5h = formatCountdown(item.claudeReset5hTs, nowEpoch);
-            }
+            item.claudeReset5h = format5hCountdown(item.claudeReset5hTs, nowEpoch);
         }
 
         // 活跃状态与状态胶囊
@@ -556,8 +558,7 @@ void AccountModel::onSecondTick() {
         if (g4R != acc.gemini4Reset) { acc.gemini4Reset = g4R; anyChanged = true; }
 
         if (acc.has5h) {
-            const QString g38R5 = (acc.gemini38Quota5h >= 0.999 || acc.gemini38Reset5hTs > nowEpoch + 18000)
-                ? QStringLiteral("满额") : formatCountdown(acc.gemini38Reset5hTs, nowEpoch);
+            const QString g38R5 = format5hCountdown(acc.gemini38Reset5hTs, nowEpoch);
             if (g38R5 != acc.gemini38Reset5h) { acc.gemini38Reset5h = g38R5; anyChanged = true; }
         }
 
@@ -565,8 +566,7 @@ void AccountModel::onSecondTick() {
         if (g38RW != acc.gemini38ResetW) { acc.gemini38ResetW = g38RW; anyChanged = true; }
 
         if (acc.has5h) {
-            const QString cR5 = (acc.claudeQuota5h >= 0.999 || acc.claudeReset5hTs > nowEpoch + 18000)
-                ? QStringLiteral("满额") : formatCountdown(acc.claudeReset5hTs, nowEpoch);
+            const QString cR5 = format5hCountdown(acc.claudeReset5hTs, nowEpoch);
             if (cR5 != acc.claudeReset5h) { acc.claudeReset5h = cR5; anyChanged = true; }
         }
 

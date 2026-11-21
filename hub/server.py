@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "4.0.0"
-__canonical_version_tag__ = "20261120-v4.0.0-THREE_TIER_OFFICIAL_LAYOUT_AND_SMART_ROTATION"
-__last_updated__ = "2026-11-20 20:40:00"
-__canonical_doctrine__ = "Antigravity Hub v4.0.0：全自动三档账号分类、对齐官方 Gemini/Claude 双列、FREE 单轨周限、全局 Gemini 与付费 PRO 专享轮转、最小宽度与自适应高度窗口"
+__version__ = "4.1.0"
+__canonical_version_tag__ = "20261121-v4.1.0-MAC_WEB_PARITY_AND_REAL_STAGGERED_PREWARM"
+__last_updated__ = "2026-11-21 11:15:00"
+__canonical_doctrine__ = "Antigravity Hub v4.1.0：Git Mac Web端全功能同步、真实1-token随机错峰预热与Google锁定倒计时全端透传"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -435,7 +435,7 @@ def get_hub_settings() -> Dict[str, Any]:
         "claude_threshold": 0.0,
         "default_sort": "gemini_5h_desc",
         "hourly_warmup": True,
-        "warmup_model": "gemini_first",
+        "warmup_model": "dual",
         "warmup_stagger_sec": 60,
         "account_mask": False,
         "auto_refresh_sec": 5,
@@ -493,13 +493,69 @@ class KeychainFileLock:
                 pass
 
 
+def _parse_iso_to_epoch(iso_str: str) -> int:
+    if not iso_str or "T" not in str(iso_str):
+        return 0
+    try:
+        clean_iso = str(iso_str).strip().replace("Z", "+00:00")
+        return int(datetime.datetime.fromisoformat(clean_iso).timestamp())
+    except Exception:
+        return 0
+
+
 class HubEngine:
     def __init__(self):
         self.lock = threading.Lock()
         self._token_lock = threading.Lock()
         self.refreshing_now = False
         self._cached_accounts_data: Dict[str, Any] = {}
+        self._5h_clock_obs: Dict[Tuple[str, str], Tuple[float, int]] = {}
+        self._initial_quota_sync_done = threading.Event()
         self._ensure_storage()
+
+    def _record_5h_clock_state(
+        self,
+        email: str,
+        bucket: str,
+        q_5h: float,
+        rst_iso: str,
+        bkt_dict: Dict[str, Any],
+        sched_entry: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        权威分辨 Google 5h resetTime 是“已锁定真实倒计时”还是“未预热墙钟漂移 (now+18000s)”：
+        - 已有真实消耗 (<0.999)、剩余 <= 17850s、近 5 分钟内有真实 HTTP 200 预热记录、
+          或 >=10s 两次探测时钟未随墙钟前进 -> 确认真实倒计时并写入 reset_time_5h；
+        - 否则（确认漂移未激活态）清空虚假/旧 reset_time_5h 并标记 warmup_active=False，以便错峰预热调度立即接管。
+        """
+        rst_str = str(rst_iso or "").strip()
+        t_ts = _parse_iso_to_epoch(rst_str)
+        if not rst_str or t_ts <= 0:
+            bkt_dict["reset_time_5h"] = ""
+            bkt_dict["warmup_active"] = False
+            return
+
+        now_t = time.time()
+        rem = t_ts - now_t
+        w_ts = max(
+            int(bkt_dict.get("warmup_ts") or 0),
+            int((sched_entry or {}).get(f"{bucket}_warmup_ts") or 0),
+        )
+        prev_obs = self._5h_clock_obs.get((email, bucket))
+        self._5h_clock_obs[(email, bucket)] = (now_t, t_ts)
+
+        is_locked_countdown = (
+            (q_5h < 0.999 and rem <= 18060)
+            or (rem <= 17850)
+            or (w_ts > 0 and 0 <= (now_t - w_ts) <= 300 and abs(t_ts - (w_ts + 18000)) <= 180)
+            or (prev_obs is not None and (now_t - prev_obs[0]) >= 10.0 and abs(t_ts - prev_obs[1]) <= 2 and t_ts > now_t)
+        )
+        if is_locked_countdown:
+            bkt_dict["reset_time_5h"] = rst_str
+            bkt_dict["warmup_active"] = True
+        else:
+            bkt_dict["reset_time_5h"] = ""
+            bkt_dict["warmup_active"] = False
 
     def _ensure_storage(self):
         os.makedirs(HUB_DIR, exist_ok=True)
@@ -768,7 +824,7 @@ class HubEngine:
                 "email": email,
                 "name": name,
                 "status": "active" if is_active else "standby",
-                "last_5h_fraction": round(float(acc.get("gemini", {}).get("quota_5h", 1.0)), 4),
+                "last_5h_fraction": round(_safe_float((acc.get("gemini") or {}).get("quota_5h"), 1.0), 4),
                 "last_used_time": float(now_ts) if is_active else 0.0,
                 "cooldown_until": 0.0,
                 "last_warmup_ts": acc.get("last_warmup_ts") or now_ts,
@@ -890,6 +946,7 @@ class HubEngine:
                         q_groups = q_res.get("response", {}).get("groups", [])
                         ls_seen_any_bucket = False
                         ls_seen_5h_bucket = False
+                        ls_pending_5h: Dict[str, Tuple[float, str]] = {}
                         for grp in q_groups:
                             grp_name = grp.get("displayName", "")
                             is_g4_grp = ("gemini 4" in grp_name.lower() or "argon" in grp_name.lower())
@@ -909,11 +966,7 @@ class HubEngine:
                                         updated_any = True
                                     elif bid == "gemini-5h":
                                         ls_seen_5h_bucket = True
-                                        g_d = acc.setdefault("gemini", {})
-                                        g_d["quota_5h"] = val
-                                        if rst:
-                                            g_d["reset_time_5h"] = str(rst)
-                                        updated_any = True
+                                        ls_pending_5h["gemini"] = (val, str(rst or ""))
                                     elif bid == "3p-weekly":
                                         c_d = acc.setdefault("claude", {})
                                         c_d["quota_weekly"] = val
@@ -922,12 +975,7 @@ class HubEngine:
                                             c_d["reset_time"] = str(rst)
                                         updated_any = True
                                     elif bid == "3p-5h":
-                                        ls_seen_5h_bucket = True
-                                        c_d = acc.setdefault("claude", {})
-                                        c_d["quota_5h"] = val
-                                        if rst:
-                                            c_d["reset_time_5h"] = str(rst)
-                                        updated_any = True
+                                        ls_pending_5h["claude"] = (val, str(rst or ""))
                                     elif is_g4_grp or "argon" in bid.lower() or "gemini-4" in bid.lower():
                                         g4_d = acc.setdefault("gemini4", {})
                                         g4_d["quota_weekly"] = val
@@ -937,11 +985,24 @@ class HubEngine:
                                         updated_any = True
                         if ls_seen_any_bucket:
                             acc["has_5h"] = ls_seen_5h_bucket
-                            if not ls_seen_5h_bucket:
+                            if ls_seen_5h_bucket:
+                                if "gemini" in ls_pending_5h:
+                                    g_val, g_rst = ls_pending_5h["gemini"]
+                                    g_d = acc.setdefault("gemini", {})
+                                    g_d["quota_5h"] = g_val
+                                    self._record_5h_clock_state(email, "gemini", g_val, g_rst, g_d)
+                                if "claude" in ls_pending_5h:
+                                    c_val, c_rst = ls_pending_5h["claude"]
+                                    c_d = acc.setdefault("claude", {})
+                                    c_d["quota_5h"] = c_val
+                                    self._record_5h_clock_state(email, "claude", c_val, c_rst, c_d)
+                            else:
                                 acc.setdefault("gemini", {})["quota_5h"] = None
                                 acc["gemini"]["reset_time_5h"] = ""
+                                acc["gemini"]["warmup_active"] = False
                                 acc.setdefault("claude", {})["quota_5h"] = None
                                 acc["claude"]["reset_time_5h"] = ""
+                                acc["claude"]["warmup_active"] = False
                             updated_any = True
                 except Exception as qe:
                     logger.debug(f"本地 language_server RetrieveUserQuotaSummary 直连探测跳过: {qe}")
@@ -1094,22 +1155,9 @@ class HubEngine:
                         "reset_time": ""
                     }
                 }
-                # 立即拉取实时配额
+                # 立即拉取实时配额与三档分类
                 try:
-                    quotas, resets = self.fetch_live_quota(at)
-                    if quotas:
-                        new_acc["gemini"]["quota_5h"] = quotas.get("gemini-5h", 1.0)
-                        new_acc["gemini"]["quota_weekly"] = quotas.get("gemini-weekly", 1.0)
-                        if resets.get("gemini-5h"):
-                            new_acc["gemini"]["reset_time_5h"] = resets["gemini-5h"]
-                        if resets.get("gemini-weekly"):
-                            new_acc["gemini"]["reset_time_weekly"] = resets["gemini-weekly"]
-                        new_acc["claude"]["quota_5h"] = quotas.get("3p-5h", 1.0)
-                        new_acc["claude"]["quota_weekly"] = quotas.get("3p-weekly", 1.0)
-                        if resets.get("3p-5h"):
-                            new_acc["claude"]["reset_time_5h"] = resets["3p-5h"]
-                        if resets.get("3p-weekly"):
-                            new_acc["claude"]["reset_time_weekly"] = resets["3p-weekly"]
+                    self.refresh_single_account_quota(detected_email, new_acc)
                 except Exception as e:
                     logger.warning(f"新账号初始化配额异常: {e}")
 
@@ -1532,8 +1580,18 @@ class HubEngine:
             acc.setdefault("gemini", {})
             acc.setdefault("claude", {})
 
-            # 权威物理门禁：以官方 retrieveUserQuotaSummary 是否返回 5h 桶决定 has_5h，彻底消除 FREE 账号虚显 5H 100% 满额
-            has_5h_bucket = ("gemini-5h" in quotas) or ("3p-5h" in quotas)
+            sched_entry: Dict[str, Any] = {}
+            if os.path.exists(WARMUP_SCHEDULE_PATH):
+                try:
+                    with open(WARMUP_SCHEDULE_PATH, "r", encoding="utf-8") as sf:
+                        sched_all = json.load(sf)
+                    if isinstance(sched_all, dict) and isinstance(sched_all.get(email), dict):
+                        sched_entry = sched_all[email]
+                except Exception:
+                    pass
+
+            # 权威物理门禁：仅当官方 retrieveUserQuotaSummary 返回 gemini-5h 桶才具备 5h 窗口（过滤 FREE 幽灵 3p-5h 误判）
+            has_5h_bucket = ("gemini-5h" in quotas)
             acc["has_5h"] = has_5h_bucket
 
             acc["gemini"]["quota_weekly"] = quotas.get("gemini-weekly", acc["gemini"].get("quota_weekly", 1.0))
@@ -1541,25 +1599,16 @@ class HubEngine:
                 acc["gemini"]["reset_time_weekly"] = resets["gemini-weekly"]
                 acc["gemini"]["reset_time"] = resets["gemini-weekly"]
 
-            if has_5h_bucket and "gemini-5h" in quotas:
+            if has_5h_bucket:
                 g_5h = quotas["gemini-5h"]
                 acc["gemini"]["quota_5h"] = g_5h
-                if resets.get("gemini-5h"):
-                    g_res = resets["gemini-5h"]
-                    is_floating = False
-                    try:
-                        if "T" in g_res:
-                            clean_iso = g_res.replace("Z", "+00:00")
-                            t_ts = datetime.datetime.fromisoformat(clean_iso).timestamp()
-                            if abs(t_ts - time.time() - 18000) < 120 and g_5h >= 0.999:
-                                is_floating = True
-                    except Exception:
-                        pass
-                    if not is_floating or not acc["gemini"].get("reset_time_5h"):
-                        acc["gemini"]["reset_time_5h"] = g_res
-            elif not has_5h_bucket:
+                self._record_5h_clock_state(
+                    email, "gemini", g_5h, resets.get("gemini-5h", ""), acc["gemini"], sched_entry=sched_entry
+                )
+            else:
                 acc["gemini"]["quota_5h"] = None
                 acc["gemini"]["reset_time_5h"] = ""
+                acc["gemini"]["warmup_active"] = False
 
             acc["claude"]["quota_weekly"] = quotas.get("3p-weekly", acc["claude"].get("quota_weekly", 1.0))
             if resets.get("3p-weekly"):
@@ -1569,24 +1618,16 @@ class HubEngine:
             if has_5h_bucket and "3p-5h" in quotas:
                 c_5h = quotas["3p-5h"]
                 acc["claude"]["quota_5h"] = c_5h
-                if resets.get("3p-5h"):
-                    c_res = resets["3p-5h"]
-                    c_floating = False
-                    try:
-                        if "T" in c_res:
-                            clean_iso = c_res.replace("Z", "+00:00")
-                            t_ts = datetime.datetime.fromisoformat(clean_iso).timestamp()
-                            if abs(t_ts - time.time() - 18000) < 120 and c_5h >= 0.999:
-                                c_floating = True
-                    except Exception:
-                        pass
-                    if not c_floating or not acc["claude"].get("reset_time_5h"):
-                        acc["claude"]["reset_time_5h"] = c_res
+                self._record_5h_clock_state(
+                    email, "claude", c_5h, resets.get("3p-5h", ""), acc["claude"], sched_entry=sched_entry
+                )
                 if not resets.get("3p-weekly") and resets.get("3p-5h"):
                     acc["claude"]["reset_time"] = resets["3p-5h"]
-            elif not has_5h_bucket:
-                acc["claude"]["quota_5h"] = None
-                acc["claude"]["reset_time_5h"] = ""
+            else:
+                acc["claude"]["quota_5h"] = None if not has_5h_bucket else acc["claude"].get("quota_5h")
+                acc["claude"]["reset_time_5h"] = "" if not has_5h_bucket else acc["claude"].get("reset_time_5h", "")
+                if not has_5h_bucket:
+                    acc["claude"]["warmup_active"] = False
 
             # Gemini 4 周配额专属提取 (若官方返回则记录，绝不伪造复制)
             g4_weekly_quota = quotas.get("gemini4-weekly")
@@ -1651,21 +1692,34 @@ class HubEngine:
 
     def trigger_warmup(self, email: str, acc: Dict[str, Any], model_override: str = "") -> bool:
         """
-        【Hub 预热单账号直通入口 · 对齐物理中枢 AntigravityPhysicalManager】
+        Hub 预热单账号直通入口，仅针对具备 5h 桶的 PRO 账号发送真实 1-token 生成激活
         """
         try:
             from core.switcher import AntigravityPhysicalManager
             mgr = AntigravityPhysicalManager()
+            cfg = get_hub_settings()
+            warmup_mode = str(cfg.get("warmup_model") or "dual")
+            stagger_sec = int(cfg.get("warmup_stagger_sec") or 60)
             acc_entry = dict(acc)
             acc_entry["email"] = email
-            res = mgr.warmup_single_account(acc_entry, force=True, model_override=model_override)
+            res = mgr.warmup_single_account(
+                acc_entry,
+                force=True,
+                model_override=model_override,
+                warmup_mode=warmup_mode,
+                stagger_sec=stagger_sec,
+            )
             st = res.get("status")
-            if st in ("success", "cooldown_active"):
-                logger.info(f"🔥 Hub 触发预热成功: {email} -> {res}")
+            if st in ("success", "already_active"):
+                logger.info(f"🔥 Hub 触发真实预热完成: {email} -> {res}")
                 now = int(time.time())
-                acc["last_warmup_ts"] = now
-                acc["next_warmup_ts"] = res.get("locked_reset_ts", now + 18000)
-                # 触发配额刷新并写回
+                acc["last_warmup_ts"] = acc_entry.get("last_warmup_ts", now)
+                if res.get("locked_reset_ts"):
+                    acc["next_warmup_ts"] = res["locked_reset_ts"]
+                if "gemini" in acc_entry and isinstance(acc_entry["gemini"], dict):
+                    acc.setdefault("gemini", {}).update(acc_entry["gemini"])
+                if "claude" in acc_entry and isinstance(acc_entry["claude"], dict):
+                    acc.setdefault("claude", {}).update(acc_entry["claude"])
                 self.refresh_single_account_quota(email, acc)
                 return True
             else:
@@ -1677,32 +1731,40 @@ class HubEngine:
 
     def run_hourly_staggered_warmup(self, force: bool = False) -> int:
         """
-        【每小时全局错峰预热流水线 · 摩天轮阶梯无缝接力保障】
-        核心契约：
-        1. 绝不看到 4h59m：全池 11 个账号在 5 小时时间轴上按 ~27 分钟阶梯等距打散，保持充足可用且到期即满血；
-        2. 每小时全池巡检：后台自动以 1-token 极简调用对齐流水线，杜绝并发冲击与假就绪；
-        3. 梯次接力：高并发高难度任务打满一轮后，各账号已在不同倒计时阶段，接二连三快速满血恢复，告别全员死等 5 小时。
+        每小时随机错峰预热调度与立即批量激活入口：
+        - 仅面向 PRO 账号，跳过 FREE 账号；
+        - force=True 时按随机打散顺序向所有未激活 PRO 账号发送真实 1-token 请求；
+        - force=False 时为未激活 PRO 账号排班并触发到期预热，绝不伪造 reset_time_5h。
         """
         try:
             from core.switcher import AntigravityPhysicalManager
             mgr = AntigravityPhysicalManager()
+            cfg = get_hub_settings()
+            warmup_mode = str(cfg.get("warmup_model") or "dual")
+            stagger_sec = int(cfg.get("warmup_stagger_sec") or 60)
             data = self.load_accounts()
             accounts = [dict(v, email=k) for k, v in data.get("accounts", {}).items()]
-            
-            # 1. 梯次错峰重平衡与排班编排
-            res = mgr.rebalance_and_align_staggered_ladder(accounts, force=force)
-            
-            # 2. 检查并触发当前到期账号的阶梯轮转
-            due_count = mgr.check_and_trigger_due_staggered_warmup()
-            
-            # 重新加载并同步内存缓存与本地备份
+
+            res = mgr.rebalance_and_align_staggered_ladder(
+                accounts, force=force, stagger_sec=stagger_sec, warmup_mode=warmup_mode
+            )
+            due_count = 0
+            if not force:
+                due_count = mgr.check_and_trigger_due_staggered_warmup(
+                    stagger_sec=stagger_sec, warmup_mode=warmup_mode
+                )
+
             fresh_data = self.load_accounts()
-            self.save_accounts(fresh_data)
-            
-            logger.info(f"🎯 [错峰梯次流水线闭环] 阶梯对齐状态: {res.get('status')}, 全池编排: {res.get('count')} 账号, 到期续接数: {due_count}")
-            return res.get("count", 0) + due_count
+            if fresh_data.get("accounts"):
+                self.save_accounts(fresh_data)
+
+            acted = int(res.get("warmed", 0) or 0) + due_count
+            logger.info(
+                f"🎯 [随机错峰预热闭环] PRO 总数: {res.get('count', 0)}, 本轮实激活: {res.get('warmed', 0)}, 到期触发: {due_count}"
+            )
+            return acted if acted > 0 else int(res.get("count", 0) or 0)
         except Exception as e:
-            logger.error(f"❌ 每小时错峰预热流水线异常: {e}")
+            logger.error(f"❌ 随机错峰预热调度异常: {e}")
             return 0
 
     def switch_account(self, target_email: str) -> Tuple[bool, str]:
@@ -1968,12 +2030,10 @@ def render_quota_cell(h5_pct: Optional[float], weekly_pct: float, reset_5h_info:
     if is_weekly_exhausted:
         tip = f"周度总配额已耗尽 (0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
         reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
-    elif raw_5h >= 0.999 or (reset_5h_info and ("d" in reset_5h_info or reset_5h_info in ("--", "已就绪", "就绪"))):
-        reset_5h_html = '<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额满血可用">满额</span>'
-    elif reset_5h_info:
-        reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额恢复倒计时: {reset_5h_info}">{reset_5h_info}</span>'
+    elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪", "满额") and "d" not in reset_5h_info:
+        reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额真实倒计时: {reset_5h_info}">{reset_5h_info}</span>'
     else:
-        reset_5h_html = '<span class="q-reset q-reset-empty font-mono">--</span>'
+        reset_5h_html = '<span class="q-reset q-reset-ready font-mono" title="5小时周期尚未激活，等待随机错峰预热">待预热</span>'
 
     return f"""
     <div class="q-cell"{cell_title}>
@@ -2009,11 +2069,26 @@ def render_top_bar_stats_html(total_count: int, pro_count: int, avg_g: float, av
     return f"""<div id="top-bar-stats" class="stats-strip font-mono"{oob_attr} style="display:none;"></div>"""
 
 
-def render_active_pill_html(active_email: str, oob: bool = False) -> str:
+def render_active_pill_html(
+    active_email: str,
+    oob: bool = False,
+    active_tier: str = "",
+    active_tier_display: str = "",
+) -> str:
     oob_attr = ' hx-swap-oob="true"' if oob else ""
     short_name = active_email.split("@")[0] if "@" in active_email else (active_email or "未激活")
     lock_info = get_manual_override_lock()
     now_ts = time.time()
+
+    tier_badge_inline = ""
+    if active_tier == "PAID_PRO":
+        tier_badge_inline = '<span class="active-tier-tag active-tier-paid font-mono">付费 PRO</span>'
+    elif active_tier == "FREE_PRO":
+        tier_badge_inline = '<span class="active-tier-tag active-tier-freepro font-mono">免费 PRO</span>'
+    elif active_tier == "FREE":
+        tier_badge_inline = '<span class="active-tier-tag active-tier-free font-mono">FREE</span>'
+    elif active_tier_display:
+        tier_badge_inline = f'<span class="active-tier-tag active-tier-free font-mono">{active_tier_display}</span>'
 
     shield_svg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
     zap_svg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
@@ -2022,13 +2097,51 @@ def render_active_pill_html(active_email: str, oob: bool = False) -> str:
         rem_sec = int(lock_info.get("locked_until", 0) - now_ts)
         rem_min = max(1, rem_sec // 60)
         return f"""<span id="active-email-pill" class="active-pill font-mono locked-manual" title="人工保护中: {active_email} (剩余{rem_min}分，点击复制)" onclick="copyText('{active_email}')"{oob_attr}>
-            {shield_svg}<span class="active-email-val" data-active-email="{short_name}">{short_name}</span> <span class="lock-tag font-mono">{rem_min}m</span>
+            {shield_svg}<span class="active-email-val" data-active-email="{short_name}">{short_name}</span>{tier_badge_inline}<span class="lock-tag font-mono">{rem_min}m</span>
             <button class="btn-unlock-pill font-mono" onclick="doUnlockProtection(); event.preventDefault(); event.stopPropagation();" title="恢复自动轮转">✕</button>
         </span>"""
     else:
         return f"""<span id="active-email-pill" class="active-pill font-mono auto-mode" title="当前活跃账号: {active_email} (点击复制)" onclick="copyText('{active_email}')"{oob_attr}>
-            {zap_svg}<span class="active-email-val" data-active-email="{short_name}">{short_name}</span>
+            {zap_svg}<span class="active-email-val" data-active-email="{short_name}">{short_name}</span>{tier_badge_inline}
         </span>"""
+
+
+def _format_live_5h_reset_str(raw_iso: str, now_ts: int) -> str:
+    """仅格式化仍在有效未来窗口内的 Google 真实 5h 倒计时；已过期或空串返回空串以触发待预热显示"""
+    if not raw_iso or raw_iso == "--" or "T" not in str(raw_iso):
+        return ""
+    t_ts = _parse_iso_to_epoch(str(raw_iso))
+    if t_ts <= 0:
+        return ""
+    diff = t_ts - now_ts
+    if diff <= -60 or diff > 18060:
+        return ""
+    if diff <= 0:
+        return "即将恢复"
+    return format_reset_time(str(raw_iso))
+
+
+def _summarize_account_tiers(accounts: Dict[str, Any], active_email: str) -> Tuple[int, int, int, str, str]:
+    """汇总三档账号数量并提取当前活跃账号的类别徽标"""
+    paid_pro_count = 0
+    free_pro_count = 0
+    free_count = 0
+    active_tier = ""
+    active_tier_display = ""
+    for em, acc in accounts.items():
+        if not isinstance(acc, dict):
+            continue
+        t_code, t_disp, _, _ = classify_account_tier(acc)
+        if t_code == "PAID_PRO":
+            paid_pro_count += 1
+        elif t_code == "FREE_PRO":
+            free_pro_count += 1
+        else:
+            free_count += 1
+        if active_email and em == active_email:
+            active_tier = t_code
+            active_tier_display = t_disp
+    return paid_pro_count, free_pro_count, free_count, active_tier, active_tier_display
 
 
 def render_table_rows(include_oob: bool = False) -> str:
@@ -2036,33 +2149,9 @@ def render_table_rows(include_oob: bool = False) -> str:
     active_email = data.get("active_email", "")
     accounts = data.get("accounts", {})
 
-    # 自动检测是否存在已过期的 5h 梯次时间槽 (防止出现大面积虚假“即将恢复”)
-    now_check = time.time()
-    need_ladder_rebalance = False
-    for _em, _acc in accounts.items():
-        if _acc.get("disabled") or _acc.get("validation_blocked"):
-            continue
-        _g_iso = _acc.get("gemini", {}).get("reset_time_5h", "")
-        if not _g_iso or "T" not in str(_g_iso):
-            need_ladder_rebalance = True
-            break
-        try:
-            _ts = datetime.datetime.fromisoformat(str(_g_iso).replace("Z", "+00:00")).timestamp()
-            if _ts <= now_check:
-                need_ladder_rebalance = True
-                break
-        except Exception:
-            need_ladder_rebalance = True
-            break
-
-    if need_ladder_rebalance and accounts:
-        ENGINE.run_hourly_staggered_warmup(force=False)
-        data = ENGINE.load_accounts()
-        active_email = data.get("active_email", "")
-        accounts = data.get("accounts", {})
-
     total_count = len(accounts)
-    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
+    paid_cnt, free_pro_cnt, free_cnt, active_tier, active_tier_disp = _summarize_account_tiers(accounts, active_email)
+    pro_count = paid_cnt + free_pro_cnt
     avg_g = format_quota_int_pct(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     avg_c = format_quota_int_pct(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     cur_time = time.strftime("%H:%M:%S")
@@ -2075,14 +2164,6 @@ def render_table_rows(include_oob: bool = False) -> str:
 
     rows = []
     now = int(time.time())
-
-    sched_warmup = {}
-    if os.path.exists(WARMUP_SCHEDULE_PATH):
-        try:
-            with open(WARMUP_SCHEDULE_PATH, "r", encoding="utf-8") as sf:
-                sched_warmup = json.load(sf)
-        except Exception:
-            pass
 
     for idx, (email, acc) in enumerate(accounts.items(), start=1):
         is_active = (email == active_email)
@@ -2098,14 +2179,24 @@ def render_table_rows(include_oob: bool = False) -> str:
         </div>"""
 
         is_blocked = bool(acc.get("validation_blocked"))
-        val_url = acc.get("validation_url", "")
+
+        # 三档账号类别与真实模型判定
+        acc_tier, acc_tier_display, _is_pro, acc_has_5h = classify_account_tier(acc)
+        tier_rank = 0 if acc_tier == "PAID_PRO" else (1 if acc_tier == "FREE_PRO" else 2)
+        tier_badge_html = render_tier_badge_html(acc_tier, acc_tier_display)
+
+        warmup_btn_html = (
+            f"""
+                                <button class="btn btn-warmup font-mono" 
+                                onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
+                                title="单账号极轻量 1-token 真实预热，启动 Google 5h 倒计时">预热</button>"""
+            if acc_has_5h
+            else ""
+        )
 
         if is_active:
             badge_html = '<span class="badge badge-active"><span class="pulse-dot-green"></span>ACTIVE</span>'
-            main_btn_html = f"""<div class="btn-in-use font-mono" title="当前主程序正在使用此账号护航">在用</div>
-                                <button class="btn btn-warmup font-mono" 
-                                onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="单账号极轻量 1-token 预热激活，接入 5h 错峰梯次流水线">预热</button>"""
+            main_btn_html = f"""<div class="btn-in-use font-mono" title="当前主程序正在使用此账号护航">在用</div>{warmup_btn_html}"""
         elif is_blocked:
             badge_html = '<span class="badge badge-blocked" title="Google账号需网页验证">⚠️待验证</span>'
             main_btn_html = f"""<button class="btn btn-unblock font-mono" 
@@ -2117,10 +2208,7 @@ def render_table_rows(include_oob: bool = False) -> str:
             if has_refresh_token:
                 main_btn_html = f"""<button class="btn btn-switch font-mono" 
                                 onclick="doSwitchAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button>
-                                <button class="btn btn-warmup font-mono" 
-                                onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="单账号极轻量 1-token 预热激活，接入 5h 错峰梯次流水线">预热</button>"""
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button>{warmup_btn_html}"""
             else:
                 main_btn_html = f"""<button class="btn btn-switch font-mono" 
                                 style="opacity:0.35;cursor:not-allowed;background:#ccc;"
@@ -2128,16 +2216,6 @@ def render_table_rows(include_oob: bool = False) -> str:
                                 title="此账号缺少 refresh_token，无法物理切换">无Token</button>"""
 
         action_switch_html = f"""<div class="actions-flex">{main_btn_html}{arrows_html}</div>"""
-
-        # 联动持久化预热调度账本：若官方返回尚未刷新或漂移，优先采信预热锁定的绝对重置倒计时
-        acc_warmup = sched_warmup.get(email, {})
-        warmup_iso = acc_warmup.get("locked_reset_iso", "")
-        warmup_model = acc_warmup.get("model_warmed", "")
-
-        # 三档账号类别与真实模型判定
-        acc_tier, acc_tier_display, _is_pro, acc_has_5h = classify_account_tier(acc)
-        tier_rank = 0 if acc_tier == "PAID_PRO" else (1 if acc_tier == "FREE_PRO" else 2)
-        tier_badge_html = render_tier_badge_html(acc_tier, acc_tier_display)
 
         c_models = acc.get("claude_models") or []
         has_real_55 = any(("5-5" in m or "5.5" in m) for m in c_models) if c_models else (acc.get("claude_version") == "5.5")
@@ -2151,18 +2229,7 @@ def render_table_rows(include_oob: bool = False) -> str:
         else:
             raw_g5h = acc.get("gemini", {}).get("quota_5h")
             g_5h = 0.0 if g_w <= 0.0001 else _safe_float(raw_g5h, 1.0)
-            g_reset_raw = acc.get("gemini", {}).get("reset_time_5h", "")
-            is_g_floating = False
-            try:
-                if "T" in g_reset_raw:
-                    t_dt = datetime.datetime.fromisoformat(g_reset_raw.replace("Z", "+00:00"))
-                    if abs(t_dt.timestamp() - time.time() - 18000) < 120 and g_5h >= 0.999:
-                        is_g_floating = True
-            except Exception:
-                pass
-            if (not g_reset_raw or g_reset_raw == "--" or is_g_floating) and warmup_iso:
-                g_reset_raw = warmup_iso
-            g_reset_5h = format_reset_time(g_reset_raw)
+            g_reset_5h = _format_live_5h_reset_str(acc.get("gemini", {}).get("reset_time_5h", ""), now)
         g_reset_w = format_reset_time(acc.get("gemini", {}).get("reset_time_weekly", acc.get("gemini", {}).get("reset_time", "")))
         g_cell = render_quota_cell(g_5h, g_w, g_reset_5h, g_reset_w, model_type="gemini", has_5h=acc_has_5h)
 
@@ -2174,19 +2241,7 @@ def render_table_rows(include_oob: bool = False) -> str:
         else:
             raw_c5h = acc.get("claude", {}).get("quota_5h")
             c_5h = 0.0 if c_w <= 0.0001 else _safe_float(raw_c5h, 1.0)
-            c_reset_raw = acc.get("claude", {}).get("reset_time_5h", "")
-            is_c_floating = False
-            try:
-                if "T" in c_reset_raw:
-                    t_dt = datetime.datetime.fromisoformat(c_reset_raw.replace("Z", "+00:00"))
-                    if abs(t_dt.timestamp() - time.time() - 18000) < 120 and c_5h >= 0.999:
-                        is_c_floating = True
-            except Exception:
-                pass
-            c_warmup_iso = acc_warmup.get("locked_reset_iso_claude", warmup_iso)
-            if (not c_reset_raw or c_reset_raw == "--" or is_c_floating) and c_warmup_iso:
-                c_reset_raw = c_warmup_iso
-            c_reset_5h = format_reset_time(c_reset_raw)
+            c_reset_5h = _format_live_5h_reset_str(acc.get("claude", {}).get("reset_time_5h", ""), now)
         c_reset_w = format_reset_time(acc.get("claude", {}).get("reset_time_weekly", acc.get("claude", {}).get("reset_time", "")))
         c_cell = render_quota_cell(c_5h, c_w, c_reset_5h, c_reset_w, model_type="claude", claude_ver=claude_ver, has_5h=acc_has_5h)
 
@@ -2229,7 +2284,12 @@ def render_table_rows(include_oob: bool = False) -> str:
     output = "\n".join(rows)
     if include_oob:
         output += "\n" + render_top_bar_stats_html(total_count, pro_count, avg_g, avg_c, cur_time, oob=True)
-        output += "\n" + render_active_pill_html(active_email, oob=True)
+        output += "\n" + render_active_pill_html(
+            active_email,
+            oob=True,
+            active_tier=active_tier,
+            active_tier_display=active_tier_disp,
+        )
         output += "\n" + render_rotation_button_html(oob=True)
         output += "\n" + render_version_marker_html(oob=True)
     return output
@@ -2276,9 +2336,8 @@ def render_dashboard_html() -> str:
     active_email = data.get("active_email", "")
 
     total_count = len(accounts)
-    c55_count = sum(1 for a in accounts.values() if any(("5-5" in m or "5.5" in m) for m in (a.get("claude_models") or [])))
-    c46_count = total_count - c55_count
-    pro_count = sum(1 for a in accounts.values() if a.get("tier") == "PRO")
+    paid_pro_count, free_pro_count, free_count, active_tier, active_tier_disp = _summarize_account_tiers(accounts, active_email)
+    pro_count = paid_pro_count + free_pro_count
     avg_g = format_quota_int_pct(sum(a.get("gemini", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     avg_c = format_quota_int_pct(sum(a.get("claude", {}).get("quota_weekly", 0.0) for a in accounts.values()) / max(1, total_count))
     cur_time = time.strftime("%H:%M:%S")
@@ -2286,7 +2345,12 @@ def render_dashboard_html() -> str:
     rot_btn_html = render_rotation_button_html(oob=False)
     table_rows = render_table_rows(include_oob=False)
     stats_html = render_top_bar_stats_html(total_count, pro_count, avg_g, avg_c, cur_time, oob=False)
-    active_pill_html = render_active_pill_html(active_email, oob=False)
+    active_pill_html = render_active_pill_html(
+        active_email,
+        oob=False,
+        active_tier=active_tier,
+        active_tier_display=active_tier_disp,
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -2497,6 +2561,21 @@ def render_dashboard_html() -> str:
         .active-pill.locked-manual:hover {{
             background: #FECDD3 !important;
         }}
+        .active-tier-tag {{
+            font-size: 9px;
+            font-weight: 900;
+            padding: 0 4px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            border: 1.5px solid #000000;
+            border-radius: 3px;
+            line-height: 1;
+            flex-shrink: 0;
+        }}
+        .active-tier-paid {{ background: #FEF3C7; color: #B45309; }}
+        .active-tier-freepro {{ background: #E0F2FE; color: #0369A1; }}
+        .active-tier-free {{ background: #F3F4F6; color: #4B5563; }}
         .version-badge {{
             background: #FEF08A;
             color: #713F12;
@@ -2624,31 +2703,31 @@ def render_dashboard_html() -> str:
             border: var(--border-thick);
             border-radius: var(--radius-card);
             box-shadow: var(--shadow-hard);
-            padding: 5px 8px;
+            padding: 5px 7px;
             margin-bottom: 6px;
             width: 100% !important;
             box-sizing: border-box;
-            gap: 6px;
+            gap: 4px;
             flex-wrap: nowrap !important;
             white-space: nowrap !important;
         }}
         .control-left-group {{
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             flex-shrink: 0;
         }}
         .search-box {{
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             background: #F4F0EA;
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
             box-shadow: 2px 2px 0px #000000;
-            padding: 0 8px;
+            padding: 0 6px;
             height: 26px;
-            width: 145px;
+            width: 108px;
             flex-shrink: 0;
             box-sizing: border-box;
             position: relative;
@@ -2694,8 +2773,15 @@ def render_dashboard_html() -> str:
         .filter-group {{
             display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 4px;
             flex-shrink: 0;
+        }}
+        .filter-divider {{
+            width: 2px;
+            height: 18px;
+            background: #CBD5E1;
+            flex-shrink: 0;
+            margin: 0 1px;
         }}
         .filter-tab {{
             background: #F4F0EA;
@@ -2703,9 +2789,9 @@ def render_dashboard_html() -> str:
             border: 2px solid #000000;
             border-radius: var(--radius-btn);
             box-shadow: 2px 2px 0px #000000;
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 900;
-            padding: 0 8px;
+            padding: 0 6px;
             height: 26px;
             flex-shrink: 0;
             cursor: pointer;
@@ -2713,9 +2799,13 @@ def render_dashboard_html() -> str:
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 4px;
+            gap: 3px;
             transition: all 0.08s ease;
         }}
+        .tier-tab[data-tier-filter="PAID_PRO"].active {{ background: #FEF3C7; color: #B45309; }}
+        .tier-tab[data-tier-filter="FREE_PRO"].active {{ background: #E0F2FE; color: #0369A1; }}
+        .tier-tab[data-tier-filter="FREE"].active {{ background: #E5E7EB; color: #1F2937; }}
+        .dot-amber {{ background: #F59E0B; }}
         .filter-tab:hover {{
             background: #E5E7EB;
             transform: translate(-1px, -1px);
@@ -4091,7 +4181,7 @@ def render_dashboard_html() -> str:
                 {rot_btn_html}
                 <button class="btn btn-top btn-warmup-all font-mono"
                         onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
-                        title="全池 11 账号阶梯错峰打散预热，接入 5h 流水线轮转 (快捷键: W)">
+                        title="全池 PRO 账号随机错峰预热，激活 5h 真实倒计时 (快捷键: W)">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                     预热
                 </button>
@@ -4129,6 +4219,10 @@ def render_dashboard_html() -> str:
                 <button class="filter-tab" data-filter="healthy" onclick="setFilter('healthy', this)"><span class="filter-dot dot-green"></span>充足</button>
                 <button class="filter-tab" data-filter="warning" onclick="setFilter('warning', this)"><span class="filter-dot dot-red"></span>告急</button>
                 <button class="filter-tab" data-filter="exhausted" onclick="setFilter('exhausted', this)"><span class="filter-dot dot-gray"></span>枯竭</button>
+                <span class="filter-divider" aria-hidden="true"></span>
+                <button class="filter-tab tier-tab" data-tier-filter="PAID_PRO" onclick="toggleTierFilter('PAID_PRO', this)" title="筛选付费 PRO 账号"><span class="filter-dot dot-amber"></span>付费 PRO</button>
+                <button class="filter-tab tier-tab" data-tier-filter="FREE_PRO" onclick="toggleTierFilter('FREE_PRO', this)" title="筛选免费 PRO 账号"><span class="filter-dot dot-blue"></span>免费 PRO</button>
+                <button class="filter-tab tier-tab" data-tier-filter="FREE" onclick="toggleTierFilter('FREE', this)" title="筛选 FREE 账号"><span class="filter-dot dot-gray"></span>FREE</button>
             </div>
             <div class="stats-counter" id="filter-counter">
                 <b>{total_count}</b> / {total_count}
@@ -4287,8 +4381,7 @@ def render_dashboard_html() -> str:
                         <div class="cfg-label">预热目标模型</div>
                         <div class="cfg-field">
                             <select id="cfg-warmup-model" class="neo-select font-mono">
-                                <option value="gemini_first">Gemini 优先</option>
-                                <option value="dual">Gemini + Claude</option>
+                                <option value="dual">Gemini + Claude (全双桶预热)</option>
                                 <option value="gemini_only">仅 Gemini</option>
                             </select>
                         </div>
@@ -4370,9 +4463,9 @@ def render_dashboard_html() -> str:
                         </table>
                     </div>
                     <div style="background:#FFFFFF; border:2px solid #000000; border-radius:4px; padding:8px 12px;">
-                        <div style="font-weight:900; margin-bottom:4px; font-size:12px;">🖥️ 多机集群状态 (01 M4 节点)</div>
+                        <div style="font-weight:900; margin-bottom:4px; font-size:12px;">🖥️ 本地运行态与账号池概览</div>
                         <div style="font-size:11px; color:#374151;">
-                            节点 IP: <b class="font-mono">10.0.0.200</b> · 服务端口: <b class="font-mono">18088</b> · 账号数: <b class="font-mono">11</b>
+                            监听地址: <b class="font-mono">127.0.0.1:{SERVER_PORT}</b> · 账号总数: <b class="font-mono">{total_count}</b> (<b class="font-mono">付费PRO {paid_pro_count}</b> / <b class="font-mono">免费PRO {free_pro_count}</b> / <b class="font-mono">FREE {free_count}</b>)
                         </div>
                     </div>
                 </div>
@@ -4634,7 +4727,7 @@ def render_dashboard_html() -> str:
                 const warmupCb = document.getElementById('cfg-hourly-warmup');
                 if (warmupCb && cfg.hourly_warmup !== undefined) warmupCb.checked = !!cfg.hourly_warmup;
                 const warmupModel = document.getElementById('cfg-warmup-model');
-                if (warmupModel && cfg.warmup_model) warmupModel.value = cfg.warmup_model;
+                if (warmupModel && cfg.warmup_model) warmupModel.value = (cfg.warmup_model === 'gemini_first' ? 'dual' : cfg.warmup_model);
                 const warmupStagger = document.getElementById('cfg-warmup-stagger');
                 if (warmupStagger && cfg.warmup_stagger_sec !== undefined) warmupStagger.value = String(cfg.warmup_stagger_sec);
             }}).catch(() => {{}});
@@ -4681,7 +4774,7 @@ def render_dashboard_html() -> str:
             const gThreshold = parseFloat(document.getElementById('cfg-gemini-threshold')?.value || '0');
             const defaultSort = document.getElementById('cfg-default-sort')?.value || 'gemini_5h_desc';
             const hourlyWarmup = document.getElementById('cfg-hourly-warmup')?.checked ?? true;
-            const warmupModel = document.getElementById('cfg-warmup-model')?.value || 'gemini_first';
+            const warmupModel = document.getElementById('cfg-warmup-model')?.value || 'dual';
             const warmupStagger = parseInt(document.getElementById('cfg-warmup-stagger')?.value || '60', 10);
 
             localStorage.setItem('hub_default_sort', defaultSort);
@@ -4752,6 +4845,7 @@ def render_dashboard_html() -> str:
         }}
 
         let currentFilter = 'all';
+        let currentTierFilter = '';
         let __oauthPollTimer = null;
         let __currentOAuthUrl = '';
         let __currentOAuthState = '';
@@ -5227,9 +5321,9 @@ def render_dashboard_html() -> str:
             }}
         }}
 
-        // 🔥 全池阶梯错峰预热直通函数
+        // 🔥 全池 PRO 账号随机错峰预热直通函数
         async function doWarmupAll() {{
-            showToast("⏳ 正在构建 5h 错峰梯次流水线...", "info");
+            showToast("⏳ 正在对未激活 PRO 账号发起随机错峰 1-token 真实预热...", "info");
             try {{
                 const resp = await fetch('/api/warmup-all', {{
                     method: 'POST'
@@ -5237,7 +5331,9 @@ def render_dashboard_html() -> str:
                 if (!resp.ok) throw new Error("HTTP " + resp.status);
                 const html = await resp.text();
                 applyTbodyAndOOB(html);
-                showToast("🎉 全池 11 账号阶梯错峰打散完成，5h 流水线已锁定接力！", "warmup");
+                setTimeout(fetchTableSafely, 3500);
+                setTimeout(fetchTableSafely, 9000);
+                showToast("🔥 随机错峰预热已启动，全池 PRO 账号将陆续激活 Google 5h 倒计时！", "warmup");
             }} catch (err) {{
                 showToast("❌ 错峰预热失败: " + err.message, "error");
             }}
@@ -5415,8 +5511,17 @@ def render_dashboard_html() -> str:
         function setFilter(filterType, btn) {{
             currentFilter = filterType;
             currentPage = 1;
-            document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.filter-tab[data-filter]').forEach(b => b.classList.remove('active'));
             if (btn) btn.classList.add('active');
+            filterTable();
+        }}
+
+        function toggleTierFilter(tierCode, btn) {{
+            currentTierFilter = (currentTierFilter === tierCode) ? '' : tierCode;
+            currentPage = 1;
+            document.querySelectorAll('.tier-tab[data-tier-filter]').forEach(b => {{
+                b.classList.toggle('active', b.getAttribute('data-tier-filter') === currentTierFilter);
+            }});
             filterTable();
         }}
 
@@ -5492,17 +5597,30 @@ def render_dashboard_html() -> str:
             const clearBtn = document.getElementById('clear-search');
             if (clearBtn) clearBtn.style.display = q ? 'inline-block' : 'none';
 
-            // 3. 分类 Tab 过滤
+            // 3. 状态与三档类别组合过滤
+            const hideExhausted = localStorage.getItem('hub_hide_exhausted') === '1';
+            let paidCount = 0;
+            let freeProCount = 0;
+            let freeCount = 0;
             const matchedRows = [];
             allRows.forEach(tr => {{
                 const email = tr.getAttribute('data-email') || '';
-                const cver = tr.getAttribute('data-claude-ver') || '';
-                const matchQuery = !q || email.toLowerCase().includes(q) 
-                    || (q === '5.5' && cver === '5.5') 
-                    || (q === '4.6' && cver === '4.6') 
-                    || (q === '下架' && cver === '4.6')
-                    || (q === '付费' && cver === '5.5');
+                const tier = tr.getAttribute('data-tier') || 'FREE';
+                if (tier === 'PAID_PRO') paidCount++;
+                else if (tier === 'FREE_PRO') freeProCount++;
+                else freeCount++;
 
+                const cver = tr.getAttribute('data-claude-ver') || '';
+                const matchQuery = !q || email.toLowerCase().includes(q)
+                    || (q === '5.5' && cver === '5.5')
+                    || (q === '4.6' && cver === '4.6')
+                    || (q === '下架' && cver === '4.6')
+                    || ((q === '付费' || q === 'paid') && tier === 'PAID_PRO')
+                    || ((q === '免费pro' || q === 'freepro') && tier === 'FREE_PRO')
+                    || (q === 'pro' && (tier === 'PAID_PRO' || tier === 'FREE_PRO'))
+                    || (q === 'free' && tier === 'FREE');
+
+                const g5 = parseFloat(tr.getAttribute('data-gemini-5h') || '-1');
                 const gw = parseFloat(tr.getAttribute('data-gemini-w') || '1.0');
                 const cw = parseFloat(tr.getAttribute('data-claude-w') || '1.0');
                 let matchTab = true;
@@ -5515,17 +5633,23 @@ def render_dashboard_html() -> str:
                 }} else if (currentFilter === 'healthy') {{
                     matchTab = (gw >= 0.5 && cw >= 0.5);
                 }} else if (currentFilter === 'warning') {{
-                    matchTab = (gw < 0.15 || cw < 0.15);
+                    matchTab = (gw < 0.15 || cw < 0.15 || (g5 >= 0 && g5 < 0.15));
                 }} else if (currentFilter === 'exhausted') {{
                     matchTab = (gw <= 0.0001);
                 }}
 
-                if (matchQuery && matchTab) {{
+                const matchTier = !currentTierFilter || (tier === currentTierFilter);
+                const matchHideExhausted = !hideExhausted || (gw > 0.0001);
+
+                if (matchQuery && matchTab && matchTier && matchHideExhausted) {{
                     matchedRows.push(tr);
                 }} else {{
                     tr.style.display = 'none';
                 }}
             }});
+
+            const allTab = document.querySelector('.filter-tab[data-filter="all"]');
+            if (allTab) allTab.textContent = `全部 (${{allRows.length}})`;
 
             // 4. 🎯 单页上限 15 个的分页算法
             const totalMatched = matchedRows.length;
@@ -5556,7 +5680,7 @@ def render_dashboard_html() -> str:
             }}
             const pageTotal = document.getElementById('page-total');
             if (pageTotal) {{
-                pageTotal.innerHTML = `共 ${{totalMatched}} 个账号`;
+                pageTotal.innerHTML = `共 ${{totalMatched}} 项 · 付费PRO ${{paidCount}} · 免费PRO ${{freeProCount}} · FREE ${{freeCount}}`;
             }}
             const btnPrev = document.getElementById('btn-prev-page');
             const btnNext = document.getElementById('btn-next-page');
@@ -6223,9 +6347,9 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             self.wfile.write(html.encode("utf-8"))
 
         elif parsed.path == "/api/warmup-all":
-            # 异步启动全局错峰打散预热线程，绝不阻塞前端界面
+            # 异步启动全池 PRO 账号随机错峰真实预热线程，绝不阻塞前端界面
             threading.Thread(target=ENGINE.run_hourly_staggered_warmup, kwargs={"force": True}, daemon=True).start()
-            logger.info("🔥 [全池错峰预热] 用户触发全局错峰预热，后台打散流水线已在新线程启动")
+            logger.info("🔥 [全池随机错峰预热] 用户触发立即预热，后台真实 1-token 激活线程已启动")
             html = render_table_rows(include_oob=True)
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -6512,7 +6636,7 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
 
             export_payload = {
                 "exported_at": datetime.datetime.now().isoformat(),
-                "generator": "Antigravity Hub v3.0.7",
+                "generator": f"Antigravity Hub v{__version__}",
                 "count": len(selected_dict),
                 "accounts": selected_dict
             }
@@ -6617,6 +6741,8 @@ def start_background_workers():
             ENGINE.refresh_all_quotas()
         except Exception as e:
             logger.warning(f"启动初始配额同步异常: {e}")
+        finally:
+            ENGINE._initial_quota_sync_done.set()
         last_full_refresh = time.time()
         while True:
             try:
@@ -6630,23 +6756,30 @@ def start_background_workers():
                 logger.error(f"后台本地配额同步异常: {e}")
 
     def warmup_worker():
-        logger.info("后台每小时智能错峰预热守卫已启动 (5h错峰梯次流水线与接力轮转)")
-        time.sleep(5)  # 启动后稍等 5 秒让服务就绪
+        logger.info("后台每小时智能随机错峰预热守卫已启动 (5h 真实 1-token 激活与到期续热)")
+        # 等待首次全池官方配额探测与三档分类完成（最多 15s）后再启动排班
+        ENGINE._initial_quota_sync_done.wait(timeout=15)
         last_global_round = 0
         from core.switcher import AntigravityPhysicalManager
         mgr = AntigravityPhysicalManager()
         while True:
             try:
-                now = int(time.time())
-                # 每小时触发一次全量错峰检查 (3300s ~ 3900s 随机抖动)
-                is_hourly_round = (now - last_global_round >= random.randint(3300, 3900))
-                if is_hourly_round or last_global_round == 0:
-                    last_global_round = now
-                    logger.info("⏰ [定时触发] 每小时全局错峰预热巡检启动！")
-                    ENGINE.run_hourly_staggered_warmup(force=False)
-                else:
-                    # 高频巡检 (30s)：检查是否有梯次中到期的账号需要 1-token 极简续接轮转
-                    mgr.check_and_trigger_due_staggered_warmup()
+                cfg = get_hub_settings()
+                if cfg.get("hourly_warmup", True):
+                    warmup_mode = str(cfg.get("warmup_model") or "dual")
+                    stagger_sec = int(cfg.get("warmup_stagger_sec") or 60)
+                    now = int(time.time())
+                    # 每小时触发一次全池随机错峰排班校准 (3300 至 3900 秒随机抖动)
+                    is_hourly_round = (now - last_global_round >= random.randint(3300, 3900))
+                    if is_hourly_round or last_global_round == 0:
+                        last_global_round = now
+                        logger.info("⏰ [定时触发] 每小时全局随机错峰预热巡检启动！")
+                        ENGINE.run_hourly_staggered_warmup(force=False)
+                    else:
+                        # 高频巡检 (30s)：触发已到达随机排班时刻的 PRO 账号执行真实 1-token 预热
+                        mgr.check_and_trigger_due_staggered_warmup(
+                            stagger_sec=stagger_sec, warmup_mode=warmup_mode
+                        )
 
                 time.sleep(30)
             except Exception as e:

@@ -16,6 +16,7 @@
 #include <QQuickItem>
 #include <QRegularExpression>
 #include <QMetaProperty>
+#include <QTimeZone>
 #include <cstdio>
 
 #include "theme.h"
@@ -76,12 +77,15 @@ private slots:
     // v3.1.0 Three-Tier Classification & Official Gemini/Claude Single-Track Invariants
     void v310ThreeTierClassificationAndFreeSingleTrackInvariants();
 
+    // v4.1.0 Prewarm Real Countdown (Never Masked as Full) Invariants
+    void v410PrewarmCountdownNeverMaskedAsFullInvariants();
+
     void cleanupTestCase();
 };
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.0.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.1.0"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1355,11 +1359,7 @@ void AntigravityHubTests::qmlComponentsInstantiationAndSmoke() {
             QTRY_COMPARE_WITH_TIMEOUT(settingsDlg->property("visible").toBool(), false, 1000);
 
             const QImage snapshot = win->grabWindow();
-            if (!snapshot.isNull()) {
-                snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/hub_pure_offscreen.png"));
-                snapshot.save(QStringLiteral("/home/dunova/.gemini/antigravity/brain/5d9fcafa-c826-4c8a-b0e8-d234a942971b/live_hub_v307_verified.png"));
-                snapshot.save(QStringLiteral("/home/dunova/Projects/antigravity-hub/docs/assets/preview.png"));
-            }
+            QVERIFY2(!snapshot.isNull(), "Offscreen Main.qml window grab failed");
         }
     }
 }
@@ -2211,6 +2211,101 @@ void AntigravityHubTests::v310ThreeTierClassificationAndFreeSingleTrackInvariant
     QCOMPARE(proxy.data(proxy.index(0, 0), AccountModel::TierRole).toString(), QStringLiteral("PAID_PRO"));
     QCOMPARE(proxy.data(proxy.index(1, 0), AccountModel::TierRole).toString(), QStringLiteral("FREE_PRO"));
     QCOMPARE(proxy.data(proxy.index(2, 0), AccountModel::TierRole).toString(), QStringLiteral("FREE"));
+
+    if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
+    else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
+}
+
+void AntigravityHubTests::v410PrewarmCountdownNeverMaskedAsFullInvariants() {
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QByteArray prevHubDir = qgetenv("ANTIGRAVITY_HUB_DIR");
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    QDir(tempDir.path()).mkpath("data");
+    const QString accountsFile = tempDir.filePath("data/accounts_hub.json");
+
+    const qint64 nowEpoch = QDateTime::currentSecsSinceEpoch();
+    const QString future15000Iso = QDateTime::fromSecsSinceEpoch(nowEpoch + 15000, QTimeZone::utc()).toString(Qt::ISODate);
+    const QString future17940Iso = QDateTime::fromSecsSinceEpoch(nowEpoch + 17940, QTimeZone::utc()).toString(Qt::ISODate);
+    const QString futureWkIso = QDateTime::fromSecsSinceEpoch(nowEpoch + 500000, QTimeZone::utc()).toString(Qt::ISODate);
+
+    QJsonObject accountsObj;
+
+    // 1. Warmed PRO account with 100% (1.0) 5h quota and active Google countdown: MUST show countdown, NEVER "满额"
+    QJsonObject warmedPro;
+    warmedPro["email"] = "warmedpro@example.com";
+    warmedPro["has_5h"] = true;
+    warmedPro["claude_version"] = "5.5";
+    warmedPro["claude_models"] = QJsonArray({QStringLiteral("claude-sonnet-5-5-low")});
+    QJsonObject wGem;
+    wGem["quota_5h"] = 1.0;
+    wGem["quota_weekly"] = 0.85;
+    wGem["reset_time_5h"] = future15000Iso;
+    wGem["reset_time_weekly"] = futureWkIso;
+    warmedPro["gemini"] = wGem;
+    QJsonObject wCla;
+    wCla["quota_5h"] = 0.9999;
+    wCla["quota_weekly"] = 0.9999;
+    wCla["reset_time_5h"] = future17940Iso;
+    wCla["reset_time_weekly"] = futureWkIso;
+    warmedPro["claude"] = wCla;
+    accountsObj["warmedpro@example.com"] = warmedPro;
+
+    // 2. Unwarmed PRO account with empty reset_time_5h: MUST show "待预热" (never "满额")
+    QJsonObject unwarmedPro;
+    unwarmedPro["email"] = "unwarmedpro@example.com";
+    unwarmedPro["has_5h"] = true;
+    unwarmedPro["claude_version"] = "4.6";
+    unwarmedPro["claude_models"] = QJsonArray({QStringLiteral("claude-sonnet-4-6")});
+    QJsonObject uGem;
+    uGem["quota_5h"] = 1.0;
+    uGem["quota_weekly"] = 0.95;
+    uGem["reset_time_5h"] = "";
+    uGem["reset_time_weekly"] = futureWkIso;
+    unwarmedPro["gemini"] = uGem;
+    QJsonObject uCla;
+    uCla["quota_5h"] = 1.0;
+    uCla["quota_weekly"] = 1.0;
+    uCla["reset_time_5h"] = "";
+    uCla["reset_time_weekly"] = futureWkIso;
+    unwarmedPro["claude"] = uCla;
+    accountsObj["unwarmedpro@example.com"] = unwarmedPro;
+
+    QJsonObject rootDoc;
+    rootDoc["active_email"] = "warmedpro@example.com";
+    rootDoc["accounts"] = accountsObj;
+
+    QFile file(accountsFile);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(QJsonDocument(rootDoc).toJson());
+    file.close();
+
+    AccountModel model;
+    QCOMPARE(model.rowCount(), 2);
+
+    const int rowWarmed = model.findIndexByEmail("warmedpro@example.com");
+    const int rowUnwarmed = model.findIndexByEmail("unwarmedpro@example.com");
+    QVERIFY(rowWarmed >= 0 && rowUnwarmed >= 0);
+
+    const QString gReset5hWarmed = model.data(model.index(rowWarmed, 0), AccountModel::Gemini38Reset5hRole).toString();
+    const QString cReset5hWarmed = model.data(model.index(rowWarmed, 0), AccountModel::ClaudeReset5hRole).toString();
+    QVERIFY(gReset5hWarmed.contains(QStringLiteral("h ")));
+    QVERIFY(cReset5hWarmed.contains(QStringLiteral("h ")));
+    QVERIFY(gReset5hWarmed != QStringLiteral("满额"));
+    QVERIFY(cReset5hWarmed != QStringLiteral("满额"));
+
+    const QString gReset5hUnwarmed = model.data(model.index(rowUnwarmed, 0), AccountModel::Gemini38Reset5hRole).toString();
+    QCOMPARE(gReset5hUnwarmed, QStringLiteral("待预热"));
+
+    // Verify 1s tick keeps countdown and never snaps back to "满额"
+    QMetaObject::invokeMethod(&model, "onSecondTick", Qt::DirectConnection);
+    const QString gResetAfterTick = model.data(model.index(rowWarmed, 0), AccountModel::Gemini38Reset5hRole).toString();
+    const QString cResetAfterTick = model.data(model.index(rowWarmed, 0), AccountModel::ClaudeReset5hRole).toString();
+    QVERIFY(gResetAfterTick.contains(QStringLiteral("h ")));
+    QVERIFY(cResetAfterTick.contains(QStringLiteral("h ")));
+    QVERIFY(gResetAfterTick != QStringLiteral("满额"));
+    QVERIFY(cResetAfterTick != QStringLiteral("满额"));
 
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
