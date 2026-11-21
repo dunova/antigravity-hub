@@ -7,23 +7,22 @@ Item {
 
     // =========================================================================
     // 0. 响应式共享列几何常数 (Strict Header-Data Row Synchronization)
-    //    20px 固定开销 = 左边距 8 + 右边距 8 + 4 条 1px 竖向分割线
-    //    876px 最小列总宽 + 20px = 896px (920px 最小窗口 / 941px 半屏 / 1896px 全屏自适应)
+    //    22px 固定开销 = 外框 2 + 左边距 8 + 右边距 8 + 4 条 1px 竖向分割线
+    //    674px 最小列总宽 + 22px = 696px (720px 最小/默认窗口，手动拉伸全屏自适应)
     // =========================================================================
-    readonly property int availColsWidth: Math.max(876, Math.floor(width) - 20)
-    readonly property int extraColsWidth: Math.max(0, availColsWidth - 876)
+    readonly property int availColsWidth: Math.max(674, Math.floor(width) - 22)
+    readonly property int extraColsWidth: Math.max(0, availColsWidth - 674)
     readonly property int extraAccWidth: Math.round(extraColsWidth * 0.24)
     readonly property int extraGeminiWidth: Math.round(extraColsWidth * 0.38)
     readonly property int extraClaudeWidth: Math.max(0, extraColsWidth - extraAccWidth - extraGeminiWidth)
 
     readonly property int colCheckWidth: 24
     readonly property int colIndexWidth: 24
-    readonly property int colStatusWidth: 64
-    readonly property int colTierWidth: 78
-    readonly property int colAccountWidth: 154 + extraAccWidth
-    readonly property int colGeminiWidth: 234 + extraGeminiWidth
-    readonly property int colClaudeWidth: 234 + extraClaudeWidth
-    readonly property int colActionWidth: 64
+    readonly property int colTierWidth: 74
+    readonly property int colAccountWidth: 128 + extraAccWidth
+    readonly property int colGeminiWidth: 182 + extraGeminiWidth
+    readonly property int colClaudeWidth: 182 + extraClaudeWidth
+    readonly property int colActionWidth: 60
     readonly property int rowHeight: 42
     readonly property int pageSize: 15
     readonly property int pageCount: Math.max(1, Math.ceil(listView.count / pageSize))
@@ -396,55 +395,7 @@ Item {
                     }
                 }
 
-                // Col 3: 状态 (支持点击按状态排序)
-                Rectangle {
-                    Layout.preferredWidth: colStatusWidth
-                    Layout.minimumWidth: colStatusWidth
-                    Layout.maximumWidth: colStatusWidth
-                    Layout.fillHeight: true
-                    color: "transparent"
-
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 2
-
-                        Text {
-                            text: qsTr("Status")
-                            font.family: theme.uiFont
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            renderType: Text.NativeRendering
-                            color: (proxyModel && proxyModel.sortField === "status") ?
-                                   ((theme && theme.accent) ? theme.accent : "#7daea3") :
-                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
-                        }
-
-                        Text {
-                            visible: proxyModel ? (proxyModel.sortField === "status") : false
-                            text: (proxyModel && proxyModel.sortOrder === Qt.DescendingOrder) ? "↓" : "↑"
-                            font.pixelSize: 11
-                            renderType: Text.NativeRendering
-                            color: (theme && theme.accent) ? theme.accent : "#7daea3"
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (!proxyModel) return;
-                            if (proxyModel.sortField !== "status") {
-                                proxyModel.setSortRule("status", Qt.AscendingOrder);
-                            } else if (proxyModel.sortOrder === Qt.AscendingOrder) {
-                                proxyModel.setSortRule("status", Qt.DescendingOrder);
-                            } else {
-                                proxyModel.setSortRule("default", Qt.DescendingOrder);
-                            }
-                        }
-                    }
-                }
-
-                // Hairline between Col 3 (Status) and Col 4 (Tier)
+                // Hairline between Col 2 (#) and Col 3 (Tier)
                 Rectangle {
                     width: 1
                     Layout.preferredWidth: 1
@@ -456,7 +407,7 @@ Item {
                     color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
                 }
 
-                // Col 4: 账号类别 (付费 PRO / 免费 PRO / FREE，支持点击按等级排序)
+                // Col 3: 账号类别 (付费 PRO / 免费 PRO / FREE，支持点击按等级排序)
                 Rectangle {
                     Layout.preferredWidth: colTierWidth
                     Layout.minimumWidth: colTierWidth
@@ -514,8 +465,8 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 8
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 6
                         spacing: 2
 
                         Text {
@@ -577,8 +528,8 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 8
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 6
                         spacing: 4
 
                         Text {
@@ -640,8 +591,8 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 10
-                        anchors.rightMargin: 8
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 6
                         spacing: 4
 
                         Text {
@@ -752,41 +703,6 @@ Item {
                 }
 
                 Item { Layout.fillWidth: true }
-
-                // [批量预热]
-                Rectangle {
-                    height: 26
-                    implicitWidth: btnWarmupText.implicitWidth + 20
-                    radius: 0
-                    color: warmupMouse.containsMouse ?
-                           ((theme && theme.surface3 && theme.surface3.charAt(0) === '#') ? theme.surface3 : "#243c34") :
-                           ((theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#142620")
-                    border.width: 1
-                    border.color: (theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff"
-
-                    Text {
-                        id: btnWarmupText
-                        anchors.centerIn: parent
-                        text: qsTr("Prewarm")
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                        color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
-                    }
-                    MouseArea {
-                        id: warmupMouse
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: {
-                            var emails = Object.keys(accountListView.selectedEmails);
-                            if (backend && typeof backend.batchWarmup === "function") {
-                                backend.batchWarmup(emails);
-                            } else if (backend) {
-                                backend.triggerPrewarm();
-                            }
-                        }
-                    }
-                }
 
                 // [导出所选]
                 Rectangle {
@@ -949,7 +865,6 @@ Item {
                 property bool isRowChecked: accountListView.selectedEmails[model.email] === true
                 readonly property bool isManualLockedRow: (model.isActive || false) && ((model.manualLockRemaining || 0) > 0)
                 readonly property bool isRowHovered: rowMouse.containsMouse ||
-                    statusPillMouse.containsMouse ||
                     tierBadgeMouse.containsMouse ||
                     dragMouse.containsMouse ||
                     nameMouse.containsMouse ||
@@ -1105,106 +1020,7 @@ Item {
                         }
                     }
 
-                    // -------------------------------------------------
-                    // Col 3: 状态胶囊 (全直角长方形 60x20，人工锁定时切换为紧凑 [🔒 15m])
-                    // -------------------------------------------------
-                    Item {
-                        Layout.preferredWidth: colStatusWidth
-                        Layout.minimumWidth: colStatusWidth
-                        Layout.maximumWidth: colStatusWidth
-                        Layout.fillHeight: true
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 60
-                            height: 20
-                            radius: 0
-                            clip: true
-
-                            // Marker 5: 行内 ACTIVE 状态徽章定锚 theme.accent，严禁 goodText 绿色；人工保护锁定时使用琥珀警示框
-                            color: rowDelegate.isManualLockedRow ?
-                                   Qt.alpha("#F59E0B", 0.16) :
-                                   (model.isActive ?
-                                       Qt.alpha((theme && theme.accent) ? theme.accent : "#7daea3", 0.15) :
-                                       (model.isBlocked ?
-                                           Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.18) :
-                                           (model.status === "EXHAUSTED" ?
-                                               Qt.alpha((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280", 0.15) :
-                                               ((theme && theme.mode === "light") ? "#0a000000" : "#14ffffff"))))
-
-                            border.width: 1
-                            border.color: rowDelegate.isManualLockedRow ? "#F59E0B" :
-                                          (model.isActive ? ((theme && theme.accent) ? theme.accent : "#7daea3") :
-                                              (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
-                                                  (model.status === "EXHAUSTED" ? ((theme && theme.text4 && theme.text4.charAt(0) === '#') ? theme.text4 : "#6B7280") :
-                                                      ((theme && theme.controlBorder && theme.controlBorder.charAt(0) === '#') ? theme.controlBorder : "#3dffffff"))))
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                width: Math.min(implicitWidth, parent.width - 6)
-                                spacing: 3
-
-                                // Marker 5: 指示方块 (dot) 定锚 theme.accent
-                                Rectangle {
-                                    width: 5
-                                    height: 5
-                                    radius: 0
-                                    visible: model.isActive && !rowDelegate.isManualLockedRow
-                                    color: (theme && theme.accent) ? theme.accent : "#7daea3"
-                                }
-
-                                Text {
-                                    id: statusPillText
-                                    visible: !rowDelegate.isManualLockedRow
-                                    text: model.isActive ? qsTr("ACTIVE") :
-                                          (model.isBlocked ? qsTr("Blocked") :
-                                              (model.status === "EXHAUSTED" ? qsTr("Exhausted") : qsTr("STANDBY")))
-                                    font.family: theme.monoFont
-                                    font.pixelSize: (text.length > 7) ? 10 : 11
-                                    font.weight: Font.DemiBold
-                                    renderType: Text.NativeRendering
-                                    elide: Text.ElideRight
-                                    color: model.isActive ?
-                                           ((theme && theme.accentText) ? theme.accentText : ((theme && theme.accent) ? theme.accent : "#7daea3")) :
-                                           (model.isBlocked ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
-                                               (model.status === "EXHAUSTED" ? ((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1") :
-                                                   ((theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6")))
-                                }
-
-                                // 人工保护锁定倒计时标签 (紧凑 10px 锁图标 + 时长，杜绝越界)
-                                RowLayout {
-                                    visible: rowDelegate.isManualLockedRow
-                                    spacing: 3
-                                    AppIcon {
-                                        name: "lock"
-                                        size: 10
-                                        tint: "#F59E0B"
-                                    }
-                                    Text {
-                                        text: model.manualLockRemainingStr || ""
-                                        font.family: theme.monoFont
-                                        font.pixelSize: 11
-                                        font.weight: Font.DemiBold
-                                        renderType: Text.NativeRendering
-                                        color: "#F59E0B"
-                                    }
-                                }
-                            }
-
-                            MouseArea {
-                                id: statusPillMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                ToolTip.visible: containsMouse && rowDelegate.isManualLockedRow
-                                ToolTip.text: qsTr("Manual protection locked: %1 left").arg(model.manualLockRemainingStr || "")
-                                onClicked: {
-                                    listView.currentIndex = index;
-                                }
-                            }
-                        }
-                    }
-
-                    // Hairline between Col 3 (Status) and Col 4 (Tier)
+                    // Hairline between Col 2 (#) and Col 3 (Tier)
                     Rectangle {
                         width: 1
                         Layout.preferredWidth: 1
@@ -1218,7 +1034,7 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 4: 独立显著账号类别列 (付费 PRO / 免费 PRO / FREE)
+                    // Col 3: 独立显著账号类别列 (付费 PRO / 免费 PRO / FREE)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colTierWidth
@@ -1230,7 +1046,7 @@ Item {
                         Rectangle {
                             id: tierBadge
                             anchors.centerIn: parent
-                            width: 66
+                            width: 64
                             height: 20
                             radius: 0
                             color: model.tier === "PAID_PRO" ?
@@ -1303,7 +1119,7 @@ Item {
                         // 1. 拖拽手柄图标 (⠿) - 支持真实纵向拖拽排序
                         Item {
                             id: dragHandle
-                            width: 26
+                            width: 20
                             height: parent.height
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
@@ -1351,13 +1167,13 @@ Item {
                         Text {
                             id: accountNameText
                             anchors.left: dragHandle.right
-                            anchors.leftMargin: 4
+                            anchors.leftMargin: 2
                             anchors.right: (pinTopBtn.visible ? pinTopBtn.left : parent.right)
-                            anchors.rightMargin: pinTopBtn.visible ? 4 : 6
+                            anchors.rightMargin: pinTopBtn.visible ? 4 : 4
                             anchors.verticalCenter: parent.verticalCenter
                             text: model.displayUsername || ""
                             font.family: theme.uiFont
-                            font.pixelSize: 13
+                            font.pixelSize: 12
                             font.weight: Font.DemiBold
                             renderType: Text.NativeRendering
                             elide: Text.ElideRight
@@ -1489,8 +1305,8 @@ Item {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 8
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 6
                             anchors.topMargin: 2
                             anchors.bottomMargin: 2
                             spacing: 3
@@ -1499,7 +1315,7 @@ Item {
                             RowLayout {
                                 visible: model.has5h
                                 Layout.fillWidth: true
-                                spacing: 5
+                                spacing: 4
 
                                 Rectangle {
                                     width: 20
@@ -1523,7 +1339,7 @@ Item {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    implicitWidth: 60
+                                    implicitWidth: 48
                                     Layout.minimumWidth: 24
                                     Layout.preferredHeight: 5
                                     height: 5
@@ -1543,11 +1359,11 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 32
+                                    Layout.preferredWidth: 30
                                     text: (model.gemini38QuotaW < 0.005) ? "0%" :
                                           accountListView.formatQuotaPct(model.gemini38Quota5h)
                                     font.family: theme.monoFont
-                                    font.pixelSize: 12
+                                    font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
@@ -1556,13 +1372,12 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 52
-                                    Layout.leftMargin: 2
+                                    Layout.preferredWidth: 50
                                     text: (model.gemini38QuotaW < 0.005) ? qsTr("用尽") :
                                           ((model.gemini38Reset5h === "待预热" || model.gemini38Reset5h === "满额" || model.gemini38Reset5h === "--" || !model.gemini38Reset5h) ? qsTr("待预热") :
                                               ((model.gemini38Reset5h === "即将恢复") ? qsTr("即将恢复") : model.gemini38Reset5h))
                                     font.family: theme.monoFont
-                                    font.pixelSize: (model.gemini38QuotaW < 0.005) ? 11 : 12
+                                    font.pixelSize: 11
                                     font.weight: (model.gemini38QuotaW < 0.005) ? Font.Bold : Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (model.gemini38QuotaW < 0.005) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
@@ -1575,7 +1390,7 @@ Item {
                             // 下轨: 周度总配额
                             RowLayout {
                                 Layout.fillWidth: true
-                                spacing: 5
+                                spacing: 4
 
                                 Rectangle {
                                     width: 20
@@ -1599,7 +1414,7 @@ Item {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    implicitWidth: 60
+                                    implicitWidth: 48
                                     Layout.minimumWidth: 24
                                     Layout.preferredHeight: 5
                                     height: 5
@@ -1618,10 +1433,10 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 32
+                                    Layout.preferredWidth: 30
                                     text: accountListView.formatQuotaPct(model.gemini38QuotaW)
                                     font.family: theme.monoFont
-                                    font.pixelSize: 12
+                                    font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
@@ -1629,12 +1444,11 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 52
-                                    Layout.leftMargin: 2
+                                    Layout.preferredWidth: 50
                                     text: (model.gemini38ResetW === "即将恢复") ? qsTr("即将恢复") :
                                           ((model.gemini38ResetW === "--" || !model.gemini38ResetW) ? "—" : model.gemini38ResetW)
                                     font.family: theme.monoFont
-                                    font.pixelSize: 12
+                                    font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
@@ -1672,8 +1486,8 @@ Item {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 8
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 6
                             anchors.topMargin: 2
                             anchors.bottomMargin: 2
                             spacing: 3
@@ -1682,7 +1496,7 @@ Item {
                             RowLayout {
                                 visible: model.has5h
                                 Layout.fillWidth: true
-                                spacing: 5
+                                spacing: 4
 
                                 Rectangle {
                                     width: 20
@@ -1706,7 +1520,7 @@ Item {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    implicitWidth: 60
+                                    implicitWidth: 48
                                     Layout.minimumWidth: 24
                                     Layout.preferredHeight: 5
                                     height: 5
@@ -1726,11 +1540,11 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 32
+                                    Layout.preferredWidth: 30
                                     text: (model.claudeQuotaW < 0.005) ? "0%" :
                                           accountListView.formatQuotaPct(model.claudeQuota5h)
                                     font.family: theme.monoFont
-                                    font.pixelSize: 12
+                                    font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
@@ -1739,13 +1553,12 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 52
-                                    Layout.leftMargin: 2
+                                    Layout.preferredWidth: 50
                                     text: (model.claudeQuotaW < 0.005) ? qsTr("用尽") :
                                           ((model.claudeReset5h === "待预热" || model.claudeReset5h === "满额" || model.claudeReset5h === "--" || !model.claudeReset5h) ? qsTr("待预热") :
                                               ((model.claudeReset5h === "即将恢复") ? qsTr("即将恢复") : model.claudeReset5h))
                                     font.family: theme.monoFont
-                                    font.pixelSize: (model.claudeQuotaW < 0.005) ? 11 : 12
+                                    font.pixelSize: 11
                                     font.weight: (model.claudeQuotaW < 0.005) ? Font.Bold : Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (model.claudeQuotaW < 0.005) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
@@ -1758,7 +1571,7 @@ Item {
                             // 下轨: 周度总配额
                             RowLayout {
                                 Layout.fillWidth: true
-                                spacing: 5
+                                spacing: 4
 
                                 Rectangle {
                                     width: 20
@@ -1782,7 +1595,7 @@ Item {
 
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    implicitWidth: 60
+                                    implicitWidth: 48
                                     Layout.minimumWidth: 24
                                     Layout.preferredHeight: 5
                                     height: 5
@@ -1801,10 +1614,10 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 32
+                                    Layout.preferredWidth: 30
                                     text: accountListView.formatQuotaPct(model.claudeQuotaW)
                                     font.family: theme.monoFont
-                                    font.pixelSize: 12
+                                    font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
@@ -1812,12 +1625,11 @@ Item {
                                 }
 
                                 Text {
-                                    Layout.preferredWidth: 52
-                                    Layout.leftMargin: 2
+                                    Layout.preferredWidth: 50
                                     text: (model.claudeResetW === "即将恢复") ? qsTr("即将恢复") :
                                           ((model.claudeResetW === "--" || !model.claudeResetW) ? "—" : model.claudeResetW)
                                     font.family: theme.monoFont
-                                    font.pixelSize: 12
+                                    font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF")
@@ -1855,7 +1667,7 @@ Item {
                             id: btnInUse
                             anchors.centerIn: parent
                             visible: model.isActive
-                            width: 52
+                            width: 48
                             height: 24
                             radius: 0
                             color: (theme && theme.accent) ? theme.accent : "#7daea3"
@@ -1884,7 +1696,7 @@ Item {
                         Rectangle {
                             anchors.centerIn: parent
                             visible: !model.isActive && model.isBlocked
-                            width: 52
+                            width: 48
                             height: 24
                             radius: 0
                             color: btnUnblockMouse.containsMouse ?
@@ -1921,7 +1733,7 @@ Item {
                             id: btnSwitch
                             anchors.centerIn: parent
                             visible: !model.isActive && !model.isBlocked
-                            width: 52
+                            width: 48
                             height: 24
                             radius: 0
                             color: btnSwitchMouse.containsMouse ?
@@ -1936,7 +1748,7 @@ Item {
                                 anchors.centerIn: parent
                                 text: qsTr("Switch")
                                 font.family: theme.uiFont
-                                font.pixelSize: 12
+                                font.pixelSize: 11
                                 font.weight: Font.DemiBold
                                 renderType: Text.NativeRendering
                                 color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
@@ -1975,12 +1787,13 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 12
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 8
 
                 // 左侧: 全池三档统计信息
                 Text {
+                    Layout.fillWidth: true
                     text: qsTr("共 %1 个账号 · 付费PRO %2 · 免费PRO %3 · FREE %4 · 显示 %5")
                           .arg((accountModel && typeof accountModel.count !== "undefined") ? accountModel.count : (accountModel ? accountModel.rowCount() : 0))
                           .arg(accountModel ? (accountModel.paidProCount || 0) : 0)
@@ -1989,18 +1802,14 @@ Item {
                           .arg(accountListView.displayedCount)
                     font.family: theme.uiFont
                     font.pixelSize: 11
+                    elide: Text.ElideRight
                     renderType: Text.NativeRendering
                     color: (theme && theme.text2 && theme.text2.charAt(0) === '#') ? theme.text2 : "#F3F4F6"
                 }
 
-                // 弹性推开间隔
-                Item {
-                    Layout.fillWidth: true
-                }
-
                 // 右侧: 直角按键键帽组 ([J/K] 移动选择  [Enter] 快速切换  [/] 搜索账号  [?] 快捷键帮助)
                 RowLayout {
-                    spacing: 8
+                    spacing: 6
 
                     Repeater {
                         model: [
@@ -2011,12 +1820,12 @@ Item {
                         ]
 
                         delegate: RowLayout {
-                            spacing: 5
+                            spacing: 4
 
                             // 矩形直角键帽 (border: theme.hairline, background: theme.surface2, radius: 0)
                             Rectangle {
                                 height: 16
-                                implicitWidth: keycapText.implicitWidth + 8
+                                implicitWidth: keycapText.implicitWidth + 6
                                 radius: 0
                                 color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a2c26"
                                 border.width: 1

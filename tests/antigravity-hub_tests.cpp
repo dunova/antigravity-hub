@@ -85,7 +85,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.1.1"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.2.0"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1119,10 +1119,9 @@ void AntigravityHubTests::backendControllerStateAndUrls() {
     QCOMPARE(backend.isMasked(), false);
     QCOMPARE(spyMask.count(), 2);
 
-    // Verify that all core operations are invokable without crash
-    // In offscreen testing, these methods dispatch async HTTP requests safely
+    // Verify that all core operations are invokable without crash (TopG removed in v4.2.0)
     QVERIFY(QMetaObject::invokeMethod(&backend, "switchAccount", Q_ARG(QString, QStringLiteral("test@example.com"))));
-    QVERIFY(QMetaObject::invokeMethod(&backend, "switchTopGemini"));
+    QVERIFY(!QMetaObject::invokeMethod(&backend, "switchTopGemini"));
     QVERIFY(QMetaObject::invokeMethod(&backend, "toggleRotation"));
     QVERIFY(QMetaObject::invokeMethod(&backend, "refreshQuota", Q_ARG(bool, true)));
     QVERIFY(QMetaObject::invokeMethod(&backend, "triggerPrewarm"));
@@ -1422,14 +1421,26 @@ void AntigravityHubTests::accountListViewVisualDenoisingInvariants() {
              "MANDATORY COLOR VIOLATION: Pure red '#EF4444' found in HeaderBar.qml");
     QVERIFY2(!headerContent.contains(QStringLiteral("name: \"gear\"")),
              "MANDATORY DENOISING VIOLATION: Gear logo found in HeaderBar settings capsule");
-    QVERIFY2(!headerContent.contains(QStringLiteral("name: \"bolt\"")),
-             "MANDATORY DENOISING VIOLATION: Bolt logo found in HeaderBar topg capsule");
-    QVERIFY2(!headerContent.contains(QStringLiteral("name: \"sparkle\"")),
-             "MANDATORY DENOISING VIOLATION: Sparkle logo found in HeaderBar prewarm capsule");
+    QVERIFY2(!headerContent.contains(QStringLiteral("topgCapsule")),
+             "v4.2.0 VIOLATION: TopG capsule must be removed from HeaderBar.qml");
+    QVERIFY2(!headerContent.contains(QStringLiteral("\"TopG\"")),
+             "v4.2.0 VIOLATION: TopG label must be removed from HeaderBar.qml");
+    QVERIFY2(!headerContent.contains(QStringLiteral("prewarmCapsule")),
+             "v4.2.0 VIOLATION: Prewarm button capsule must be removed from HeaderBar.qml (toggle lives in Settings)");
     QVERIFY2(headerContent.contains(QStringLiteral("\"paid_pro\"")),
              "v3.1.1 HeaderBar missing paid_pro auto-rotation mode");
     QVERIFY2(!headerContent.contains(QStringLiteral("currentMode === \"claude\"")),
              "v3.1.1 HeaderBar must not retain obsolete claude auto-rotation mode");
+
+    // 6. Verify SettingsDialog retains Auto Random Prewarm switch (hourly_warmup)
+    QFile settingsFile(QStringLiteral(":/SettingsDialog.qml"));
+    QVERIFY(settingsFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString settingsContent = QString::fromUtf8(settingsFile.readAll());
+    settingsFile.close();
+    QVERIFY2(settingsContent.contains(QStringLiteral("id: prewarmSwitch")),
+             "v4.2.0 VIOLATION: SettingsDialog.qml must contain prewarmSwitch");
+    QVERIFY2(settingsContent.contains(QStringLiteral("hourly_warmup")),
+             "v4.2.0 VIOLATION: SettingsDialog.qml must persist hourly_warmup");
 }
 
 // -----------------------------------------------------------------------------
@@ -1444,13 +1455,15 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     mainFile.close();
 
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*minimumWidth\b)"))), "Main.qml default width must equal minimumWidth");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*920\b)"))), "Main.qml minimumWidth != 920");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*720\b)"))), "Main.qml minimumWidth != 720");
     QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth to allow manual stretching & dynamic tiling");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*idealHeight\b)"))), "Main.qml default height must be adaptive idealHeight");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*360\b)"))), "Main.qml minimumHeight != 360");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*896\b)"))), "Main.qml contentWidth != 896");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*696\b)"))), "Main.qml contentWidth != 696");
+    QVERIFY2(!mainContent.contains(QStringLiteral("switchTopGemini")), "v4.2.0: Main.qml must not keep TopG shortcut");
+    QVERIFY2(!mainContent.contains(QStringLiteral("triggerPrewarm")), "v4.2.0: Main.qml must not keep manual Prewarm shortcut");
 
-    // 2. Offscreen Dynamic Instantiation of Main.qml with 14 mock accounts (verify exact 920x772 adaptive fit)
+    // 2. Offscreen Dynamic Instantiation of Main.qml with 14 mock accounts (verify exact 720x772 adaptive fit)
     QQmlEngine engine;
     engine.addImageProvider(QStringLiteral("icons"), new IconProvider());
 
@@ -1500,10 +1513,10 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     QQuickWindow *win = qobject_cast<QQuickWindow*>(rootObj.data());
     QVERIFY2(win != nullptr, "Main.qml root object is not a QQuickWindow");
 
-    QCOMPARE(win->width(), 920);
-    QCOMPARE(win->property("minimumWidth").toInt(), 920);
+    QCOMPARE(win->width(), 720);
+    QCOMPARE(win->property("minimumWidth").toInt(), 720);
     QCOMPARE(win->property("minimumHeight").toInt(), 360);
-    QCOMPARE(win->property("contentWidth").toInt(), 896);
+    QCOMPARE(win->property("contentWidth").toInt(), 696);
     QCOMPARE(win->height(), win->property("idealHeight").toInt());
     QCOMPARE(win->property("rawIdealHeight").toInt(), 772);
     QVERIFY(win->property("idealHeight").toInt() <= 772 && win->property("idealHeight").toInt() >= 360);
@@ -1514,7 +1527,7 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     // Resize stress test: manual stretching works freely while preserving contentWidth baseline
     win->resize(1280, 900);
     QCoreApplication::processEvents();
-    QCOMPARE(win->property("contentWidth").toInt(), 896);
+    QCOMPARE(win->property("contentWidth").toInt(), 696);
     QCOMPARE(win->property("userResizedManually").toBool(), true);
 }
 
@@ -1525,20 +1538,21 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     const QString content = QString::fromUtf8(file.readAll());
     file.close();
 
-    // Verify responsive base column widths and row height (v3.1.0 official Tier + Gemini + Claude layout)
+    // Verify v4.2.0 ultra-compact 7-column geometry (Status column removed; Check + # preserved)
+    QVERIFY2(!content.contains(QStringLiteral("colStatusWidth")), "v4.2.0 VIOLATION: colStatusWidth must be removed");
+    QVERIFY2(!content.contains(QStringLiteral("qsTr(\"Prewarm\")")), "v4.2.0 VIOLATION: Prewarm button must be removed from AccountListView");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolCheckWidth\s*:\s*24\b)"))), "colCheckWidth != 24");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolIndexWidth\s*:\s*24\b)"))), "colIndexWidth != 24");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolStatusWidth\s*:\s*64\b)"))), "colStatusWidth != 64");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolTierWidth\s*:\s*78\b)"))), "colTierWidth != 78");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*154\b)"))), "colAccountWidth base != 154");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolGeminiWidth\s*:\s*234\b)"))), "colGeminiWidth base != 234");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*234\b)"))), "colClaudeWidth base != 234");
-    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*64\b)"))), "colActionWidth != 64");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolTierWidth\s*:\s*74\b)"))), "colTierWidth != 74");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolAccountWidth\s*:\s*128\b)"))), "colAccountWidth base != 128");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolGeminiWidth\s*:\s*182\b)"))), "colGeminiWidth base != 182");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolClaudeWidth\s*:\s*182\b)"))), "colClaudeWidth base != 182");
+    QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\bcolActionWidth\s*:\s*60\b)"))), "colActionWidth != 60");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(\browHeight\s*:\s*42\b)"))), "rowHeight != 42");
 
-    // Exact arithmetic base sum check: 24 + 24 + 64 + 78 + 154 + 234 + 234 + 64 == 876 (+ 20px overhead = 896px)
-    const int baseColumnWidth = 24 + 24 + 64 + 78 + 154 + 234 + 234 + 64;
-    QCOMPARE(baseColumnWidth, 876);
+    // Exact arithmetic base sum check: 24 + 24 + 74 + 128 + 182 + 182 + 60 == 674 (+ 22px overhead = 696px)
+    const int baseColumnWidth = 24 + 24 + 74 + 128 + 182 + 182 + 60;
+    QCOMPARE(baseColumnWidth, 674);
 
     // Verify interactive & collision-prevention guards in AccountListView.qml
     QVERIFY2(content.contains(QStringLiteral("isRowHovered")), "Combined row hover guard isRowHovered missing");
@@ -1556,17 +1570,17 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     QString headerColumnsSection = headerSection.mid(headerRowLayoutPos);
     QVERIFY2(!headerColumnsSection.contains(QStringLiteral("Layout.fillWidth")), "Header column has Layout.fillWidth!");
 
-    // Verify all 8 columns in Header specify preferredWidth
+    // Verify all 7 columns in Header specify preferredWidth (no Status column)
+    QVERIFY2(!headerSection.contains(QStringLiteral("qsTr(\"Status\")")), "Header must not contain Status column");
     QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colCheckWidth")), "Header Col 1 missing preferredWidth");
     QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colIndexWidth")), "Header Col 2 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colStatusWidth")), "Header Col 3 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colTierWidth")), "Header Col 4 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Header Col 5 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colGeminiWidth")), "Header Col 6 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Header Col 7 missing preferredWidth");
-    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Header Col 8 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colTierWidth")), "Header Col 3 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Header Col 4 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colGeminiWidth")), "Header Col 5 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Header Col 6 missing preferredWidth");
+    QVERIFY2(headerSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Header Col 7 missing preferredWidth");
 
-    // Verify all 8 columns in Delegate specify preferredWidth
+    // Verify all 7 columns in Delegate specify preferredWidth (no Status column)
     int delegatePos = content.indexOf(QStringLiteral("id: rowDelegate"));
     QVERIFY(delegatePos != -1);
     int bottomBarPos = content.indexOf(QStringLiteral("id: bottomBar"));
@@ -1575,21 +1589,20 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
 
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colCheckWidth")), "Delegate Col 1 missing preferredWidth");
     QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colIndexWidth")), "Delegate Col 2 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colStatusWidth")), "Delegate Col 3 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colTierWidth")), "Delegate Col 4 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Delegate Col 5 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colGeminiWidth")), "Delegate Col 6 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Delegate Col 7 missing preferredWidth");
-    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Delegate Col 8 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colTierWidth")), "Delegate Col 3 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colAccountWidth")), "Delegate Col 4 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colGeminiWidth")), "Delegate Col 5 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colClaudeWidth")), "Delegate Col 6 missing preferredWidth");
+    QVERIFY2(delegateSection.contains(QStringLiteral("Layout.preferredWidth: colActionWidth")), "Delegate Col 7 missing preferredWidth");
 
-    // Verify spacing in Col 6 & 7 between 5h and weekly containers is 3px
+    // Verify spacing in Col 5 & 6 between 5h and weekly containers is 3px
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(spacing\s*:\s*3\b)"))), "spacing: 3 between 5h and weekly missing");
 
     // Verify progress bar height 5px and label pill 20x14px
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(Layout\.preferredHeight\s*:\s*5\b)"))), "Progress bar preferredHeight 5 missing");
     QVERIFY2(content.contains(QRegularExpression(QStringLiteral(R"(width\s*:\s*20\b[\s\S]*?height\s*:\s*14\b)"))), "Label pill 20x14 missing");
 
-    // 2. Runtime instantiation: Verify base (896px) & fullscreen (1872px) column budget exact match
+    // 2. Runtime instantiation: Verify base (696px) & fullscreen (1872px) column budget exact match
     QQmlEngine engine;
     engine.addImageProvider(QStringLiteral("icons"), new IconProvider());
     QTemporaryDir tempDir;
@@ -1615,29 +1628,27 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     QScopedPointer<QObject> listObj(listComp.create());
     QVERIFY(listObj != nullptr);
 
-    listObj->setProperty("width", 896);
+    listObj->setProperty("width", 696);
     QCoreApplication::processEvents();
-    const int sum896 = listObj->property("colCheckWidth").toInt() +
+    const int sum696 = listObj->property("colCheckWidth").toInt() +
                          listObj->property("colIndexWidth").toInt() +
-                         listObj->property("colStatusWidth").toInt() +
                          listObj->property("colTierWidth").toInt() +
                          listObj->property("colAccountWidth").toInt() +
                          listObj->property("colGeminiWidth").toInt() +
                          listObj->property("colClaudeWidth").toInt() +
                          listObj->property("colActionWidth").toInt();
-    QCOMPARE(sum896, 876);
+    QCOMPARE(sum696, 674);
 
     listObj->setProperty("width", 1872);
     QCoreApplication::processEvents();
     const int sum1872 = listObj->property("colCheckWidth").toInt() +
                           listObj->property("colIndexWidth").toInt() +
-                          listObj->property("colStatusWidth").toInt() +
                           listObj->property("colTierWidth").toInt() +
                           listObj->property("colAccountWidth").toInt() +
                           listObj->property("colGeminiWidth").toInt() +
                           listObj->property("colClaudeWidth").toInt() +
                           listObj->property("colActionWidth").toInt();
-    QCOMPARE(sum1872, 1852);
+    QCOMPARE(sum1872, 1850);
     QVERIFY(listObj->property("colGeminiWidth").toInt() > 550);
     QVERIFY(listObj->property("colClaudeWidth").toInt() > 550);
 

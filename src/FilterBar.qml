@@ -31,15 +31,18 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 8
+        spacing: 6
 
         // -------------------------------------------------------------
-        // 1. 实时搜索输入框 (支持快捷键 / 聚焦)
+        // 1. 实时搜索输入框 (支持快捷键 / 聚焦，紧凑自适应宽度)
         // -------------------------------------------------------------
         Rectangle {
             id: searchBox
-            Layout.preferredWidth: 184
-            Layout.preferredHeight: 32
+            Layout.fillWidth: true
+            Layout.minimumWidth: 108
+            Layout.preferredWidth: 124
+            Layout.maximumWidth: 184
+            Layout.preferredHeight: 30
             radius: 0
             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
             border.width: searchInput.activeFocus ? 1.5 : 1
@@ -153,7 +156,7 @@ Item {
         // 2. 五大状态过滤胶囊标签组 (全部、可用、充足、告急、枯竭)
         // -------------------------------------------------------------
         RowLayout {
-            spacing: 4
+            spacing: 3
 
             Repeater {
                 model: [
@@ -169,8 +172,8 @@ Item {
                     required property var modelData
                     property bool isActive: proxyModel ? (proxyModel.statusTab === modelData.key) : (modelData.key === "all")
 
-                    implicitWidth: tabRow.implicitWidth + 18
-                    implicitHeight: 30
+                    implicitWidth: tabRow.implicitWidth + 12
+                    implicitHeight: 28
                     radius: 0
 
                     color: isActive ?
@@ -188,13 +191,13 @@ Item {
                     RowLayout {
                         id: tabRow
                         anchors.centerIn: parent
-                        spacing: 5
+                        spacing: 4
 
                         // 状态色标小方块 (Marker 4: 全部在激活时显示 theme.accent 小方块)
                         Rectangle {
                             visible: (modelData.dot !== "") || (tabCapsule.isActive && modelData.key === "all")
-                            width: 6
-                            height: 6
+                            width: 5
+                            height: 5
                             radius: 0
                             color: (modelData.key === "all" && tabCapsule.isActive) ?
                                    ((theme && theme.accent) ? theme.accent : "#7daea3") :
@@ -238,7 +241,7 @@ Item {
         // 2.5. 三档账号类别快筛胶囊组 (付费 PRO / 免费 PRO / FREE)
         // -------------------------------------------------------------
         RowLayout {
-            spacing: 4
+            spacing: 3
 
             Repeater {
                 model: [
@@ -252,8 +255,8 @@ Item {
                     required property var modelData
                     property bool isSelected: proxyModel ? (proxyModel.tierFilter === modelData.key) : false
 
-                    implicitWidth: tierPillRow.implicitWidth + 14
-                    implicitHeight: 30
+                    implicitWidth: tierPillRow.implicitWidth + 10
+                    implicitHeight: 28
                     radius: 0
                     color: isSelected ? Qt.alpha(modelData.color, 0.22) :
                            (tierPillMouse.containsMouse ? Qt.alpha(modelData.color, 0.10) : "transparent")
@@ -265,7 +268,7 @@ Item {
                     RowLayout {
                         id: tierPillRow
                         anchors.centerIn: parent
-                        spacing: 4
+                        spacing: 3
 
                         Rectangle {
                             width: 5
@@ -310,7 +313,7 @@ Item {
         // 3. 动态过滤数量徽章 (filteredCount / totalCount)
         // -------------------------------------------------------------
         Rectangle {
-            implicitWidth: counterText.implicitWidth + 14
+            implicitWidth: counterText.implicitWidth + 10
             Layout.preferredHeight: 28
             radius: 0
             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"

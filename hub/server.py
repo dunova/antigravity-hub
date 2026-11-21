@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "4.1.1"
-__canonical_version_tag__ = "20261121-v4.1.1-SUB_HALF_PERCENT_WEEKLY_DEPLETION_SHORTCIRCUIT"
-__last_updated__ = "2026-11-21 11:46:00"
-__canonical_doctrine__ = "Antigravity Hub v4.1.1：周额度低于 0.5%（显示 0%）双端统一短路为用尽，隐藏 5H 倒计时并跳过无效预热"
+__version__ = "4.2.0"
+__canonical_version_tag__ = "20261121-v4.2.0-ULTRA_COMPACT_720PX_NO_STATUS_NO_TOPG_SETTINGS_PREWARM"
+__last_updated__ = "2026-11-21 20:30:00"
+__canonical_doctrine__ = "Antigravity Hub v4.2.0：删除状态列与 TopG、预热开关统一收口至设置、压缩双配额条与 720px 默认最小宽度"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -1820,75 +1820,6 @@ class HubEngine:
 
 
 
-    def switch_top_gemini_account(self, rot_mode: Optional[str] = None) -> Tuple[bool, str, str]:
-        """
-        针对 Gemini 专项优化：找出有效剩余配额最充沛的健康账号并秒级物理切换。
-        - 当处于 paid_pro 模式时，仅在付费 PRO (PAID_PRO) 账号中选优；
-        - 当处于 gemini / off 模式时，全池（含 FREE 单周限账号）统一选优；
-        - 严格剔除风控/禁用/无Token账号，并将 >=1.5% (显示>=2%) 健康池与 1% 残丝池物理分级隔离。
-        返回: (success: bool, msg: str, target_email: str)
-        """
-        data = self.load_accounts()
-        accounts = data.get("accounts", {})
-        active_email = data.get("active_email", "")
-        effective_mode = rot_mode if rot_mode is not None else get_auto_rotation_config().get("mode", "gemini")
-        paid_pro_only = (effective_mode == "paid_pro")
-
-        candidates = []
-        for email, acc in accounts.items():
-            if not isinstance(acc, dict):
-                continue
-            if paid_pro_only:
-                acc_tier, _, _, _ = classify_account_tier(acc)
-                if acc_tier != "PAID_PRO":
-                    continue
-            if acc.get("validation_blocked") or acc.get("disabled"):
-                continue
-            if "refresh_token" in acc or "token" in acc:
-                tok = acc.get("token")
-                rt = acc.get("refresh_token") or (tok.get("refresh_token") if isinstance(tok, dict) else "")
-                if not str(rt or "").strip():
-                    continue
-
-            g_info = acc.get("gemini") or {}
-            g_w = _safe_float(g_info.get("quota_weekly", 0.0), 0.0)
-            raw_5h = g_info.get("quota_5h")
-            has_5h = acc.get("has_5h")
-            if g_w <= 0.0001:
-                g_5h = 0.0
-            elif has_5h is False or raw_5h is None:
-                g_5h = 1.0
-            else:
-                g_5h = _safe_float(raw_5h, 0.0)
-            if g_w <= 0.0001 or g_5h <= 0.0001:
-                continue
-
-            if g_w >= 0.015 and g_5h >= 0.015:
-                tier = 2  # 主力健康池（>= 2% 周 & 5h）
-            elif g_w >= 0.005:
-                tier = 1  # 1% 周额度残丝兜底池
-            else:
-                tier = 0  # < 0.5% 残余最后兜底
-
-            eff = min(g_5h, g_w)
-            candidates.append((email, tier, eff, g_w, g_5h))
-
-        if not candidates:
-            if paid_pro_only:
-                return False, "当前为付费 PRO 轮转模式，未检测到可用的付费 PRO 账号", ""
-            return False, "全池未检测到可用的 Gemini 账号", ""
-
-        # 按健康层级、有效可用配额 min(5h, w)、周配额、5h 配额降序
-        candidates.sort(key=lambda x: (x[1], round(x[2], 6), round(x[3], 6), round(x[4], 6)), reverse=True)
-        best_email, best_tier, best_eff, best_w, best_5h = candidates[0]
-
-        if best_email == active_email and best_tier == 2 and best_eff > 0.8:
-            return True, f"当前活跃账号 {active_email} Gemini 额度已处于顶峰 (5h {format_quota_int_pct(best_5h)}% · 周 {format_quota_int_pct(best_w)}%)", active_email
-
-        ok, msg = self.switch_account(best_email)
-        return ok, f"已切至 Gemini 额度最高账号: {best_email} (5h {format_quota_int_pct(best_5h)}% · 周 {format_quota_int_pct(best_w)}%)", best_email
-
-
 ENGINE = HubEngine()
 
 
@@ -2157,7 +2088,7 @@ def render_table_rows(include_oob: bool = False) -> str:
     cur_time = time.strftime("%H:%M:%S")
 
     if not accounts:
-        empty_row = '<tr><td colspan="8" style="text-align:center; padding: 24px; font-size:13px; font-weight:900; background:#FFE4E6;">暂无账号，请执行单向导入</td></tr>'
+        empty_row = '<tr><td colspan="7" style="text-align:center; padding: 24px; font-size:13px; font-weight:900; background:#FFE4E6;">暂无账号，请执行单向导入</td></tr>'
         if include_oob:
             return empty_row + "\n" + render_top_bar_stats_html(0, 0, 0.0, 0.0, cur_time, oob=True) + "\n" + render_active_pill_html("", oob=True) + "\n" + render_rotation_button_html(oob=True) + "\n" + render_version_marker_html(oob=True)
         return empty_row
@@ -2185,30 +2116,18 @@ def render_table_rows(include_oob: bool = False) -> str:
         tier_rank = 0 if acc_tier == "PAID_PRO" else (1 if acc_tier == "FREE_PRO" else 2)
         tier_badge_html = render_tier_badge_html(acc_tier, acc_tier_display)
 
-        warmup_btn_html = (
-            f"""
-                                <button class="btn btn-warmup font-mono" 
-                                onclick="doWarmupAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="单账号极轻量 1-token 真实预热，启动 Google 5h 倒计时">预热</button>"""
-            if acc_has_5h
-            else ""
-        )
-
         if is_active:
-            badge_html = '<span class="badge badge-active"><span class="pulse-dot-green"></span>ACTIVE</span>'
-            main_btn_html = f"""<div class="btn-in-use font-mono" title="当前主程序正在使用此账号护航">在用</div>{warmup_btn_html}"""
+            main_btn_html = """<div class="btn-in-use font-mono" title="当前主程序正在使用此账号护航">在用</div>"""
         elif is_blocked:
-            badge_html = '<span class="badge badge-blocked" title="Google账号需网页验证">⚠️待验证</span>'
             main_btn_html = f"""<button class="btn btn-unblock font-mono" 
                             onclick="doUnblockAccount('{email}'); event.preventDefault(); event.stopPropagation();"
                             title="在现役 ego lite 浏览器中拉起解封页面并自动定向该账号（后台自动监听解锁）">解封</button>"""
         else:
-            badge_html = '<span class="badge badge-standby">STANDBY</span>'
             has_refresh_token = bool(acc.get("refresh_token", ""))
             if has_refresh_token:
                 main_btn_html = f"""<button class="btn btn-switch font-mono" 
                                 onclick="doSwitchAccount('{email}'); event.preventDefault(); event.stopPropagation();"
-                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button>{warmup_btn_html}"""
+                                title="切换为此账号，看门狗照常监控额度自动轮换">切换</button>"""
             else:
                 main_btn_html = f"""<button class="btn btn-switch font-mono" 
                                 style="opacity:0.35;cursor:not-allowed;background:#ccc;"
@@ -2263,7 +2182,6 @@ def render_table_rows(include_oob: bool = False) -> str:
             data-is-active="{'1' if is_active else '0'}">
             <td class="col-center col-check" style="background-color: {row_bg};"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
             <td class="col-center font-mono num-col" style="background-color: {row_bg};">{num_html}</td>
-            <td class="col-status" style="background-color: {row_bg};"><div class="status-cell-wrap">{badge_html}</div></td>
             <td class="col-center col-tier" style="background-color: {row_bg};">{tier_badge_html}</td>
             <td class="col-email" style="background-color: {row_bg};">
                 <div class="email-cell-inner">
@@ -2419,11 +2337,11 @@ def render_dashboard_html() -> str:
             font-variant-numeric: tabular-nums;
         }}
 
-        /* 🚀 官方高密显瘦黄金版心：自适应 924px~1034px，半屏平铺与独立窗口均 100% 零截断 */
+        /* 🚀 官方超紧凑显瘦版心：自适应 720px 至 960px，默认最小宽度零截断 */
         .app-container {{
             width: 100% !important;
-            max-width: 1034px !important;
-            min-width: 924px !important;
+            max-width: 960px !important;
+            min-width: 720px !important;
             margin: 0 auto;
             box-sizing: border-box;
             padding: 0 4px;
@@ -2653,10 +2571,6 @@ def render_dashboard_html() -> str:
         .btn-import {{ background: #00F0FF; color: #000000; }}
         .btn-export {{ background: #FFE600; color: #000000; }}
         .btn-refresh-all {{ background: #22C55E; color: #000000; }}
-        .btn-warmup-all {{ background: #C084FC; color: #000000; }}
-        .btn-warmup-all:hover {{ background: #A855F7; }}
-        .btn-top-gemini {{ background: #4ADE80; color: #000000; font-weight: 900; }}
-        .btn-top-gemini:hover {{ background: #22C55E; }}
         .btn-mask {{
             background: #F1F5F9;
             color: #000000;
@@ -2907,12 +2821,10 @@ def render_dashboard_html() -> str:
         thead th:last-child {{ border-right: none; }}
 
         .th-num {{ background: #FFFFFF; text-align: center; }}
-        .th-status {{ background: #38BDF8; text-align: center; }}
         .th-tier {{ background: #FBBF24; text-align: center; }}
         .th-email {{ background: #FDE047; text-align: left; padding-left: 6px; }}
         .th-gemini {{ background: #7DD3FC; text-align: center; }}
         .th-claude {{ background: #FB923C; text-align: center; }}
-        .th-warmup {{ background: #C084FC; text-align: center; }}
         .th-action {{ background: #4ADE80; text-align: center; }}
 
         /* 🔀 Gemini / Claude 表头三态循环排序交互与角标 */
@@ -3117,10 +3029,13 @@ def render_dashboard_html() -> str:
             min-width: 162px;
         }}
         .col-quota-g38 {{
-            min-width: 184px;
+            min-width: 152px;
+        }}
+        .col-quota-gemini {{
+            min-width: 152px;
         }}
         .col-quota-claude {{
-            min-width: 184px;
+            min-width: 152px;
         }}
         .tag-w-g4 {{ background: #A855F7; color: #FFFFFF; }}
         .q-cell-empty {{
@@ -3177,11 +3092,11 @@ def render_dashboard_html() -> str:
         .tag-5h-c {{ background: #FB923C; color: #000000; }}
         .tag-w-c {{ background: #FB923C; color: #000000; }}
 
-        /* 进度条：弹性 52px~82px，兼容半屏平铺与宽屏独立窗口，紧凑高密零截断！ */
+        /* 进度条：超紧凑 34px 至 64px，兼容 720px 极窄窗口与宽屏自适应 */
         .q-track {{
-            flex: 1 1 56px !important;
-            min-width: 48px !important;
-            max-width: 82px !important;
+            flex: 1 1 42px !important;
+            min-width: 34px !important;
+            max-width: 64px !important;
             height: 8px;
             background: #FFFFFF;
             border: 1.5px solid #000000;
@@ -3266,11 +3181,11 @@ def render_dashboard_html() -> str:
             box-shadow: none !important;
         }}
 
-        /* 操作按钮容器与定宽按键 */
+        /* 操作按钮容器与定宽按键 (无每行预热按钮，紧凑 86px) */
         .col-actions {{
-            width: 132px !important;
-            min-width: 132px !important;
-            max-width: 132px !important;
+            width: 86px !important;
+            min-width: 86px !important;
+            max-width: 86px !important;
             padding: 0 !important;
             text-align: center;
             vertical-align: middle;
@@ -4168,23 +4083,11 @@ def render_dashboard_html() -> str:
                 </button>
                 <button class="btn btn-top btn-settings font-mono"
                         onclick="openSettingsModal(); event.preventDefault(); event.stopPropagation();"
-                        title="控制台设置 (快捷键: S)">
+                        title="控制台设置与预热开关 (快捷键: S)">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:1px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                     设置
                 </button>
-                <button class="btn btn-top btn-top-gemini font-mono"
-                        onclick="doSwitchTopGemini(this); event.preventDefault(); event.stopPropagation();"
-                        title="针对Gemini优化：一键切至全池Gemini最高额度账号 (快捷键: G)">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="#000000" stroke="#000000" stroke-width="1" style="vertical-align:-1px; margin-right:1px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    TopG
-                </button>
                 {rot_btn_html}
-                <button class="btn btn-top btn-warmup-all font-mono"
-                        onclick="doWarmupAll(); event.preventDefault(); event.stopPropagation();"
-                        title="全池 PRO 账号随机错峰预热，激活 5h 真实倒计时 (快捷键: W)">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:2px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    预热
-                </button>
                 <button class="btn btn-top btn-refresh-all font-mono"
                         onclick="doRefreshQuota(this); event.preventDefault(); event.stopPropagation();"
                         title="立即并发刷新最新配额 (快捷键: R)">
@@ -4239,24 +4142,22 @@ def render_dashboard_html() -> str:
             </div>
         </div>
 
-        <!-- 官方规范级高密新野兽表格 (自适应弹性伸缩 + 兼容半屏平铺 924px 防截断) -->
+        <!-- 官方规范级超紧凑新野兽表格 (720px 最小宽零截断，移除冗余状态列) -->
         <div class="table-wrap">
             <table>
                 <colgroup>
                     <col style="width: 26px;">   <!-- 批量勾选复选框 -->
                     <col style="width: 28px;">   <!-- # 序号+拖拽手柄 -->
-                    <col style="width: 66px;">   <!-- 状态 -->
-                    <col style="width: 84px;">   <!-- 账号类别 (付费 PRO / 免费 PRO / FREE) -->
-                    <col style="width: 118px;">  <!-- 账号 -->
-                    <col style="width: 28%;">    <!-- Gemini 官方配额 -->
-                    <col style="width: 28%;">    <!-- Claude 官方配额 -->
-                    <col style="width: 130px;">  <!-- 操作 -->
+                    <col style="width: 76px;">   <!-- 账号类别 (付费 PRO / 免费 PRO / FREE) -->
+                    <col style="width: 112px;">  <!-- 账号 -->
+                    <col style="width: 29%;">    <!-- Gemini 官方配额 -->
+                    <col style="width: 29%;">    <!-- Claude 官方配额 -->
+                    <col style="width: 86px;">   <!-- 操作 -->
                 </colgroup>
                 <thead>
                     <tr>
                         <th class="col-center th-check" title="全选 / 反选"><input type="checkbox" id="master-select-cb" class="neo-checkbox" onchange="toggleMasterSelect(this)"></th>
                         <th class="col-center th-num">#</th>
-                        <th class="col-center th-status">状态</th>
                         <th class="col-center th-tier th-sortable" onclick="cycleTierSort()" title="点击按账号类别排序">
                             <div class="th-sort-inner">
                                 <span>类别</span>
@@ -4356,24 +4257,16 @@ def render_dashboard_html() -> str:
                             </select>
                         </div>
                     </div>
-                    <div class="cfg-row" style="margin-top: 10px; padding-top: 10px; border-top: 1.5px dashed #CBD5E1;">
-                        <div class="cfg-label">快捷定锚</div>
-                        <div class="cfg-field">
-                            <button class="btn font-mono" style="background:#4ADE80; font-weight:900; height:28px; padding:0 10px;" onclick="doSwitchTopGemini(); closeSettingsModal();">
-                                ⚡ 一键切至全池 Gemini 额度最高账号
-                            </button>
-                        </div>
-                    </div>
                 </div>
 
-                <!-- TAB 2: 错峰预热防线 -->
+                <!-- TAB 2: 错峰预热开关 -->
                 <div id="settings-pane-warmup" class="settings-pane" style="display:none;">
                     <div class="cfg-row">
-                        <div class="cfg-label">每小时错峰预热</div>
+                        <div class="cfg-label">自动随机预热</div>
                         <div class="cfg-field">
                             <label class="toggle-wrap">
                                 <input type="checkbox" id="cfg-hourly-warmup" class="neo-checkbox" checked>
-                                <span>每小时自动随机错峰预热</span>
+                                <span>开启后台随机错峰 1-token 预热 (关闭则暂停自动预热)</span>
                             </label>
                         </div>
                     </div>
@@ -4394,14 +4287,6 @@ def render_dashboard_html() -> str:
                                 <option value="120">120 秒</option>
                                 <option value="180">180 秒</option>
                             </select>
-                        </div>
-                    </div>
-                    <div class="cfg-row" style="margin-top: 10px; padding-top: 10px; border-top: 1.5px dashed #CBD5E1;">
-                        <div class="cfg-label">立即预热</div>
-                        <div class="cfg-field">
-                            <button class="btn font-mono" style="background:#C084FC; font-weight:900; height:28px; padding:0 10px;" onclick="doWarmupAll(); closeSettingsModal();">
-                                ⚡ 立即错峰预热
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -4456,9 +4341,7 @@ def render_dashboard_html() -> str:
                         <table style="width:100%; font-size:11px; border-collapse:collapse;">
                             <tr><td style="padding:3px 0; width:50px;"><kbd class="neo-kbd">S</kbd></td><td>打开 / 关闭控制台设置</td></tr>
                             <tr><td style="padding:3px 0;"><kbd class="neo-kbd">M</kbd></td><td>切换账号脱敏打码</td></tr>
-                            <tr><td style="padding:3px 0;"><kbd class="neo-kbd">G</kbd></td><td>一键定锚至全池 Gemini 最高额度账号</td></tr>
                             <tr><td style="padding:3px 0;"><kbd class="neo-kbd">R</kbd></td><td>并发拉取最新配额数据</td></tr>
-                            <tr><td style="padding:3px 0;"><kbd class="neo-kbd">W</kbd></td><td>触发全池错峰预热</td></tr>
                             <tr><td style="padding:3px 0;"><kbd class="neo-kbd">Esc</kbd></td><td>快速关闭所有弹窗</td></tr>
                         </table>
                     </div>
@@ -4811,36 +4694,6 @@ def render_dashboard_html() -> str:
                 showToast("⚙️ 设置已成功保存并即时生效", "success");
             }} catch (err) {{
                 showToast("❌ 设置保存失败: " + err.message, "error");
-            }}
-        }}
-
-        // 🚀 Gemini 专精优化：一键切至全池 Gemini 额度最高账号
-        async function doSwitchTopGemini(btn) {{
-            if (btn) {{
-                btn.disabled = true;
-                btn.style.opacity = '0.7';
-            }}
-            showToast("⚡ 正在智能切至全池 Gemini 额度顶峰账号...", "info");
-            try {{
-                const resp = await fetch('/api/switch_top_gemini', {{
-                    method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }}
-                }});
-                if (!resp.ok) throw new Error("HTTP " + resp.status);
-                const data = await resp.json();
-                if (data.success) {{
-                    showToast(data.msg, "success");
-                    if (data.html) applyTbodyAndOOB(data.html);
-                }} else {{
-                    showToast("⚠️ " + data.msg, "warning");
-                }}
-            }} catch (err) {{
-                showToast("❌ 切换失败: " + err.message, "error");
-            }} finally {{
-                if (btn) {{
-                    btn.disabled = false;
-                    btn.style.opacity = '1';
-                }}
             }}
         }}
 
@@ -5303,42 +5156,6 @@ def render_dashboard_html() -> str:
             }}
         }}
 
-        // 🔥 静默预热直通函数
-        async function doWarmupAccount(email) {{
-            showToast("⏳ 正在向 Google 探针节点发送单账号静默预热...", "info");
-            try {{
-                const resp = await fetch('/api/warmup', {{
-                    method: 'POST',
-                    headers: {{ 'Content-Type': 'application/x-www-form-urlencoded' }},
-                    body: 'email=' + encodeURIComponent(email)
-                }});
-                if (!resp.ok) throw new Error("HTTP " + resp.status);
-                const html = await resp.text();
-                applyTbodyAndOOB(html);
-                showToast("🔥 静默预热探针触发完成！模型已激活", "warmup");
-            }} catch (err) {{
-                showToast("❌ 预热失败: " + err.message, "error");
-            }}
-        }}
-
-        // 🔥 全池 PRO 账号随机错峰预热直通函数
-        async function doWarmupAll() {{
-            showToast("⏳ 正在对未激活 PRO 账号发起随机错峰 1-token 真实预热...", "info");
-            try {{
-                const resp = await fetch('/api/warmup-all', {{
-                    method: 'POST'
-                }});
-                if (!resp.ok) throw new Error("HTTP " + resp.status);
-                const html = await resp.text();
-                applyTbodyAndOOB(html);
-                setTimeout(fetchTableSafely, 3500);
-                setTimeout(fetchTableSafely, 9000);
-                showToast("🔥 随机错峰预热已启动，全池 PRO 账号将陆续激活 Google 5h 倒计时！", "warmup");
-            }} catch (err) {{
-                showToast("❌ 错峰预热失败: " + err.message, "error");
-            }}
-        }}
-
         // 🔄 三态循环切换自动轮换开关直通函数 (全局 Gemini ➔ 仅付费 PRO ➔ 关闭 ➔ 全局 Gemini)
         async function cycleAutoRotation(btn) {{
             btn.disabled = true;
@@ -5727,16 +5544,10 @@ def render_dashboard_html() -> str:
             }} else if (e.key === 'm' || e.key === 'M') {{
                 e.preventDefault();
                 toggleAccountMask();
-            }} else if (e.key === 'g' || e.key === 'G') {{
-                e.preventDefault();
-                doSwitchTopGemini();
             }} else if (e.key === 'r' || e.key === 'R') {{
                 e.preventDefault();
                 const refreshBtn = document.querySelector('.btn-refresh-all');
                 if (refreshBtn) doRefreshQuota(refreshBtn);
-            }} else if (e.key === 'w' || e.key === 'W') {{
-                e.preventDefault();
-                doWarmupAll();
             }}
         }});
 
@@ -6358,10 +6169,17 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
 
         elif parsed.path == "/api/settings":
             try:
+                prev_warmup = bool(get_hub_settings().get("hourly_warmup", True))
                 data = json.loads(post_data)
                 updated = save_hub_settings(data)
                 if "mode" in data:
                     set_auto_rotation_config(mode=data["mode"])
+                if not prev_warmup and bool(updated.get("hourly_warmup", True)):
+                    threading.Thread(
+                        target=ENGINE.run_hourly_staggered_warmup,
+                        kwargs={"force": False},
+                        daemon=True,
+                    ).start()
                 resp_bytes = json.dumps(updated).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -6374,21 +6192,6 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": str(e)}).encode("utf-8"))
                 return
-
-        elif parsed.path == "/api/switch_top_gemini":
-            ok, msg, target_email = ENGINE.switch_top_gemini_account()
-            html = render_table_rows(include_oob=True)
-            resp = {
-                "success": ok,
-                "msg": msg,
-                "target_email": target_email,
-                "html": html
-            }
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(json.dumps(resp).encode("utf-8"))
-            return
 
         elif parsed.path == "/api/toggle-rotation":
             cur_cfg = get_auto_rotation_config()

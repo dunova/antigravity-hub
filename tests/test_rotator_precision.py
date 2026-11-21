@@ -229,26 +229,11 @@ class TestRotatorPrecision(unittest.TestCase):
         rot_mode, _, _ = rotator._load_runtime_settings()
         self.assertEqual(rot_mode, "gemini")
 
-        # 5. TopG 在 paid_pro 模式下也只选付费 PRO，在 gemini 模式下可正常选中 FREE (quota_5h=None)
-        accounts_path = os.path.join(self.data_dir, "data", "accounts_hub.json")
-        _write_json(accounts_path, {"active_email": "paid_active@test.com", "accounts": accounts})
-        with patch.object(hub_server, "ACCOUNTS_HUB_FILE", accounts_path):
-            eng = HubEngine()
-            eng.switch_account = MagicMock(return_value=(True, "ok"))
-            ok_p, _, tgt_p = eng.switch_top_gemini_account(rot_mode="paid_pro")
-            self.assertTrue(ok_p)
-            self.assertEqual(tgt_p, "paid_standby@test.com")
+        # 5. v4.2.0 起已彻底移除 TopG 功能
+        self.assertFalse(hasattr(HubEngine, "switch_top_gemini_account"))
 
-        _write_json(accounts_path, {"active_email": "paid_active@test.com", "accounts": free_only_standby})
-        with patch.object(hub_server, "ACCOUNTS_HUB_FILE", accounts_path):
-            eng = HubEngine()
-            eng.switch_account = MagicMock(return_value=(True, "ok"))
-            ok_g, _, tgt_g = eng.switch_top_gemini_account(rot_mode="gemini")
-            self.assertTrue(ok_g)
-            self.assertEqual(tgt_g, "free_full@test.com")
-
-    def test_one_percent_weekly_accounts_never_hijack_any_strategy_or_topg(self):
-        """核心防呆：1% 周额度 (0.0073) 与 0% 周额度 (0.004) 账号在所有策略和 TopG 下均绝不抢占健康账号"""
+    def test_one_percent_weekly_accounts_never_hijack_any_strategy(self):
+        """核心防呆：1% 周额度 (0.0073) 与 0% 周额度 (0.004) 账号在所有策略下均绝不抢占健康账号"""
         accounts = {
             "active@test.com": {
                 "email": "active@test.com",
@@ -348,18 +333,6 @@ class TestRotatorPrecision(unittest.TestCase):
         self.assertIsNone(
             rotator.pick_best_standby_account(zero_only, "active@test.com", strategy="highest-quota")
         )
-
-        # 6. TopG (HubEngine.switch_top_gemini_account): 同样隔离 1% 周额度账号与风控/无 Token 账号
-        accounts_path = os.path.join(self.data_dir, "data", "accounts_hub.json")
-        _write_json(accounts_path, {"active_email": "active@test.com", "accounts": accounts})
-        with patch.object(hub_server, "ACCOUNTS_HUB_FILE", accounts_path):
-            eng = HubEngine()
-            eng.switch_account = MagicMock(return_value=(True, "ok"))
-            ok, msg, target = eng.switch_top_gemini_account(rot_mode="gemini")
-        self.assertTrue(ok)
-        self.assertEqual(target, "healthy_top@test.com")
-        self.assertIn("98%", msg)
-        self.assertIn("90%", msg)
 
     def test_off_mode_freezes_watchdog_and_hub_settings_defaults_zero(self):
         """off 模式彻底冻结自动轮换；get_hub_settings 缺失文件时默认双阈值均为 0.0"""

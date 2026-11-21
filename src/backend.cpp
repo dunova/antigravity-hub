@@ -208,36 +208,6 @@ void BackendController::switchAccount(const QString &email)
     });
 }
 
-void BackendController::switchTopGemini()
-{
-    // 契约: POST /api/switch_top_gemini
-    executePost(QStringLiteral("/api/switch_top_gemini"), QByteArray(), QString(),
-                tr("TopG Switch"), [this](const QByteArray &body, int) {
-        QJsonParseError parseErr;
-        QJsonDocument doc = QJsonDocument::fromJson(body, &parseErr);
-        if (parseErr.error == QJsonParseError::NoError && doc.isObject()) {
-            QJsonObject obj = doc.object();
-            bool ok = obj.value(QStringLiteral("success")).toBool();
-            QString msg = obj.value(QStringLiteral("msg")).toString();
-            QString targetEmail = obj.value(QStringLiteral("target_email")).toString();
-
-            if (ok) {
-                if (!targetEmail.isEmpty()) {
-                    m_activeEmail = targetEmail;
-                    emit activeEmailChanged();
-                }
-                emit notificationRequested(tr("TopG Switch"), msg, false);
-            } else {
-                emit notificationRequested(tr("TopG Switch Failed"), msg, true);
-            }
-        } else {
-            emit notificationRequested(tr("TopG Switch"),
-                                      tr("Best Gemini account switched successfully"), false);
-        }
-        checkManualLockState();
-    });
-}
-
 void BackendController::toggleRotation()
 {
     // 契约: POST /api/toggle-rotation

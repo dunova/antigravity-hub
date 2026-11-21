@@ -491,7 +491,7 @@ Dialog {
                     }
                 }
 
-                // 4. Hourly Fleet Prewarm Switch
+                // 4. Auto Random Prewarm Switch
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -500,13 +500,13 @@ Dialog {
                         Layout.fillWidth: true
                         spacing: 2
                         Text {
-                            text: qsTr("Hourly Fleet Prewarm")
+                            text: qsTr("Auto Random Prewarm")
                             font.pixelSize: 12
                             font.weight: Font.Medium
                             color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                         }
                         Text {
-                            text: qsTr("Keep dual-machine 16-channel warmup pipeline running hourly")
+                            text: qsTr("Automatically send 1-token staggered warmup to idle PRO accounts to lock 5H countdowns")
                             font.pixelSize: 11
                             color: (theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#CBD5E1"
                             wrapMode: Text.WordWrap
@@ -516,6 +516,7 @@ Dialog {
 
                     Switch {
                         id: prewarmSwitch
+                        objectName: "prewarmSwitch"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         checked: true
 

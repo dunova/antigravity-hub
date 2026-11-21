@@ -334,6 +334,18 @@ class TestWarmupAndMacSync(unittest.TestCase):
         self.assertIn('data-tier-filter="FREE"', html)
         self.assertNotIn("10.0.0." + "200", html)
         self.assertNotIn("01 M4", html)
+        # v4.2.0 紧凑化与功能收口门禁：删除状态列、TopG 与预热按钮，保留勾选、序号与设置内预热开关
+        self.assertIn("th-check", html)
+        self.assertIn("th-num", html)
+        self.assertNotIn("col-center th-status", html)
+        self.assertNotIn(">状态</th>", html)
+        self.assertNotIn('class="col-status"', html)
+        self.assertNotIn("btn-top-gemini", html)
+        self.assertNotIn("doSwitchTopGemini", html)
+        self.assertNotIn("btn-warmup-all", html)
+        self.assertNotIn("doWarmupAccount", html)
+        self.assertIn("cfg-hourly-warmup", html)
+        self.assertIn("min-width: 720px", html)
 
     def test_importer_handles_free_none_quota_5h(self):
         """importer.normalize_account_record 安全接纳 FREE 账号 quota_5h=None 并保留三档元数据"""

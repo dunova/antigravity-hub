@@ -34,9 +34,9 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        spacing: 7
+        anchors.leftMargin: 10
+        anchors.rightMargin: 10
+        spacing: 6
 
         // =====================================================================
         // LEFT GROUP: Logo + Title + ACTIVE Account Badge + Version Tag
@@ -47,9 +47,9 @@ Rectangle {
             id: logoIcon
             source: "qrc:/assets/logo.svg"
             color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#0F172A"
-            width: 24
-            height: 24
-            sourceSize: Qt.size(24, 24)
+            width: 22
+            height: 22
+            sourceSize: Qt.size(22, 22)
             Layout.alignment: Qt.AlignVCenter
 
             MouseArea {
@@ -70,7 +70,7 @@ Rectangle {
             text: qsTr("Antigravity Hub")
             font.family: theme.uiFont
             font.weight: Font.DemiBold
-            font.pixelSize: 15
+            font.pixelSize: 14
             renderType: Text.NativeRendering
             color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#dfede5"
             Layout.alignment: Qt.AlignVCenter
@@ -79,8 +79,8 @@ Rectangle {
         // 3. Current ACTIVE Account Highlight Badge (Static, no blinking animation)
         Rectangle {
             id: activeBadge
-            height: 28
-            implicitWidth: activeContentRow.implicitWidth + 14
+            height: 26
+            implicitWidth: activeContentRow.implicitWidth + 12
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -147,7 +147,7 @@ Rectangle {
                     renderType: Text.NativeRendering
                     color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
                     elide: Text.ElideRight
-                    Layout.maximumWidth: 120
+                    Layout.maximumWidth: 96
                 }
 
                 // Active Account Tier Micro-Badge (Paid Pro / Free Pro / Free)
@@ -205,7 +205,7 @@ Rectangle {
         Rectangle {
             id: versionBadge
             height: 22
-            implicitWidth: verText.implicitWidth + 12
+            implicitWidth: verText.implicitWidth + 10
             radius: 0
             color: (theme && theme.pillBg && theme.pillBg.charAt(0) === '#') ? theme.pillBg : ((theme && theme.surface2) ? theme.surface2 : "#1a2c26")
             border.color: (theme && theme.border && theme.border.charAt(0) === '#') ? theme.border : "#14ffffff"
@@ -215,7 +215,7 @@ Rectangle {
             Text {
                 id: verText
                 anchors.centerIn: parent
-                text: qsTr("v%1").arg(Qt.application.version || "3.0.0")
+                text: qsTr("v%1").arg(Qt.application.version || "4.2.0")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 renderType: Text.NativeRendering
@@ -229,14 +229,14 @@ Rectangle {
         }
 
         // =====================================================================
-        // RIGHT GROUP: 6 Action Capsules
+        // RIGHT GROUP: 4 Compact Action Capsules (Add Account, Mask, Settings, Rotation)
         // =====================================================================
 
         // 0. Add Account Capsule (+ 添加账户)
         Rectangle {
             id: addAccountCapsule
-            height: 30
-            implicitWidth: addAccountRow.implicitWidth + 14
+            height: 28
+            implicitWidth: addAccountRow.implicitWidth + 12
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -249,7 +249,7 @@ Rectangle {
             RowLayout {
                 id: addAccountRow
                 anchors.centerIn: parent
-                spacing: 6
+                spacing: 4
 
                 Text {
                     id: addAccountLabel
@@ -279,8 +279,8 @@ Rectangle {
         // 1. Mask Capsule (打码/明文)
         Rectangle {
             id: maskCapsule
-            height: 30
-            implicitWidth: maskText.implicitWidth + 16
+            height: 28
+            implicitWidth: maskText.implicitWidth + 12
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -318,11 +318,11 @@ Rectangle {
             }
         }
 
-        // 2. Settings Capsule (设置 - 纯文本跟随系统)
+        // 2. Settings Capsule (设置, 含自动预热开关)
         Rectangle {
             id: settingsCapsule
-            height: 30
-            implicitWidth: settText.implicitWidth + 14
+            height: 28
+            implicitWidth: settText.implicitWidth + 12
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -356,51 +356,11 @@ Rectangle {
             }
         }
 
-        // 3. TopG Capsule (纯文本跟随系统，无小图标)
-        Rectangle {
-            id: topgCapsule
-            height: 30
-            implicitWidth: topgText.implicitWidth + 14
-            radius: 0
-            Layout.alignment: Qt.AlignVCenter
-
-            color: topgMouse.containsMouse ?
-                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
-                   ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
-            border.color: topgMouse.containsMouse ?
-                          ((theme && theme.accent) ? theme.accent : "#7daea3") :
-                          ((theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff")
-            border.width: 1
-
-            Text {
-                id: topgText
-                anchors.centerIn: parent
-                text: "TopG"
-                font.family: theme.uiFont
-                font.pixelSize: 12
-                font.weight: Font.DemiBold
-                renderType: Text.NativeRendering
-                color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
-            }
-
-            MouseArea {
-                id: topgMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                ToolTip.visible: containsMouse
-                ToolTip.text: qsTr("Switch to top Gemini account (G)")
-                onClicked: {
-                    if (backend) backend.switchTopGemini();
-                }
-            }
-        }
-
-        // 4. Gemini Rotation Mode Capsule (3-state: Global Gemini -> Paid Pro Only -> Off)
+        // 3. Gemini Rotation Mode Capsule (3-state: Global Gemini -> Paid Pro Only -> Off)
         Rectangle {
             id: rotationCapsule
-            height: 30
-            implicitWidth: geminiText.implicitWidth + 14
+            height: 28
+            implicitWidth: geminiText.implicitWidth + 12
             radius: 0
             Layout.alignment: Qt.AlignVCenter
 
@@ -454,60 +414,6 @@ Rectangle {
                 }
                 onClicked: {
                     if (backend) backend.toggleRotation();
-                }
-            }
-        }
-
-        // 5. Prewarm Capsule (预热 - 纯文本跟随系统，无小图标)
-        Rectangle {
-            id: prewarmCapsule
-            height: 30
-            implicitWidth: prewarmRow.implicitWidth + 14
-            radius: 0
-            Layout.alignment: Qt.AlignVCenter
-
-            color: prewarmMouse.containsMouse ?
-                   ((theme && theme.surface3) ? theme.surface3 : "#3c3836") :
-                   ((theme && theme.surface2) ? theme.surface2 : "#1c1c1c")
-            border.color: (backend && backend.busy) ?
-                          ((theme && theme.accent) ? theme.accent : "#7daea3") :
-                          (prewarmMouse.containsMouse ?
-                              ((theme && theme.accent) ? theme.accent : "#7daea3") :
-                              ((theme && theme.controlBorder) ? theme.controlBorder : "#3dffffff"))
-            border.width: 1
-
-            RowLayout {
-                id: prewarmRow
-                anchors.centerIn: parent
-                spacing: 6
-
-                BusyIndicator {
-                    width: 14
-                    height: 14
-                    running: backend ? backend.busy : false
-                    visible: backend ? backend.busy : false
-                }
-
-                Text {
-                    id: prewarmLabel
-                    text: qsTr("Prewarm")
-                    font.family: theme.uiFont
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    renderType: Text.NativeRendering
-                    color: (theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF"
-                }
-            }
-
-            MouseArea {
-                id: prewarmMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                ToolTip.visible: containsMouse
-                ToolTip.text: qsTr("Prewarm fleet (W)")
-                onClicked: {
-                    if (backend) backend.triggerPrewarm();
                 }
             }
         }

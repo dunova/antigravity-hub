@@ -193,8 +193,6 @@ Popup {
                         { keys: ["m"], desc: qsTr("Toggle masking") },
                         { keys: ["r"], desc: qsTr("Refresh quotas") },
                         { keys: ["s"], desc: qsTr("Open settings") },
-                        { keys: ["g"], desc: qsTr("Switch to TopG") },
-                        { keys: ["w"], desc: qsTr("Fleet prewarm") },
                         { keys: [qsTr("拖拽"), qsTr("置顶")], desc: qsTr("Reorder accounts") },
                         { keys: ["?", "F1"], desc: qsTr("Help overlay") }
                     ]

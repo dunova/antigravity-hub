@@ -7,8 +7,8 @@ import QtQuick.Window 2.15
 ApplicationWindow {
     id: appWindow
     visible: true
-    // 默认即最小紧凑宽度（内容 896 + 左右边距 24 = 920），高度按账号数量精准自适应，允许用户自由拉伸
-    readonly property int contentWidth: 896
+    // 默认即最小紧凑宽度（内容 696 + 左右边距 24 = 720），高度按账号数量精准自适应，允许用户自由拉伸
+    readonly property int contentWidth: 696
     readonly property int baseChromeHeight: 184
     readonly property int rowHeightPx: 42
     readonly property int adaptiveRowCount: accountModel ? Math.max(4, Math.min(15, accountModel.count)) : 8
@@ -20,7 +20,7 @@ ApplicationWindow {
     property bool userResizedManually: false
     property bool applyingAutoGeometry: false
 
-    minimumWidth: 920
+    minimumWidth: 720
     width: minimumWidth
     minimumHeight: 360
     height: idealHeight
@@ -160,26 +160,6 @@ ApplicationWindow {
             if (settingsDialog && typeof settingsDialog.open === "function") {
                 settingsDialog.open();
             }
-        }
-    }
-
-    // g / G -> TopG Auto-Switch
-    Shortcut {
-        sequence: "g"
-        enabled: !appWindow.isInputFocused && !appWindow.isModalOpen
-        context: Qt.ApplicationShortcut
-        onActivated: {
-            if (backend) backend.switchTopGemini();
-        }
-    }
-
-    // w / W -> Prewarm Fleet
-    Shortcut {
-        sequence: "w"
-        enabled: !appWindow.isInputFocused && !appWindow.isModalOpen
-        context: Qt.ApplicationShortcut
-        onActivated: {
-            if (backend) backend.triggerPrewarm();
         }
     }
 

@@ -66,7 +66,6 @@ public:
 
     // QML 调用的核心业务控制方法 (Q_INVOKABLE)
     Q_INVOKABLE void switchAccount(const QString &email);
-    Q_INVOKABLE void switchTopGemini();
     Q_INVOKABLE void toggleRotation();
     Q_INVOKABLE void refreshQuota(bool force = false);
     Q_INVOKABLE void triggerPrewarm();
