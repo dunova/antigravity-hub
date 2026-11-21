@@ -372,14 +372,16 @@ void AccountModel::loadFromDisk() {
             item.gemini38Reset5hTs = 0;
             item.gemini38Reset5h = QStringLiteral("--");
         } else {
-            if (item.gemini38QuotaW <= 0.0001) {
-                item.gemini38Quota5h = 0.0; // 周耗尽短路
+            if (item.gemini38QuotaW < 0.005) {
+                item.gemini38Quota5h = 0.0; // 周耗尽短路 (< 0.5% 即 0% 用尽)
+                item.gemini38Reset5hTs = 0;
+                item.gemini38Reset5h = QStringLiteral("用尽");
             } else {
                 item.gemini38Quota5h = geminiObj.value(QStringLiteral("quota_5h")).toDouble(1.0);
+                const QString gReset5hIso = geminiObj.value(QStringLiteral("reset_time_5h")).toString();
+                item.gemini38Reset5hTs = parseIsoTimestamp(gReset5hIso);
+                item.gemini38Reset5h = format5hCountdown(item.gemini38Reset5hTs, nowEpoch);
             }
-            const QString gReset5hIso = geminiObj.value(QStringLiteral("reset_time_5h")).toString();
-            item.gemini38Reset5hTs = parseIsoTimestamp(gReset5hIso);
-            item.gemini38Reset5h = format5hCountdown(item.gemini38Reset5hTs, nowEpoch);
         }
 
         // Claude 配额解析 (带周耗尽短路；FREE 账号无 5H)
@@ -394,21 +396,23 @@ void AccountModel::loadFromDisk() {
             item.claudeReset5hTs = 0;
             item.claudeReset5h = QStringLiteral("--");
         } else {
-            if (item.claudeQuotaW <= 0.0001) {
-                item.claudeQuota5h = 0.0; // 周耗尽短路
+            if (item.claudeQuotaW < 0.005) {
+                item.claudeQuota5h = 0.0; // 周耗尽短路 (< 0.5% 即 0% 用尽)
+                item.claudeReset5hTs = 0;
+                item.claudeReset5h = QStringLiteral("用尽");
             } else {
                 item.claudeQuota5h = claudeObj.value(QStringLiteral("quota_5h")).toDouble(1.0);
+                const QString cReset5hIso = claudeObj.value(QStringLiteral("reset_time_5h")).toString();
+                item.claudeReset5hTs = parseIsoTimestamp(cReset5hIso);
+                item.claudeReset5h = format5hCountdown(item.claudeReset5hTs, nowEpoch);
             }
-            const QString cReset5hIso = claudeObj.value(QStringLiteral("reset_time_5h")).toString();
-            item.claudeReset5hTs = parseIsoTimestamp(cReset5hIso);
-            item.claudeReset5h = format5hCountdown(item.claudeReset5hTs, nowEpoch);
         }
 
         // 活跃状态与状态胶囊
         item.isActive = (!activeEmail.isEmpty() && item.email.compare(activeEmail, Qt::CaseInsensitive) == 0);
         if (item.isActive) {
             item.status = QStringLiteral("ACTIVE");
-        } else if (item.gemini38QuotaW <= 0.0001) {
+        } else if (item.gemini38QuotaW < 0.005) {
             item.status = QStringLiteral("EXHAUSTED");
         } else if (item.isBlocked) {
             item.status = QStringLiteral("BLOCKED");
@@ -558,7 +562,9 @@ void AccountModel::onSecondTick() {
         if (g4R != acc.gemini4Reset) { acc.gemini4Reset = g4R; anyChanged = true; }
 
         if (acc.has5h) {
-            const QString g38R5 = format5hCountdown(acc.gemini38Reset5hTs, nowEpoch);
+            const QString g38R5 = (acc.gemini38QuotaW < 0.005)
+                ? QStringLiteral("用尽")
+                : format5hCountdown(acc.gemini38Reset5hTs, nowEpoch);
             if (g38R5 != acc.gemini38Reset5h) { acc.gemini38Reset5h = g38R5; anyChanged = true; }
         }
 
@@ -566,7 +572,9 @@ void AccountModel::onSecondTick() {
         if (g38RW != acc.gemini38ResetW) { acc.gemini38ResetW = g38RW; anyChanged = true; }
 
         if (acc.has5h) {
-            const QString cR5 = format5hCountdown(acc.claudeReset5hTs, nowEpoch);
+            const QString cR5 = (acc.claudeQuotaW < 0.005)
+                ? QStringLiteral("用尽")
+                : format5hCountdown(acc.claudeReset5hTs, nowEpoch);
             if (cR5 != acc.claudeReset5h) { acc.claudeReset5h = cR5; anyChanged = true; }
         }
 
@@ -984,8 +992,8 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
     }
 
     if (m_statusTab == QStringLiteral("usable")) {
-        // 可用: 未风控且拥有周配额
-        if (isBlocked || gW <= 0.0001) return false;
+        // 可用: 未风控且拥有可用周配额 (>= 0.5%)
+        if (isBlocked || gW < 0.005) return false;
     } else if (m_statusTab == QStringLiteral("plentiful")) {
         // 充足: 综合配额充沛 (Gemini 周度 >= 50% 且 Claude 周度 >= 50%)
         if (isBlocked) return false;
@@ -993,12 +1001,12 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
         if (hasC55 && cW < 0.50) return false;
     } else if (m_statusTab == QStringLiteral("warning")) {
         // 告急: 处于低水位但未彻底耗尽 (仅对拥有 5H 桶的 Pro 账号判定 5H 低水位，避免误伤 FREE 账号)
-        if (gW <= 0.0001) return false;
+        if (gW < 0.005) return false;
         const bool isLow = (gW < 0.15 || cW < 0.15 || (has5h && (g5h < 0.10 || c5h < 0.10)));
         if (!isLow) return false;
     } else if (m_statusTab == QStringLiteral("exhausted")) {
-        // 枯竭: 周配额彻底耗尽
-        if (gW > 0.0001) return false;
+        // 枯竭: 周配额耗尽 (< 0.5% 即 0%)
+        if (gW >= 0.005) return false;
     }
 
     // 2. 搜索框模糊过滤

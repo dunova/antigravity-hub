@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v4.1.0 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v4.1.1 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,26 +9,27 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.1.0-F59E0B?style=flat-square&logo=github" alt="Release v4.1.0" />
+  <img src="https://img.shields.io/badge/Release-v4.1.1-F59E0B?style=flat-square&logo=github" alt="Release v4.1.1" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-111827?style=flat-square&logo=linux" alt="Linux and macOS" />
   <img src="https://img.shields.io/badge/Desktop-C%2B%2B17%20%2B%20Qt6%20QML-41CD52?style=flat-square&logo=qt" alt="Qt6 QML" />
   <img src="https://img.shields.io/badge/Mode-Zero%20Proxy%20%7C%20Native%20Keychain-0EA5E9?style=flat-square" alt="Zero Proxy" />
-  <img src="https://img.shields.io/badge/Tests-57%20Automated%20Passing-10B981?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-58%20Automated%20Passing-10B981?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/License-MIT-2563EB?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v4.1.0 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v4.1.1 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub v4.1.0 原生桌面客户端实拍（全合成演示账号）：独立「类别」列一键区分付费 PRO / 免费 PRO / FREE，对齐官方 Gemini 与 Claude 双配额列，FREE 账号单轨周限清爽呈现，支持最小默认宽度与高度自适应</em>
+  <em>图：Antigravity Hub v4.1.1 原生桌面客户端实拍（全合成演示账号）：独立「类别」列一键区分付费 PRO / 免费 PRO / FREE，对齐官方 Gemini 与 Claude 双配额列，FREE 账号单轨周限清爽呈现，支持最小默认宽度与高度自适应</em>
 </p>
 
 ---
 
-## 🔥 v4.1.0 重要更新（Mac Web 端全功能同步 + 真随机错峰预热）
+## 🔥 v4.1.0 / v4.1.1 重要更新（Mac Web 端同步 + 真随机预热 + 周耗尽短路用尽）
 
+- **周额度不足 0.5% 即时短路「用尽」（v4.1.1）**：针对账号周额度仅余极微小数（如 `0.45%` 在界面四舍五入显示 `W: 0%`）而官方 API 仍返回 `5H: 100%` 并附带 5H 倒计时的矛盾场景，Linux Qt6 桌面端与 macOS Web 端统一步调：凡 `W < 0.5%` 的桶，其 `5H` 行强制短路归零并显示 `用尽`（英文界面 `Depleted`），不再误导展示 `100%` 或 5H 倒计时；预热引擎同步跳过 `< 0.5%` 枯竭周桶（保留同号可用双桶如 Claude 正常预热），轮转器内部仍保留 `EXHAUSTED_EPS = 0.0001` 精确榨干逻辑；
 - **真实 1-token 随机错峰预热引擎**：修复 `v1internal:generateContent` 缺少 `project` 字段及模型 ID 失配导致预热静默失败的问题；后台随机打散顺序向未激活的健康 PRO 账号发起真实极简调用（2 至 11 Tokens），锁死 Google 官方 5H 倒计时时钟；仅具备 5H 窗口的 PRO 账号参与预热，跳过 `FREE` 账号；
 - **彻底告别「满额」遮蔽真实倒计时**：当 5H 配额因 1-token 预热触发仍为 `100%` 时，Linux Qt6 客户端与 macOS Web 端均直接透传并实时渲染真实 5H 倒计时（如 `4h 58m`），未激活周期显示 `待预热`，仅 `FREE` 无 5H 窗口账号单轨居中呈现周额度；
 - **macOS Neo-Brutalism Web 端 100% 功能同步（保留原视觉）**：`hub/server.py` 补齐顶栏活跃账号三档微标、控制栏三档快筛胶囊（`付费 PRO` / `免费 PRO` / `FREE`）与状态/搜索组合过滤、隐藏已枯竭切换、底部三档汇总，修复 `FREE` 账号 `quota_5h=null` 引发外部池同步崩溃，并严苛过滤仅含幽灵 `3p-5h` 而无 `gemini-5h` 的边缘账号防误判。
@@ -178,7 +179,7 @@ cd antigravity-hub
 # 编译原生二进制（产物位于 build/antigravity-hub）
 ./bin/build
 
-# 运行 31 项 Qt6 离屏单元测试 + 26 项 Python 自动化回归测试
+# 运行 31 项 Qt6 离屏单元测试 + 27 项 Python 自动化回归测试
 ./bin/test
 python3 -m unittest discover -s tests -p "test_*.py" -v
 ```

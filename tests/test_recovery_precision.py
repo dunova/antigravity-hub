@@ -10,7 +10,7 @@ test_recovery_precision.py — v3.0.6 会话精准唤醒与整数百分比排版
 4. 后代 subagent 为 RUNNING 时，其根会话自动纳入唤醒；
 5. pre_switch_snapshot 空列表 [] 严格锁定 0 唤醒，绝不回退重扫历史已完成会话；
 6. 无 LS 回退路径去除 open_panes / 残留 SUBAGENT_STATE_ALIVE 豁免，正常收尾会话绝不误唤醒；
-7. hub.server 百分比全量四舍五入取整，且 0.4% 仅显示 0% 不误判周枯竭，0.0 正确熔断 0% 周枯竭。
+7. hub.server 百分比全量四舍五入取整，且 <0.5% (显示 0%) 及 0.0 统一触发 5H 归零与「用尽」短路；>=1% 正常保留倒计时。
 """
 
 import os
@@ -205,7 +205,7 @@ class TestRecoveryPrecision(unittest.TestCase):
         self.assertEqual(found_ids, [sid_in_progress])
 
     def test_integer_percentage_rounding_and_depletion_gate(self):
-        """验证四舍五入取整函数及 Web Hub HTML 渲染：消除全部小数点，且 0.4% 显示 0% 不误报周枯竭"""
+        """验证四舍五入取整函数及 Web Hub HTML 渲染：消除小数点，且 <0.5% (0%) 统一短路 5H 为 0% + 用尽"""
         self.assertEqual(format_quota_int_pct(0.135), 14)
         self.assertEqual(format_quota_int_pct(0.145), 15)
         self.assertEqual(format_quota_int_pct(0.2757), 28)
@@ -218,17 +218,27 @@ class TestRecoveryPrecision(unittest.TestCase):
         self.assertIn(">28%<", g4_html)
         self.assertNotIn("27.6%", g4_html)
 
-        # 0.4% 微量剩余：百分比四舍五入显示 0%，但不触发周枯竭 0% 归零联动
+        # >= 0.5% (如 1%): 5H 正常显示真实百分比与倒计时，不短路用尽
+        one_pct_html = render_quota_cell(0.943, 0.01, "4h 55m", "4d 19h", model_type="gemini")
+        self.assertIn(">94%<", one_pct_html)
+        self.assertIn(">1%<", one_pct_html)
+        self.assertIn("4h 55m", one_pct_html)
+        self.assertNotIn("用尽", one_pct_html)
+
+        # 0.4% (< 0.5%，显示 0%): 与 0.0 同样触发 5H 短路 0% + 用尽（不再展示 5H 100% 或倒计时）
         low_html = render_quota_cell(0.943, 0.004, "4h 55m", "4d 19h", model_type="gemini")
-        self.assertIn(">94%<", low_html)
         self.assertIn(">0%<", low_html)
-        self.assertNotIn("周枯竭", low_html)
+        self.assertIn("用尽", low_html)
+        self.assertNotIn(">94%<", low_html)
+        self.assertNotIn("4h 55m", low_html)
         self.assertNotIn("0.0%", low_html)
 
-        # 真正 0.0 周耗尽：显示 0% + 周枯竭
+        # 真正 0.0 周耗尽：显示 0% + 用尽
         zero_html = render_quota_cell(0.8, 0.0, "4h 55m", "4d 19h", model_type="claude")
         self.assertIn(">0%<", zero_html)
-        self.assertIn("周枯竭", zero_html)
+        self.assertIn("用尽", zero_html)
+        self.assertNotIn(">80%<", zero_html)
+        self.assertNotIn("4h 55m", zero_html)
         self.assertNotIn("0.0%", zero_html)
 
     def test_switch_account_uses_snapshot_without_rescan_and_async_recovery(self):

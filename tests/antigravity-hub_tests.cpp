@@ -85,7 +85,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.1.1"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1394,9 +1394,9 @@ void AntigravityHubTests::accountListViewVisualDenoisingInvariants() {
     QVERIFY2(!content.contains(QStringLiteral("(周额度)")),
              "MANDATORY DENOISING VIOLATION: '(周额度)' found in AccountListView.qml");
 
-    // 3. Weekly depletion short-circuit to 0% & Weekly Depleted / 周耗尽, zero decimal pct formats
-    QVERIFY2(content.contains(QStringLiteral("qsTr(\"Weekly Depleted\")")) || content.contains(QStringLiteral("qsTr(\"周耗尽\")")),
-             "AccountListView.qml missing Weekly Depleted / 周耗尽 short-circuit handler");
+    // 3. Weekly depletion short-circuit to 0% & Weekly Depleted / 用尽, zero decimal pct formats
+    QVERIFY2(content.contains(QStringLiteral("qsTr(\"Weekly Depleted\")")) || content.contains(QStringLiteral("qsTr(\"周耗尽\")")) || content.contains(QStringLiteral("qsTr(\"用尽\")")),
+             "AccountListView.qml missing Weekly Depleted / 用尽 short-circuit handler");
     QVERIFY2(!content.contains(QStringLiteral("toFixed(1)")),
              "MANDATORY INTEGER PCT VIOLATION: .toFixed(1) found in AccountListView.qml");
     QVERIFY2(!content.contains(QStringLiteral("\"0.0%\"")),
@@ -2272,6 +2272,26 @@ void AntigravityHubTests::v410PrewarmCountdownNeverMaskedAsFullInvariants() {
     unwarmedPro["claude"] = uCla;
     accountsObj["unwarmedpro@example.com"] = unwarmedPro;
 
+    // 3. Sub-0.5% weekly quota (0.0045 -> 0%) PRO account: MUST short-circuit 5H to 0.0 + "用尽" and hide 5h countdown!
+    QJsonObject subHalfPro;
+    subHalfPro["email"] = "subhalfpro@example.com";
+    subHalfPro["has_5h"] = true;
+    subHalfPro["claude_version"] = "5.5";
+    subHalfPro["claude_models"] = QJsonArray({QStringLiteral("claude-sonnet-5-5-low")});
+    QJsonObject sGem;
+    sGem["quota_5h"] = 1.0;
+    sGem["quota_weekly"] = 0.0045;
+    sGem["reset_time_5h"] = future15000Iso;
+    sGem["reset_time_weekly"] = futureWkIso;
+    subHalfPro["gemini"] = sGem;
+    QJsonObject sCla;
+    sCla["quota_5h"] = 1.0;
+    sCla["quota_weekly"] = 0.50;
+    sCla["reset_time_5h"] = future17940Iso;
+    sCla["reset_time_weekly"] = futureWkIso;
+    subHalfPro["claude"] = sCla;
+    accountsObj["subhalfpro@example.com"] = subHalfPro;
+
     QJsonObject rootDoc;
     rootDoc["active_email"] = "warmedpro@example.com";
     rootDoc["accounts"] = accountsObj;
@@ -2282,11 +2302,12 @@ void AntigravityHubTests::v410PrewarmCountdownNeverMaskedAsFullInvariants() {
     file.close();
 
     AccountModel model;
-    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.rowCount(), 3);
 
     const int rowWarmed = model.findIndexByEmail("warmedpro@example.com");
     const int rowUnwarmed = model.findIndexByEmail("unwarmedpro@example.com");
-    QVERIFY(rowWarmed >= 0 && rowUnwarmed >= 0);
+    const int rowSubHalf = model.findIndexByEmail("subhalfpro@example.com");
+    QVERIFY(rowWarmed >= 0 && rowUnwarmed >= 0 && rowSubHalf >= 0);
 
     const QString gReset5hWarmed = model.data(model.index(rowWarmed, 0), AccountModel::Gemini38Reset5hRole).toString();
     const QString cReset5hWarmed = model.data(model.index(rowWarmed, 0), AccountModel::ClaudeReset5hRole).toString();
@@ -2298,7 +2319,12 @@ void AntigravityHubTests::v410PrewarmCountdownNeverMaskedAsFullInvariants() {
     const QString gReset5hUnwarmed = model.data(model.index(rowUnwarmed, 0), AccountModel::Gemini38Reset5hRole).toString();
     QCOMPARE(gReset5hUnwarmed, QStringLiteral("待预热"));
 
-    // Verify 1s tick keeps countdown and never snaps back to "满额"
+    QCOMPARE(model.data(model.index(rowSubHalf, 0), AccountModel::Gemini38Quota5hRole).toDouble(), 0.0);
+    QCOMPARE(model.data(model.index(rowSubHalf, 0), AccountModel::Gemini38Reset5hRole).toString(), QStringLiteral("用尽"));
+    QCOMPARE(model.data(model.index(rowSubHalf, 0), AccountModel::StatusRole).toString(), QStringLiteral("EXHAUSTED"));
+    QVERIFY(model.data(model.index(rowSubHalf, 0), AccountModel::ClaudeReset5hRole).toString().contains(QStringLiteral("h ")));
+
+    // Verify 1s tick keeps countdown and never snaps back to "满额", and preserves "用尽" for <0.5% weekly
     QMetaObject::invokeMethod(&model, "onSecondTick", Qt::DirectConnection);
     const QString gResetAfterTick = model.data(model.index(rowWarmed, 0), AccountModel::Gemini38Reset5hRole).toString();
     const QString cResetAfterTick = model.data(model.index(rowWarmed, 0), AccountModel::ClaudeReset5hRole).toString();
@@ -2306,6 +2332,7 @@ void AntigravityHubTests::v410PrewarmCountdownNeverMaskedAsFullInvariants() {
     QVERIFY(cResetAfterTick.contains(QStringLiteral("h ")));
     QVERIFY(gResetAfterTick != QStringLiteral("满额"));
     QVERIFY(cResetAfterTick != QStringLiteral("满额"));
+    QCOMPARE(model.data(model.index(rowSubHalf, 0), AccountModel::Gemini38Reset5hRole).toString(), QStringLiteral("用尽"));
 
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);

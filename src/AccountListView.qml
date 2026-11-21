@@ -162,7 +162,7 @@ Item {
         var total = (typeof accountModel.rowCount === "function") ? accountModel.rowCount() : (accountModel.count || 0);
         for (var i = 0; i < total; ++i) {
             var acc = (typeof accountModel.getAccount === "function") ? accountModel.getAccount(i) : (accountModel.get ? accountModel.get(i) : null);
-            if (acc && !acc.isBlocked && (acc.gemini38QuotaW > 0.0001 || acc.claudeQuotaW > 0.0001 || acc.gemini4Quota > 0.0001)) {
+            if (acc && !acc.isBlocked && (acc.gemini38QuotaW >= 0.005 || acc.claudeQuotaW >= 0.005 || acc.gemini4Quota >= 0.005)) {
                 count++;
             }
         }
@@ -1535,37 +1535,37 @@ Item {
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
                                         radius: 0
-                                        width: (model.gemini38QuotaW <= 0.0001 || model.gemini38Quota5h <= 0.0001) ? 0 :
+                                        width: (model.gemini38QuotaW < 0.005 || model.gemini38Quota5h <= 0.0001) ? 0 :
                                                Math.min(parent.width, Math.max(4, parent.width * (model.gemini38Quota5h || 0.0)))
-                                        color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                        color: (model.gemini38QuotaW < 0.005) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                                accountListView.getQuotaColor(model.gemini38Quota5h)
                                     }
                                 }
 
                                 Text {
                                     Layout.preferredWidth: 32
-                                    text: (model.gemini38QuotaW <= 0.0001) ? "0%" :
+                                    text: (model.gemini38QuotaW < 0.005) ? "0%" :
                                           accountListView.formatQuotaPct(model.gemini38Quota5h)
                                     font.family: theme.monoFont
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
-                                    color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                    color: (model.gemini38QuotaW < 0.005) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            accountListView.getQuotaColor(model.gemini38Quota5h)
                                 }
 
                                 Text {
                                     Layout.preferredWidth: 52
                                     Layout.leftMargin: 2
-                                    text: (model.gemini38QuotaW <= 0.0001) ? qsTr("周耗尽") :
+                                    text: (model.gemini38QuotaW < 0.005) ? qsTr("用尽") :
                                           ((model.gemini38Reset5h === "待预热" || model.gemini38Reset5h === "满额" || model.gemini38Reset5h === "--" || !model.gemini38Reset5h) ? qsTr("待预热") :
                                               ((model.gemini38Reset5h === "即将恢复") ? qsTr("即将恢复") : model.gemini38Reset5h))
                                     font.family: theme.monoFont
-                                    font.pixelSize: (model.gemini38QuotaW <= 0.0001) ? 11 : 12
-                                    font.weight: (model.gemini38QuotaW <= 0.0001) ? Font.Bold : Font.DemiBold
+                                    font.pixelSize: (model.gemini38QuotaW < 0.005) ? 11 : 12
+                                    font.weight: (model.gemini38QuotaW < 0.005) ? Font.Bold : Font.DemiBold
                                     renderType: Text.NativeRendering
-                                    color: (model.gemini38QuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                    color: (model.gemini38QuotaW < 0.005) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF"))
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideRight
@@ -1611,7 +1611,7 @@ Item {
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
                                         radius: 0
-                                        width: (model.gemini38QuotaW <= 0.0001) ? 0 :
+                                        width: (model.gemini38QuotaW < 0.005) ? 0 :
                                                Math.min(parent.width, Math.max(4, parent.width * (model.gemini38QuotaW || 0.0)))
                                         color: accountListView.getQuotaColor(model.gemini38QuotaW)
                                     }
@@ -1718,37 +1718,37 @@ Item {
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
                                         radius: 0
-                                        width: (model.claudeQuotaW <= 0.0001 || model.claudeQuota5h <= 0.0001) ? 0 :
+                                        width: (model.claudeQuotaW < 0.005 || model.claudeQuota5h <= 0.0001) ? 0 :
                                                Math.min(parent.width, Math.max(4, parent.width * (model.claudeQuota5h || 0.0)))
-                                        color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                        color: (model.claudeQuotaW < 0.005) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                                accountListView.getQuotaColor(model.claudeQuota5h)
                                     }
                                 }
 
                                 Text {
                                     Layout.preferredWidth: 32
-                                    text: (model.claudeQuotaW <= 0.0001) ? "0%" :
+                                    text: (model.claudeQuotaW < 0.005) ? "0%" :
                                           accountListView.formatQuotaPct(model.claudeQuota5h)
                                     font.family: theme.monoFont
                                     font.pixelSize: 12
                                     font.weight: Font.DemiBold
                                     renderType: Text.NativeRendering
                                     horizontalAlignment: Text.AlignRight
-                                    color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                    color: (model.claudeQuotaW < 0.005) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            accountListView.getQuotaColor(model.claudeQuota5h)
                                 }
 
                                 Text {
                                     Layout.preferredWidth: 52
                                     Layout.leftMargin: 2
-                                    text: (model.claudeQuotaW <= 0.0001) ? qsTr("周耗尽") :
+                                    text: (model.claudeQuotaW < 0.005) ? qsTr("用尽") :
                                           ((model.claudeReset5h === "待预热" || model.claudeReset5h === "满额" || model.claudeReset5h === "--" || !model.claudeReset5h) ? qsTr("待预热") :
                                               ((model.claudeReset5h === "即将恢复") ? qsTr("即将恢复") : model.claudeReset5h))
                                     font.family: theme.monoFont
-                                    font.pixelSize: (model.claudeQuotaW <= 0.0001) ? 11 : 12
-                                    font.weight: (model.claudeQuotaW <= 0.0001) ? Font.Bold : Font.DemiBold
+                                    font.pixelSize: (model.claudeQuotaW < 0.005) ? 11 : 12
+                                    font.weight: (model.claudeQuotaW < 0.005) ? Font.Bold : Font.DemiBold
                                     renderType: Text.NativeRendering
-                                    color: (model.claudeQuotaW <= 0.0001) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
+                                    color: (model.claudeQuotaW < 0.005) ? ((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a") :
                                            ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : ((theme && theme.mode === "light") ? "#0F172A" : "#FFFFFF"))
                                     horizontalAlignment: Text.AlignRight
                                     elide: Text.ElideRight
@@ -1794,7 +1794,7 @@ Item {
                                         anchors.top: parent.top
                                         anchors.bottom: parent.bottom
                                         radius: 0
-                                        width: (model.claudeQuotaW <= 0.0001) ? 0 :
+                                        width: (model.claudeQuotaW < 0.005) ? 0 :
                                                Math.min(parent.width, Math.max(4, parent.width * (model.claudeQuotaW || 0.0)))
                                         color: accountListView.getQuotaColor(model.claudeQuotaW)
                                     }

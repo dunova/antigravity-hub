@@ -984,7 +984,7 @@ class AntigravityPhysicalManager:
         for bkt in self._buckets_for_warmup_mode(warmup_mode, model_override=model_override):
             bkt_dict = acc.get(bkt) or {}
             w_q = _safe_float(bkt_dict.get("quota_weekly", 1.0), 1.0)
-            if w_q <= 0.0001:
+            if w_q < 0.005:
                 continue
             cd_until = int(sched_entry.get(f"{bkt}_cooldown_until", 0) or 0)
             if not ignore_cooldown and cd_until > now_ts:

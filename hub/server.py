@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "4.1.0"
-__canonical_version_tag__ = "20261121-v4.1.0-MAC_WEB_PARITY_AND_REAL_STAGGERED_PREWARM"
-__last_updated__ = "2026-11-21 11:15:00"
-__canonical_doctrine__ = "Antigravity Hub v4.1.0：Git Mac Web端全功能同步、真实1-token随机错峰预热与Google锁定倒计时全端透传"
+__version__ = "4.1.1"
+__canonical_version_tag__ = "20261121-v4.1.1-SUB_HALF_PERCENT_WEEKLY_DEPLETION_SHORTCIRCUIT"
+__last_updated__ = "2026-11-21 11:46:00"
+__canonical_doctrine__ = "Antigravity Hub v4.1.1：周额度低于 0.5%（显示 0%）双端统一短路为用尽，隐藏 5H 倒计时并跳过无效预热"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -2023,13 +2023,13 @@ def render_quota_cell(h5_pct: Optional[float], weekly_pct: float, reset_5h_info:
     """
 
     raw_5h = max(0.0, min(1.0, float(h5_pct if h5_pct is not None else 0.0)))
-    is_weekly_exhausted = (raw_w <= 0.0001)
+    is_weekly_exhausted = (raw_w < 0.005)
     val_5h = 0 if is_weekly_exhausted else format_quota_int_pct(raw_5h)
     c_5h = "#16A34A" if val_5h >= 50 else ("#EA580C" if val_5h >= 15 else "#DC2626")
 
     if is_weekly_exhausted:
-        tip = f"周度总配额已耗尽 (0%)，5小时配额自然归零，等待周度重置: {reset_weekly_info}"
-        reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">周枯竭</span>'
+        tip = f"周度总配额已用尽 (0%)，5小时配额短路归零，等待周度重置: {reset_weekly_info}"
+        reset_5h_html = f'<span class="q-reset q-reset-exhausted font-mono" title="{tip}">用尽</span>'
     elif reset_5h_info and reset_5h_info not in ("--", "已就绪", "就绪", "满额") and "d" not in reset_5h_info:
         reset_5h_html = f'<span class="q-reset q-reset-5h font-mono" title="5小时滑动配额真实倒计时: {reset_5h_info}">{reset_5h_info}</span>'
     else:
@@ -2228,8 +2228,8 @@ def render_table_rows(include_oob: bool = False) -> str:
             g_reset_5h = ""
         else:
             raw_g5h = acc.get("gemini", {}).get("quota_5h")
-            g_5h = 0.0 if g_w <= 0.0001 else _safe_float(raw_g5h, 1.0)
-            g_reset_5h = _format_live_5h_reset_str(acc.get("gemini", {}).get("reset_time_5h", ""), now)
+            g_5h = 0.0 if g_w < 0.005 else _safe_float(raw_g5h, 1.0)
+            g_reset_5h = "" if g_w < 0.005 else _format_live_5h_reset_str(acc.get("gemini", {}).get("reset_time_5h", ""), now)
         g_reset_w = format_reset_time(acc.get("gemini", {}).get("reset_time_weekly", acc.get("gemini", {}).get("reset_time", "")))
         g_cell = render_quota_cell(g_5h, g_w, g_reset_5h, g_reset_w, model_type="gemini", has_5h=acc_has_5h)
 
@@ -2240,8 +2240,8 @@ def render_table_rows(include_oob: bool = False) -> str:
             c_reset_5h = ""
         else:
             raw_c5h = acc.get("claude", {}).get("quota_5h")
-            c_5h = 0.0 if c_w <= 0.0001 else _safe_float(raw_c5h, 1.0)
-            c_reset_5h = _format_live_5h_reset_str(acc.get("claude", {}).get("reset_time_5h", ""), now)
+            c_5h = 0.0 if c_w < 0.005 else _safe_float(raw_c5h, 1.0)
+            c_reset_5h = "" if c_w < 0.005 else _format_live_5h_reset_str(acc.get("claude", {}).get("reset_time_5h", ""), now)
         c_reset_w = format_reset_time(acc.get("claude", {}).get("reset_time_weekly", acc.get("claude", {}).get("reset_time", "")))
         c_cell = render_quota_cell(c_5h, c_w, c_reset_5h, c_reset_w, model_type="claude", claude_ver=claude_ver, has_5h=acc_has_5h)
 
@@ -5629,17 +5629,17 @@ def render_dashboard_html() -> str:
                 }} else if (currentFilter === 'ver46') {{
                     matchTab = (cver === '4.6');
                 }} else if (currentFilter === 'usable') {{
-                    matchTab = (gw > 0.0001);
+                    matchTab = (gw >= 0.005);
                 }} else if (currentFilter === 'healthy') {{
                     matchTab = (gw >= 0.5 && cw >= 0.5);
                 }} else if (currentFilter === 'warning') {{
-                    matchTab = (gw < 0.15 || cw < 0.15 || (g5 >= 0 && g5 < 0.15));
+                    matchTab = (gw >= 0.005 && (gw < 0.15 || cw < 0.15 || (g5 >= 0 && g5 < 0.15)));
                 }} else if (currentFilter === 'exhausted') {{
-                    matchTab = (gw <= 0.0001);
+                    matchTab = (gw < 0.005);
                 }}
 
                 const matchTier = !currentTierFilter || (tier === currentTierFilter);
-                const matchHideExhausted = !hideExhausted || (gw > 0.0001);
+                const matchHideExhausted = !hideExhausted || (gw >= 0.005);
 
                 if (matchQuery && matchTab && matchTier && matchHideExhausted) {{
                     matchedRows.push(tr);

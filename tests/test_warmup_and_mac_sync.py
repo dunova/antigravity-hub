@@ -279,6 +279,26 @@ class TestWarmupAndMacSync(unittest.TestCase):
         self.assertIn("待预热", html_unwarmed)
         self.assertNotIn("满额", html_unwarmed)
 
+    def test_sub_half_percent_weekly_shorts_5h_and_skips_warmup(self):
+        """周额度 <0.5% (显示 0%) 时，5H 短路显示 0% 用尽且不显示倒计时，并跳过该桶预热而保留另一健康桶"""
+        html_dep = render_quota_cell(1.0, 0.0045, "4h 39m", "5d 12h", model_type="gemini", has_5h=True)
+        self.assertIn("用尽", html_dep)
+        self.assertIn(">0%<", html_dep)
+        self.assertNotIn("100%", html_dep)
+        self.assertNotIn("4h 39m", html_dep)
+
+        mgr = AntigravityPhysicalManager(data_dir=self.data_dir)
+        acc = {
+            "email": "partial_demo@example.com",
+            "tier": "PAID_PRO",
+            "has_5h": True,
+            "refresh_token": "rt_part",
+            "gemini": {"quota_5h": 1.0, "quota_weekly": 0.0045, "reset_time_5h": ""},
+            "claude": {"quota_5h": 1.0, "quota_weekly": 0.50, "reset_time_5h": ""},
+        }
+        pending = mgr._account_pending_warmup_buckets(acc, {}, int(time.time()), warmup_mode="dual")
+        self.assertEqual(pending, ["claude"])
+
     def test_mac_web_dashboard_parity_and_zero_lan_leak(self):
         """验证 Git Mac Web 看板具备活跃类别徽标与三档快筛，且无任何内网 IP 硬编码泄漏"""
         sample_accounts = {
