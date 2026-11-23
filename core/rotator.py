@@ -183,7 +183,7 @@ class AntigravityQuotaRotator:
             if self.exhausted_cooldown_map.get(email, 0) > now_ts:
                 continue
 
-            if acc.get("validation_blocked") or acc.get("disabled"):
+            if acc.get("validation_blocked") or acc.get("region_restricted") or acc.get("disabled"):
                 continue
 
             if not _has_usable_refresh_token(acc):

@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v4.2.0 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v4.3.0 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,28 +9,29 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.2.0-F59E0B?style=flat-square&logo=github" alt="Release v4.2.0" />
+  <img src="https://img.shields.io/badge/Release-v4.3.0-F59E0B?style=flat-square&logo=github" alt="Release v4.3.0" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-111827?style=flat-square&logo=linux" alt="Linux and macOS" />
   <img src="https://img.shields.io/badge/Desktop-C%2B%2B17%20%2B%20Qt6%20QML-41CD52?style=flat-square&logo=qt" alt="Qt6 QML" />
   <img src="https://img.shields.io/badge/Mode-Zero%20Proxy%20%7C%20Native%20Keychain-0EA5E9?style=flat-square" alt="Zero Proxy" />
-  <img src="https://img.shields.io/badge/Tests-58%20Automated%20Passing-10B981?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/Tests-60%20Automated%20Passing-10B981?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/License-MIT-2563EB?style=flat-square" alt="License" />
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v4.2.0 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v4.3.0 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub 原生桌面客户端实拍（全合成演示账号）：独立「类别」列一键区分付费 PRO / 免费 PRO / FREE，对齐官方 Gemini 与 Claude 双配额列，FREE 账号单轨周限清爽呈现，v4.2.0 进一步收窄至 720px 最小默认宽度</em>
+  <em>图：Antigravity Hub 原生桌面客户端实拍（全合成演示账号）：独立「类别」列一键区分付费 PRO / 免费 PRO / FREE，对齐官方 Gemini 与 Claude 双配额列，FREE 账号单轨周限清爽呈现，支持 720px 最窄默认宽度与底层地区受限自动检测</em>
 </p>
 
 ---
 
-## 🔥 v4.2.0 重要更新（720px 超紧凑布局 + 移除冗余状态列与 TopG + 预热开关收口至设置）
+## 🔥 v4.3.0 重要更新（底层关联地区受限检测 + 红旗标注与一键解锁 + 20 账号分页与同风格滚动条）
 
-- **720px 默认最小紧凑宽度与双配额条压缩（v4.2.0）**：删除与「操作」列功能重叠的「状态」列（保留复选框与数字序号 `#`），压缩 Gemini 与 Claude 进度条长度及列宽（单列从 `234px` 降至 `182px`），整体内容宽度从 `896px` 压缩至 `696px`，默认启动宽度锁定最小宽度 **`720px`**（直降 `200px`），同时重新排布顶栏、筛选栏与底部状态栏在 `720px` 下的间距与字号，实现零截断零重叠且支持手动自由拉伸；
-- **删除 TopG，预热开关统一收口至设置（v4.2.0）**：Linux Qt6 桌面端与 macOS Web 端同步移除 `TopG` 功能及顶栏/行内全部手动「预热」按钮，顶栏精简至 4 个核心胶囊；后台自动随机错峰预热统一通过「设置」内的「自动随机预热」开关控制（默认开启，打开时即时触发后台排班校准，关闭则暂停）；
+- **毫秒级关联地区受限检测与自动复权（v4.3.0）**：刷新配额时并发调用 Google 官方 `v1internal:loadCodeAssist` 探测账号底层关联地区资格；若命中 `UNSUPPORTED_LOCATION`（如关联地区为中国、无法使用 Antigravity 的账号），立即在账号名后标注高对比矢量红旗 🇨🇳，右侧操作按钮切换为红色「**解锁**」（点击直达带账号预选的 Google 官方地区修改申请页 `policies.google.com/country-association-form`），且自动轮转看门狗与后台预热引擎同步隔离受限账号；地区修改审核通过后下次刷新自动移除红旗并恢复切换；
+- **最窄默认窗宽、15 行自适应高度、单页 20 账号与同风格右侧滚动条（v4.3.0）**：启动自动锁定 `720px` 最窄宽度，高度随账号数量自动贴合至最长 15 行（超屏或超 15 行自动出现与 UI 风格一致的零圆角右侧滚动条，不遮挡操作按钮），双端分页步长同步升级至每页 20 个账号；
+- **720px 默认最小紧凑宽度与双配额条压缩（v4.2.0）**：删除与「操作」列功能重叠的「状态」列（保留复选框与数字序号 `#`），压缩 Gemini 与 Claude 进度条长度及列宽（单列从 `234px` 降至 `182px`），整体内容宽度从 `896px` 压缩至 `696px`，默认启动宽度锁定最小宽度 **`720px`**（直降 `200px`），同时删除 `TopG` 与手动「预热」按钮并将预热开关收口至「设置」；
 - **周额度不足 0.5% 即时短路「用尽」（v4.1.1）**：针对账号周额度仅余极微小数（如 `0.45%` 在界面四舍五入显示 `W: 0%`）而官方 API 仍返回 `5H: 100%` 并附带 5H 倒计时的矛盾场景，Linux Qt6 桌面端与 macOS Web 端统一步调：凡 `W < 0.5%` 的桶，其 `5H` 行强制短路归零并显示 `用尽`（英文界面 `Depleted`），不再误导展示 `100%` 或 5H 倒计时；预热引擎同步跳过 `< 0.5%` 枯竭周桶（保留同号可用双桶如 Claude 正常预热），轮转器内部仍保留 `EXHAUSTED_EPS = 0.0001` 精确榨干逻辑；
 - **真实 1-token 随机错峰预热与 Mac Web 端同步（v4.1.0）**：后台随机打散顺序向未激活的健康 PRO 账号发起真实极简调用（2 至 11 Tokens）锁死 Google 官方 5H 倒计时时钟，5H 满额时直接透传并实时渲染真实倒计时（如 `4h 58m`），macOS Neo-Brutalism Web 端全功能同步。
 
@@ -131,7 +132,7 @@ antigravity-hub/
 | :--- | :--- | :--- |
 | `j` / `↓` | 下一账号 | 向下移动当前焦点行 |
 | `k` / `↑` | 上一账号 | 向上移动当前焦点行 |
-| `PgUp` / `PgDn` | 快速翻页 | 按每页 15 个账号步长翻页 |
+| `PgUp` / `PgDn` | 快速翻页 | 按每页 20 个账号步长翻页 |
 | `Enter` | 热切账号 | 毫秒级原子切换至选中账号，不中断在途会话 |
 | `/` | 聚焦搜索 | 聚焦搜索栏，支持按账号名及 `paid`、`pro`、`free`、`5.5` 等关键词筛选 |
 | `m` | 隐私打码 | 一键在明文与脱敏打码（`a***ev`）间切换，截图分享零泄露 |
@@ -177,7 +178,7 @@ cd antigravity-hub
 # 编译原生二进制（产物位于 build/antigravity-hub）
 ./bin/build
 
-# 运行 31 项 Qt6 离屏单元测试 + 27 项 Python 自动化回归测试
+# 运行 32 项 Qt6 离屏单元测试 + 28 项 Python 自动化回归测试
 ./bin/test
 python3 -m unittest discover -s tests -p "test_*.py" -v
 ```

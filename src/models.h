@@ -30,6 +30,9 @@ struct AccountItem {
     bool isActive = false;
     bool isBlocked = false;
     QString validationUrl;
+    bool regionRestricted = false;
+    QString regionCode;         // e.g. "CN" when UNSUPPORTED_LOCATION
+    QString regionChangeUrl;
 
     // Gemini 4
     double gemini4Quota = 0.0;          // 0.0 ~ 1.0
@@ -100,6 +103,9 @@ public:
         HasClaude55Role,
         IsBlockedRole,
         ValidationUrlRole,
+        RegionRestrictedRole,
+        RegionCodeRole,
+        RegionChangeUrlRole,
         TierRole,
         TierDisplayRole,
         TierRankRole,

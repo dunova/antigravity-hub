@@ -80,12 +80,15 @@ private slots:
     // v4.1.0 Prewarm Real Countdown (Never Masked as Full) Invariants
     void v410PrewarmCountdownNeverMaskedAsFullInvariants();
 
+    // v4.3.0 Region Restriction CN Flag, Unlock Action, 20/page & Styled Scrollbar Invariants
+    void v430RegionRestrictionUnlockAndPaginationInvariants();
+
     void cleanupTestCase();
 };
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.2.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.3.0"));
 }
 
 // -----------------------------------------------------------------------------
@@ -2344,6 +2347,107 @@ void AntigravityHubTests::v410PrewarmCountdownNeverMaskedAsFullInvariants() {
     QVERIFY(gResetAfterTick != QStringLiteral("满额"));
     QVERIFY(cResetAfterTick != QStringLiteral("满额"));
     QCOMPARE(model.data(model.index(rowSubHalf, 0), AccountModel::Gemini38Reset5hRole).toString(), QStringLiteral("用尽"));
+
+    if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
+    else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
+}
+
+void AntigravityHubTests::v430RegionRestrictionUnlockAndPaginationInvariants() {
+    // 1. Verify bundled CN vector flag asset & QML invariants (20/page, styled scrollbar, flag + unlock button)
+    QVERIFY2(QFile::exists(QStringLiteral(":/assets/icons/flag-cn.svg")),
+             "v4.3.0 VIOLATION: flag-cn.svg must be bundled in resources.qrc");
+
+    QFile listFile(QStringLiteral(":/AccountListView.qml"));
+    QVERIFY(listFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString listContent = QString::fromUtf8(listFile.readAll());
+    listFile.close();
+
+    QVERIFY2(listContent.contains(QRegularExpression(QStringLiteral(R"(\bpageSize\s*:\s*20\b)"))),
+             "v4.3.0 VIOLATION: AccountListView.qml pageSize must be 20");
+    QVERIFY2(listContent.contains(QStringLiteral("id: regionFlagBadge")),
+             "v4.3.0 VIOLATION: regionFlagBadge missing in AccountListView.qml");
+    QVERIFY2(listContent.contains(QStringLiteral("qrc:/assets/icons/flag-cn.svg")),
+             "v4.3.0 VIOLATION: vector CN flag reference missing in AccountListView.qml");
+    QVERIFY2(listContent.contains(QStringLiteral("id: btnRegionUnlock")),
+             "v4.3.0 VIOLATION: btnRegionUnlock missing in AccountListView.qml");
+    QVERIFY2(listContent.contains(QStringLiteral("openRegionChange")),
+             "v4.3.0 VIOLATION: openRegionChange action missing in AccountListView.qml");
+    QVERIFY2(listContent.contains(QStringLiteral("background: Rectangle")),
+             "v4.3.0 VIOLATION: styled right vertical scrollbar track missing in AccountListView.qml");
+
+    // 2. Verify AccountModel roles, proxy filtering, and BackendController::openRegionChange
+    const QByteArray prevHubDir = qgetenv("ANTIGRAVITY_HUB_DIR");
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QDir(tempDir.path()).mkpath("data");
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    QJsonObject accs;
+    QJsonObject accOk;
+    accOk["email"] = QStringLiteral("ok_user@example.com");
+    accOk["tier"] = QStringLiteral("FREE");
+    accOk["has_5h"] = false;
+    accOk["region_restricted"] = false;
+    QJsonObject gOk;
+    gOk["quota_weekly"] = 0.90;
+    accOk["gemini"] = gOk;
+    accs["ok_user@example.com"] = accOk;
+
+    QJsonObject accCn;
+    accCn["email"] = QStringLiteral("cn_user@example.com");
+    accCn["tier"] = QStringLiteral("FREE");
+    accCn["has_5h"] = false;
+    accCn["region_restricted"] = true;
+    accCn["region_code"] = QStringLiteral("CN");
+    QJsonObject gCn;
+    gCn["quota_weekly"] = 1.0;
+    accCn["gemini"] = gCn;
+    accs["cn_user@example.com"] = accCn;
+
+    QJsonObject rootDoc;
+    rootDoc["active_email"] = QStringLiteral("ok_user@example.com");
+    rootDoc["accounts"] = accs;
+
+    QFile file(tempDir.filePath("data/accounts_hub.json"));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(QJsonDocument(rootDoc).toJson());
+    file.close();
+
+    AccountModel model;
+    QCOMPARE(model.rowCount(), 2);
+
+    const int rowCn = model.findIndexByEmail("cn_user@example.com");
+    const int rowOk = model.findIndexByEmail("ok_user@example.com");
+    QVERIFY(rowCn >= 0 && rowOk >= 0);
+
+    QCOMPARE(model.data(model.index(rowCn, 0), AccountModel::RegionRestrictedRole).toBool(), true);
+    QCOMPARE(model.data(model.index(rowCn, 0), AccountModel::RegionCodeRole).toString(), QStringLiteral("CN"));
+    QVERIFY(model.data(model.index(rowCn, 0), AccountModel::RegionChangeUrlRole).toString().contains(QStringLiteral("country-association-form")));
+    QCOMPARE(model.data(model.index(rowOk, 0), AccountModel::RegionRestrictedRole).toBool(), false);
+
+    AccountFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+    proxy.setStatusTab(QStringLiteral("all"));
+    QCOMPARE(proxy.rowCount(), 2);
+
+    // Usable tab excludes region-restricted CN accounts
+    proxy.setStatusTab(QStringLiteral("usable"));
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.getFilteredAccount(0).value(QStringLiteral("email")).toString(), QStringLiteral("ok_user@example.com"));
+
+    // Searching "CN" or "中国" surfaces restricted accounts under "all"
+    proxy.setStatusTab(QStringLiteral("all"));
+    proxy.setFilterText(QStringLiteral("CN"));
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.getFilteredAccount(0).value(QStringLiteral("email")).toString(), QStringLiteral("cn_user@example.com"));
+
+    // Verify BackendController::openRegionChange is QML-invokable and emits notification
+    BackendController backend;
+    QSignalSpy spyNotify(&backend, &BackendController::notificationRequested);
+    QVERIFY(QMetaObject::invokeMethod(&backend, "openRegionChange",
+                                      Q_ARG(QString, QStringLiteral("cn_user@example.com")),
+                                      Q_ARG(QString, QString())));
+    QCOMPARE(spyNotify.count(), 1);
 
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);

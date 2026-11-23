@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QGuiApplication>
+#include <QDesktopServices>
 #include <QClipboard>
 #include <QJsonArray>
 #include <QUrl>
@@ -264,6 +265,28 @@ void BackendController::unblockAccount(const QString &email)
         emit notificationRequested(tr("Unblock Wizard"),
                                   tr("Unblock initiated for %1. Browser opened if puzzle required.").arg(trimmed), false);
     });
+}
+
+void BackendController::openRegionChange(const QString &email, const QString &customUrl)
+{
+    const QString trimmed = email.trimmed();
+    QString targetUrl = customUrl.trimmed();
+    if (!targetUrl.startsWith(QStringLiteral("https://"))) {
+        if (!trimmed.isEmpty()) {
+            targetUrl = QStringLiteral("https://accounts.google.com/AccountChooser?Email=%1&continue=https%3A%2F%2Fpolicies.google.com%2Fcountry-association-form")
+                            .arg(QString::fromUtf8(QUrl::toPercentEncoding(trimmed)));
+        } else {
+            targetUrl = QStringLiteral("https://policies.google.com/country-association-form");
+        }
+    }
+
+    if (qEnvironmentVariable("QT_QPA_PLATFORM") != QStringLiteral("offscreen")) {
+        QDesktopServices::openUrl(QUrl(targetUrl));
+    }
+    emit notificationRequested(
+        tr("Region Unlock"),
+        tr("Opened Google country association change form for %1").arg(trimmed.isEmpty() ? QStringLiteral("account") : trimmed),
+        false);
 }
 
 void BackendController::saveSettings(const QJsonObject &settings)

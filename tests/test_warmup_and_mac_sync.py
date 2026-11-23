@@ -346,6 +346,78 @@ class TestWarmupAndMacSync(unittest.TestCase):
         self.assertNotIn("doWarmupAccount", html)
         self.assertIn("cfg-hourly-warmup", html)
         self.assertIn("min-width: 720px", html)
+        self.assertIn("20 / 页", html)
+        self.assertIn("const PAGE_SIZE = 20;", html)
+
+    def test_region_restriction_detection_isolation_and_unlock_rendering(self):
+        """验证 loadCodeAssist 地区受限检测、自动解除、轮转/预热隔离及 Web 端红旗+解锁按钮渲染"""
+        from core.rotator import AntigravityQuotaRotator
+
+        eng = HubEngine()
+        # 1. UNSUPPORTED_LOCATION -> (True, "CN", "UNSUPPORTED_LOCATION")
+        inelig_resp = _FakeHTTPResp(200, {
+            "ineligibleTiers": [{
+                "reasonCode": "UNSUPPORTED_LOCATION",
+                "reasonMessage": "not available in your location",
+                "tierId": "free-tier",
+            }]
+        })
+        with patch("urllib.request.urlopen", return_value=inelig_resp):
+            restricted, code, reason = eng.check_account_region_eligibility("at_cn")
+        self.assertTrue(restricted)
+        self.assertEqual(code, "CN")
+        self.assertEqual(reason, "UNSUPPORTED_LOCATION")
+
+        # 2. Eligible currentTier -> (False, "", "") 自动解除受限
+        ok_resp = _FakeHTTPResp(200, {"currentTier": {"id": "free-tier"}, "ineligibleTiers": []})
+        with patch("urllib.request.urlopen", return_value=ok_resp):
+            restricted2, code2, reason2 = eng.check_account_region_eligibility("at_ok")
+        self.assertIs(restricted2, False)
+        self.assertEqual(code2, "")
+        self.assertEqual(reason2, "")
+
+        # 3. 轮转器与预热引擎均严格跳过 region_restricted=True 账号
+        accounts = {
+            "active@example.com": {
+                "email": "active@example.com",
+                "refresh_token": "rt0",
+                "gemini": {"quota_5h": 0.0, "quota_weekly": 0.0},
+            },
+            "cn_blocked@example.com": {
+                "email": "cn_blocked@example.com",
+                "refresh_token": "rt_cn",
+                "tier": "FREE_PRO",
+                "has_5h": True,
+                "region_restricted": True,
+                "region_code": "CN",
+                "gemini": {"quota_5h": 1.0, "quota_weekly": 1.0, "reset_time_5h": ""},
+                "claude": {"quota_5h": 1.0, "quota_weekly": 1.0, "reset_time_5h": ""},
+            },
+            "healthy_us@example.com": {
+                "email": "healthy_us@example.com",
+                "refresh_token": "rt_us",
+                "tier": "FREE",
+                "has_5h": False,
+                "region_restricted": False,
+                "gemini": {"quota_5h": None, "quota_weekly": 0.60},
+                "claude": {"quota_5h": None, "quota_weekly": 1.0},
+            },
+        }
+        rot = AntigravityQuotaRotator(data_dir=self.data_dir)
+        picked = rot.pick_best_standby_account(accounts, "active@example.com", rot_mode="gemini")
+        self.assertEqual(picked, "healthy_us@example.com")
+
+        mgr = AntigravityPhysicalManager(data_dir=self.data_dir)
+        wu_res = mgr.warmup_single_account(accounts["cn_blocked@example.com"])
+        self.assertEqual(wu_res["status"], "region_restricted")
+
+        # 4. Web 端渲染红色中国国旗 SVG + 「解锁」按钮直达 Google 地区修改表单
+        with patch.object(hub_server.ENGINE, "load_accounts", return_value={"active_email": "active@example.com", "accounts": accounts}):
+            html = render_dashboard_html()
+        self.assertIn("region-flag-cn", html)
+        self.assertIn("btn-region-unlock", html)
+        self.assertIn("country-association-form", html)
+        self.assertIn(">解锁</a>", html)
 
     def test_importer_handles_free_none_quota_5h(self):
         """importer.normalize_account_record 安全接纳 FREE 账号 quota_5h=None 并保留三档元数据"""

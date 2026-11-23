@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "4.2.0"
-__canonical_version_tag__ = "20261121-v4.2.0-ULTRA_COMPACT_720PX_NO_STATUS_NO_TOPG_SETTINGS_PREWARM"
-__last_updated__ = "2026-11-21 20:30:00"
-__canonical_doctrine__ = "Antigravity Hub v4.2.0：删除状态列与 TopG、预热开关统一收口至设置、压缩双配额条与 720px 默认最小宽度"
+__version__ = "4.3.0"
+__canonical_version_tag__ = "20261123-v4.3.0-REGION_CN_DETECT_UNLOCK_20_PER_PAGE_SCROLLBAR"
+__last_updated__ = "2026-11-23 14:10:00"
+__canonical_doctrine__ = "Antigravity Hub v4.3.0：自动探测底层受限地区(UNSUPPORTED_LOCATION)并标注红旗与一键解锁入口、20账号分页与同风格滚动条"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -97,10 +97,25 @@ GOOGLE_CLIENT_SECRET = os.environ.get(
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 QUOTA_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
 MODELS_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
+LOAD_CODE_ASSIST_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
+GOOGLE_REGION_CHANGE_URL = "https://policies.google.com/country-association-form"
 WARMUP_ENDPOINTS = [
     "https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent",
     "https://cloudcode-pa.googleapis.com/v1internal:generateContent"
 ]
+
+
+def build_region_change_url(email: str = "") -> str:
+    """构造带账号预选的 Google 关联地区修改申请页面地址"""
+    em = str(email or "").strip()
+    if not em:
+        return GOOGLE_REGION_CHANGE_URL
+    return (
+        "https://accounts.google.com/AccountChooser?Email="
+        + urllib.parse.quote(em, safe="")
+        + "&continue="
+        + urllib.parse.quote(GOOGLE_REGION_CHANGE_URL, safe="")
+    )
 
 SERVER_PORT = 18088
 
@@ -1398,6 +1413,49 @@ class HubEngine:
             logger.debug(f"探测模型矩阵失败: {e}")
             return "4.6", []
 
+    def check_account_region_eligibility(self, access_token: str) -> Tuple[Optional[bool], str, str]:
+        """
+        调用 Google 官方 v1internal:loadCodeAssist 毫秒级探测账号关联地区是否受限 (UNSUPPORTED_LOCATION)。
+        返回: (is_restricted: True | False | None, region_code: "CN" | "", reason_code: str)
+        - 当 ineligibleTiers 含 UNSUPPORTED_LOCATION 时返回 (True, "CN", "UNSUPPORTED_LOCATION")
+        - 当接口正常返回且无地区受限时返回 (False, "", "")，自动解除历史受限标记
+        - 网络异常时返回 (None, "", "") 保持原缓存状态不闪烁
+        """
+        if not access_token:
+            return None, "", ""
+        payload = json.dumps({
+            "metadata": {
+                "ideType": "ANTIGRAVITY",
+                "platform": "PLATFORM_UNSPECIFIED",
+                "pluginType": "GEMINI",
+            }
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            LOAD_CODE_ASSIST_ENDPOINT,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "User-Agent": "antigravity/1.19.6 linux/amd64",
+            },
+            method="POST",
+            data=payload,
+        )
+        ctx = ssl.create_default_context()
+        try:
+            with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+                body_str = _safe_decode_resp(resp.read())
+                data = json.loads(body_str)
+            inelig = data.get("ineligibleTiers") or []
+            for tier_item in inelig:
+                if isinstance(tier_item, dict) and str(tier_item.get("reasonCode", "")).upper() == "UNSUPPORTED_LOCATION":
+                    return True, "CN", "UNSUPPORTED_LOCATION"
+            if data.get("currentTier") is not None or isinstance(inelig, list):
+                return False, "", ""
+            return None, "", ""
+        except Exception as e:
+            logger.debug(f"探测账号关联地区资格失败: {e}")
+            return None, "", ""
+
 
     def _sync_antigravity_tools_cache(self, acc_id: str, access_token: str = None, refresh_token: str = None, expiry_ts: int = None, validation_blocked: bool = None, val_url: str = None):
         """同步回写 ~/.antigravity_tools/accounts/<id>.json 与 accounts_hub.json"""
@@ -1653,6 +1711,28 @@ class HubEngine:
             acc["gemini4_supported"] = (tier == "PAID_PRO")
             if tier != "PAID_PRO" and not g4_from_summary:
                 acc["gemini4"] = None
+        except Exception:
+            pass
+
+        # 3.5 探测账号关联地区是否受限 (Google loadCodeAssist UNSUPPORTED_LOCATION)
+        try:
+            is_reg_blocked, reg_code, reg_reason = self.check_account_region_eligibility(at)
+            if is_reg_blocked is True:
+                was_reg = bool(acc.get("region_restricted", False))
+                acc["region_restricted"] = True
+                acc["region_code"] = reg_code or "CN"
+                acc["region_reason"] = reg_reason or "UNSUPPORTED_LOCATION"
+                acc["region_change_url"] = build_region_change_url(email)
+                if not was_reg:
+                    logger.warning(f"🚩 [关联地区受限] 账号 {email} 被 Google 判定为 {acc['region_reason']}，已标注受限并开放解锁入口")
+            elif is_reg_blocked is False:
+                was_reg = bool(acc.get("region_restricted", False))
+                acc["region_restricted"] = False
+                acc["region_code"] = ""
+                acc["region_reason"] = ""
+                acc["region_change_url"] = ""
+                if was_reg:
+                    logger.info(f"🎉 [地区解锁成功] 账号 {email} 已通过地区审核，自动恢复可用状态！")
         except Exception:
             pass
 
@@ -2110,14 +2190,27 @@ def render_table_rows(include_oob: bool = False) -> str:
         </div>"""
 
         is_blocked = bool(acc.get("validation_blocked"))
+        is_region_restricted = bool(acc.get("region_restricted"))
+        region_change_url = acc.get("region_change_url") or build_region_change_url(email)
 
         # 三档账号类别与真实模型判定
         acc_tier, acc_tier_display, _is_pro, acc_has_5h = classify_account_tier(acc)
         tier_rank = 0 if acc_tier == "PAID_PRO" else (1 if acc_tier == "FREE_PRO" else 2)
         tier_badge_html = render_tier_badge_html(acc_tier, acc_tier_display)
 
+        region_flag_html = (
+            f"""<a class="region-flag-cn" href="{region_change_url}" target="_blank" rel="noopener" onclick="event.stopPropagation();" title="关联地区受限 (中国 / UNSUPPORTED_LOCATION)，无法使用 Antigravity。点击前往 Google 地区修改申请页"><svg viewBox="0 0 30 20" width="16" height="11" aria-label="CN"><rect width="30" height="20" fill="#DE2910"/><polygon fill="#FFDE00" points="5,2 5.88,4.71 8.73,4.71 6.43,6.38 7.31,9.09 5,7.42 2.69,9.09 3.57,6.38 1.27,4.71 4.12,4.71"/><polygon fill="#FFDE00" points="10,1.2 10.29,2.1 11.24,2.1 10.47,2.66 10.76,3.56 10,3.0 9.24,3.56 9.53,2.66 8.76,2.1 9.71,2.1"/><polygon fill="#FFDE00" points="12,3.2 12.29,4.1 13.24,4.1 12.47,4.66 12.76,5.56 12,5.0 11.24,5.56 11.53,4.66 10.76,4.1 11.71,4.1"/><polygon fill="#FFDE00" points="12,6.2 12.29,7.1 13.24,7.1 12.47,7.66 12.76,8.56 12,8.0 11.24,8.56 11.53,7.66 10.76,7.1 11.71,7.1"/><polygon fill="#FFDE00" points="10,8.2 10.29,9.1 11.24,9.1 10.47,9.66 10.76,10.56 10,10.0 9.24,10.56 9.53,9.66 8.76,9.1 9.71,9.1"/></svg></a>"""
+            if is_region_restricted
+            else ""
+        )
+
         if is_active:
             main_btn_html = """<div class="btn-in-use font-mono" title="当前主程序正在使用此账号护航">在用</div>"""
+        elif is_region_restricted:
+            main_btn_html = f"""<a class="btn btn-region-unlock font-mono"
+                            href="{region_change_url}" target="_blank" rel="noopener"
+                            onclick="event.stopPropagation();"
+                            title="关联地区受限 (中国)，点击前往 Google 地区修改申请页面">解锁</a>"""
         elif is_blocked:
             main_btn_html = f"""<button class="btn btn-unblock font-mono" 
                             onclick="doUnblockAccount('{email}'); event.preventDefault(); event.stopPropagation();"
@@ -2179,13 +2272,14 @@ def render_table_rows(include_oob: bool = False) -> str:
             data-gemini-w="{g_w}"
             data-claude-5h="{c_5h if c_5h is not None else -1}"
             data-claude-w="{c_w}"
+            data-region-restricted="{'1' if is_region_restricted else '0'}"
             data-is-active="{'1' if is_active else '0'}">
             <td class="col-center col-check" style="background-color: {row_bg};"><input type="checkbox" class="row-select-cb neo-checkbox" value="{email}" data-email="{email}" onchange="onRowSelectChange(this)" title="勾选 {email}"></td>
             <td class="col-center font-mono num-col" style="background-color: {row_bg};">{num_html}</td>
             <td class="col-center col-tier" style="background-color: {row_bg};">{tier_badge_html}</td>
             <td class="col-email" style="background-color: {row_bg};">
                 <div class="email-cell-inner">
-                    <span class="email-text font-mono" onclick="copyText('{email}')" title="点击复制: {email}" data-raw-email="{email}" data-short-name="{short_name}">{short_name}</span>
+                    <span class="email-text font-mono" onclick="copyText('{email}')" title="点击复制: {email}" data-raw-email="{email}" data-short-name="{short_name}">{short_name}</span>{region_flag_html}
                 </div>
             </td>
             <td class="col-quota col-quota-gemini" style="background-color: {row_bg};">{g_cell}</td>
@@ -2784,17 +2878,71 @@ def render_dashboard_html() -> str:
             color: #000000;
         }}
 
-        /* 表格总容器：3px 纯黑外边框 + 4px 硬投影 + 10px 微圆角 + 彻底消除无意义横向滚动条 */
+        /* 表格总容器：3px 纯黑外边框 + 4px 硬投影 + 10px 微圆角 + 超 15 行自动显现同风格右侧滚动条 */
         .table-wrap {{
             border: var(--border-thick);
             background: #FFFFFF;
             box-shadow: var(--shadow-hard);
             border-radius: var(--radius-card);
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
+            max-height: calc(15 * 40px + 34px);
             width: 100% !important;
             min-width: 100% !important;
             max-width: 100% !important;
             box-sizing: border-box;
+            scrollbar-width: thin;
+            scrollbar-color: #111827 #F8FAFC;
+        }}
+        .table-wrap::-webkit-scrollbar {{
+            width: 8px;
+        }}
+        .table-wrap::-webkit-scrollbar-track {{
+            background: #F8FAFC;
+            border-left: 2px solid #000000;
+        }}
+        .table-wrap::-webkit-scrollbar-thumb {{
+            background: #111827;
+            border-left: 1px solid #000000;
+        }}
+        .table-wrap::-webkit-scrollbar-thumb:hover {{
+            background: #F59E0B;
+        }}
+        .region-flag-cn {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-left: 4px;
+            padding: 1px;
+            background: #DE2910;
+            border: 1.5px solid #991B1B;
+            line-height: 0;
+            text-decoration: none;
+            box-shadow: 1px 1px 0px #000000;
+        }}
+        .btn-region-unlock {{
+            width: 54px !important;
+            min-width: 54px !important;
+            max-width: 54px !important;
+            height: 22px !important;
+            flex-shrink: 0 !important;
+            background: #FEE2E2;
+            color: #B91C1C !important;
+            font-size: 10.5px;
+            font-weight: 900;
+            border: 2px solid #991B1B;
+            border-radius: 4px;
+            box-shadow: 2px 2px 0px #000000;
+            padding: 0 !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            cursor: pointer;
+        }}
+        .btn-region-unlock:hover {{
+            background: #FECACA;
         }}
 
         /* 核心铁律：table-layout: fixed，严格等宽贴合容器，彻底消灭横向滑块 */
@@ -4186,10 +4334,10 @@ def render_dashboard_html() -> str:
             </table>
         </div>
 
-        <!-- 新野兽派底部分页控制条 (极简自解释) -->
+        <!-- 新野兽派底部分页控制条 (极简自解释，每页最多 20 项) -->
         <div class="pagination-bar font-mono" id="pagination-bar">
             <div class="page-info">
-                <span>15 / 页</span>
+                <span>20 / 页</span>
                 <span class="page-dot">·</span>
                 <span id="page-indicator">1 / 1</span>
                 <span class="page-dot">·</span>
@@ -5193,7 +5341,7 @@ def render_dashboard_html() -> str:
         window.toggleAutoRotation = cycleAutoRotation;
 
         let currentPage = 1;
-        const PAGE_SIZE = 15;
+        const PAGE_SIZE = 20;
         let __cachedTbodyHTML = '';
         let currentSortMode = 'default'; // 'default' | 'gemini4_w_desc' | 'gemini_w_asc' | 'gemini_5h_asc' | 'claude_w_asc' | 'claude_5h_asc'
 
@@ -5428,6 +5576,7 @@ def render_dashboard_html() -> str:
                 else freeCount++;
 
                 const cver = tr.getAttribute('data-claude-ver') || '';
+                const isRegRestricted = tr.getAttribute('data-region-restricted') === '1';
                 const matchQuery = !q || email.toLowerCase().includes(q)
                     || (q === '5.5' && cver === '5.5')
                     || (q === '4.6' && cver === '4.6')
@@ -5435,7 +5584,8 @@ def render_dashboard_html() -> str:
                     || ((q === '付费' || q === 'paid') && tier === 'PAID_PRO')
                     || ((q === '免费pro' || q === 'freepro') && tier === 'FREE_PRO')
                     || (q === 'pro' && (tier === 'PAID_PRO' || tier === 'FREE_PRO'))
-                    || (q === 'free' && tier === 'FREE');
+                    || (q === 'free' && tier === 'FREE')
+                    || ((q === 'cn' || q === '中国' || q === '解锁') && isRegRestricted);
 
                 const g5 = parseFloat(tr.getAttribute('data-gemini-5h') || '-1');
                 const gw = parseFloat(tr.getAttribute('data-gemini-w') || '1.0');
@@ -5446,9 +5596,9 @@ def render_dashboard_html() -> str:
                 }} else if (currentFilter === 'ver46') {{
                     matchTab = (cver === '4.6');
                 }} else if (currentFilter === 'usable') {{
-                    matchTab = (gw >= 0.005);
+                    matchTab = (!isRegRestricted && gw >= 0.005);
                 }} else if (currentFilter === 'healthy') {{
-                    matchTab = (gw >= 0.5 && cw >= 0.5);
+                    matchTab = (!isRegRestricted && gw >= 0.5 && cw >= 0.5);
                 }} else if (currentFilter === 'warning') {{
                     matchTab = (gw >= 0.005 && (gw < 0.15 || cw < 0.15 || (g5 >= 0 && g5 < 0.15)));
                 }} else if (currentFilter === 'exhausted') {{

@@ -24,7 +24,7 @@ Item {
     readonly property int colClaudeWidth: 182 + extraClaudeWidth
     readonly property int colActionWidth: 60
     readonly property int rowHeight: 42
-    readonly property int pageSize: 15
+    readonly property int pageSize: 20
     readonly property int pageCount: Math.max(1, Math.ceil(listView.count / pageSize))
     readonly property int currentPage: Math.min(pageCount - 1, Math.floor((listView.contentY + 1) / (rowHeight * pageSize)))
     function gotoPage(p) {
@@ -247,7 +247,11 @@ Item {
         if (listView.currentIndex >= 0 && listView.currentIndex < listView.count) {
             var acc = proxyModel.getFilteredAccount(listView.currentIndex);
             if (acc && acc.email && !acc.isActive && backend) {
-                backend.switchAccount(acc.email);
+                if (acc.regionRestricted && typeof backend.openRegionChange === "function") {
+                    backend.openRegionChange(acc.email, acc.regionChangeUrl || "");
+                } else {
+                    backend.switchAccount(acc.email);
+                }
             }
         }
     }
@@ -811,14 +815,35 @@ Item {
                 id: listScrollBar
                 policy: ScrollBar.AsNeeded
                 visible: size < 0.999
-                width: 6
+                width: 8
+                padding: 1
+                hoverEnabled: true
                 contentItem: Rectangle {
                     implicitWidth: 6
                     radius: 0
                     visible: listScrollBar.size < 0.999
-                    color: (theme && theme.trackBg && theme.trackBg.charAt(0) === '#') ? theme.trackBg : "#29ffffff"
+                    color: listScrollBar.pressed ?
+                           ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3") :
+                           (listScrollBar.hovered ?
+                               Qt.alpha((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3", 0.78) :
+                               ((theme && theme.mode === "light") ?
+                                   Qt.alpha((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#64748B", 0.48) :
+                                   Qt.alpha((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#94A3B8", 0.52)))
                 }
-                background: Item {}
+                background: Rectangle {
+                    implicitWidth: 8
+                    radius: 0
+                    visible: listScrollBar.size < 0.999
+                    color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#142620"
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 1
+                        radius: 0
+                        color: (theme && theme.hairline && theme.hairline.charAt(0) === '#') ? theme.hairline : "#1fffffff"
+                    }
+                }
             }
 
             // 空列表状态提示
@@ -868,9 +893,11 @@ Item {
                     tierBadgeMouse.containsMouse ||
                     dragMouse.containsMouse ||
                     nameMouse.containsMouse ||
+                    regionFlagMouse.containsMouse ||
                     pinTopMouse.containsMouse ||
                     rowCheckBox.hovered ||
                     btnSwitchMouse.containsMouse ||
+                    btnRegionUnlockMouse.containsMouse ||
                     btnUnblockMouse.containsMouse ||
                     btnInUseMouse.containsMouse
 
@@ -1163,30 +1190,75 @@ Item {
                             }
                         }
 
-                        // 2. 账号纯净用户名
-                        Text {
-                            id: accountNameText
+                        // 2. 账号纯净用户名 + 地区受限红色国旗标识 (仅底层地区受限时显示，解除后自动消失)
+                        Row {
+                            id: accountNameRow
+                            z: 2
                             anchors.left: dragHandle.right
                             anchors.leftMargin: 2
                             anchors.right: (pinTopBtn.visible ? pinTopBtn.left : parent.right)
-                            anchors.rightMargin: pinTopBtn.visible ? 4 : 4
+                            anchors.rightMargin: 4
                             anchors.verticalCenter: parent.verticalCenter
-                            text: model.displayUsername || ""
-                            font.family: theme.uiFont
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            renderType: Text.NativeRendering
-                            elide: Text.ElideRight
-                            color: model.isActive ?
-                                   ((theme && theme.mode === "light") ? theme.accent : ((theme && theme.accentText) ? theme.accentText : "#93C5FD")) :
-                                   ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
+                            spacing: 4
+                            clip: true
 
-                            ToolTip.visible: nameMouse.containsMouse && !pinTopMouse.containsMouse && !dragMouse.containsMouse
-                            ToolTip.text: (model.email || "") + " (" + qsTr("Click to copy") + ")"
+                            Text {
+                                id: accountNameText
+                                width: Math.min(implicitWidth, Math.max(24, parent.width - (regionFlagBadge.visible ? (regionFlagBadge.width + parent.spacing) : 0)))
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: model.displayUsername || ""
+                                font.family: theme.uiFont
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                renderType: Text.NativeRendering
+                                elide: Text.ElideRight
+                                color: model.isActive ?
+                                       ((theme && theme.mode === "light") ? theme.accent : ((theme && theme.accentText) ? theme.accentText : "#93C5FD")) :
+                                       ((theme && theme.text1 && theme.text1.charAt(0) === '#') ? theme.text1 : "#FFFFFF")
+
+                                ToolTip.visible: nameMouse.containsMouse && !pinTopMouse.containsMouse && !dragMouse.containsMouse && !regionFlagMouse.containsMouse
+                                ToolTip.text: (model.email || "") + " (" + qsTr("Click to copy") + ")"
+                            }
+
+                            Rectangle {
+                                id: regionFlagBadge
+                                visible: Boolean(model.regionRestricted) && !pinTopBtn.visible
+                                width: 18
+                                height: 13
+                                anchors.verticalCenter: parent.verticalCenter
+                                radius: 0
+                                color: "#DE2910"
+                                border.width: 1
+                                border.color: "#B91C1C"
+
+                                Image {
+                                    anchors.fill: parent
+                                    anchors.margins: 1
+                                    source: "qrc:/assets/icons/flag-cn.svg"
+                                    sourceSize: Qt.size(32, 22)
+                                    smooth: true
+                                    fillMode: Image.PreserveAspectCrop
+                                }
+
+                                MouseArea {
+                                    id: regionFlagMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: qsTr("Associated region restricted (CN). Click Unlock to open Google country association form.")
+                                    onClicked: {
+                                        if (backend && typeof backend.openRegionChange === "function") {
+                                            backend.openRegionChange(model.email, model.regionChangeUrl || "");
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         MouseArea {
                             id: nameMouse
+                            z: 1
                             anchors.left: dragHandle.right
                             anchors.right: (pinTopBtn.visible ? pinTopBtn.left : parent.right)
                             anchors.top: parent.top
@@ -1692,10 +1764,49 @@ Item {
                             }
                         }
 
+                        // 1.5 地区受限解锁按钮 (CN / UNSUPPORTED_LOCATION 状态，点击直达 Google 地区修改申请页)
+                        Rectangle {
+                            id: btnRegionUnlock
+                            anchors.centerIn: parent
+                            visible: !model.isActive && Boolean(model.regionRestricted)
+                            width: 48
+                            height: 24
+                            radius: 0
+                            color: btnRegionUnlockMouse.containsMouse ?
+                                   Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.25) :
+                                   Qt.alpha((theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a", 0.14)
+                            border.width: 1
+                            border.color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("Unlock")
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                font.weight: Font.Bold
+                                renderType: Text.NativeRendering
+                                color: (theme && theme.dangerText && theme.dangerText.charAt(0) === '#') ? theme.dangerText : "#ff5f4a"
+                            }
+
+                            MouseArea {
+                                id: btnRegionUnlockMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                ToolTip.visible: containsMouse
+                                ToolTip.text: qsTr("Open Google country association change form")
+                                onClicked: {
+                                    if (backend && typeof backend.openRegionChange === "function") {
+                                        backend.openRegionChange(model.email, model.regionChangeUrl || "");
+                                    }
+                                }
+                            }
+                        }
+
                         // 2. 解封按钮 (BLOCKED 状态)
                         Rectangle {
                             anchors.centerIn: parent
-                            visible: !model.isActive && model.isBlocked
+                            visible: !model.isActive && !Boolean(model.regionRestricted) && model.isBlocked
                             width: 48
                             height: 24
                             radius: 0
@@ -1732,7 +1843,7 @@ Item {
                         Rectangle {
                             id: btnSwitch
                             anchors.centerIn: parent
-                            visible: !model.isActive && !model.isBlocked
+                            visible: !model.isActive && !Boolean(model.regionRestricted) && !model.isBlocked
                             width: 48
                             height: 24
                             radius: 0

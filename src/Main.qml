@@ -7,7 +7,7 @@ import QtQuick.Window 2.15
 ApplicationWindow {
     id: appWindow
     visible: true
-    // 默认即最小紧凑宽度（内容 696 + 左右边距 24 = 720），高度按账号数量精准自适应，允许用户自由拉伸
+    // 默认即最小紧凑宽度（内容 696 + 左右边距 24 = 720），高度按账号数量精准自适应（最长 15 行，超屏自动滚动），允许用户自由拉伸
     readonly property int contentWidth: 696
     readonly property int baseChromeHeight: 184
     readonly property int rowHeightPx: 42
@@ -19,6 +19,7 @@ ApplicationWindow {
     }
     property bool userResizedManually: false
     property bool applyingAutoGeometry: false
+    property bool initialGeometryApplied: false
 
     minimumWidth: 720
     width: minimumWidth
@@ -26,24 +27,38 @@ ApplicationWindow {
     height: idealHeight
     title: qsTr("Antigravity Hub")
 
-    function applyAdaptiveHeight() {
+    function applyAdaptiveGeometry(forceMinimumWidth) {
         if (userResizedManually) return;
+        applyingAutoGeometry = true;
+        if (forceMinimumWidth && Math.abs(width - minimumWidth) > 1) {
+            width = minimumWidth;
+        }
         var targetH = idealHeight;
         if (Math.abs(height - targetH) > 1) {
-            applyingAutoGeometry = true;
             height = targetH;
-            applyingAutoGeometry = false;
         }
+        applyingAutoGeometry = false;
+    }
+
+    function applyAdaptiveHeight() {
+        applyAdaptiveGeometry(false);
+    }
+
+    Component.onCompleted: {
+        Qt.callLater(function() {
+            applyAdaptiveGeometry(true);
+            initialGeometryApplied = true;
+        });
     }
 
     onHeightChanged: {
-        if (!applyingAutoGeometry && visible && Math.abs(height - idealHeight) > 2) {
+        if (initialGeometryApplied && !applyingAutoGeometry && visible && Math.abs(height - idealHeight) > 2) {
             userResizedManually = true;
         }
     }
 
     onWidthChanged: {
-        if (!applyingAutoGeometry && visible && Math.abs(width - minimumWidth) > 2) {
+        if (initialGeometryApplied && !applyingAutoGeometry && visible && Math.abs(width - minimumWidth) > 2) {
             userResizedManually = true;
         }
     }
@@ -188,7 +203,7 @@ ApplicationWindow {
         onActivated: Qt.quit()
     }
 
-    // PgUp / PgDn -> 翻页（每页 15 个）
+    // PgUp / PgDn -> 翻页（每页 20 个）
     Shortcut {
         sequence: "PgDown"
         enabled: !appWindow.isModalOpen

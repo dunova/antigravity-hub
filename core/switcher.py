@@ -1118,9 +1118,9 @@ class AntigravityPhysicalManager:
             return {"email": email, "status": "skipped_no_5h"}
         if acc.get("disabled"):
             return {"email": email, "status": "disabled"}
-        if acc.get("validation_blocked"):
-            logger.warning(f"🛡️ [预热风控熔断] 账号 {email} 处于 Google 验证拦截态，跳过预热")
-            return {"email": email, "status": "validation_blocked"}
+        if acc.get("validation_blocked") or acc.get("region_restricted"):
+            logger.warning(f"🛡️ [预热拦截] 账号 {email} 处于风控或地区受限态，跳过预热")
+            return {"email": email, "status": "region_restricted" if acc.get("region_restricted") else "validation_blocked"}
 
         rt = self._extract_refresh_token(acc)
         if not rt:
@@ -1253,7 +1253,7 @@ class AntigravityPhysicalManager:
 
         for a in accounts:
             em = str(a.get("email") or "").strip()
-            if not em or a.get("disabled") or a.get("validation_blocked"):
+            if not em or a.get("disabled") or a.get("validation_blocked") or a.get("region_restricted"):
                 continue
             if not self._account_has_5h(a):
                 continue
@@ -1370,7 +1370,7 @@ class AntigravityPhysicalManager:
         has_unscheduled_pro = False
 
         for em, acc in accounts_map.items():
-            if not isinstance(acc, dict) or acc.get("disabled") or acc.get("validation_blocked"):
+            if not isinstance(acc, dict) or acc.get("disabled") or acc.get("validation_blocked") or acc.get("region_restricted"):
                 continue
             if not self._account_has_5h(acc) or not self._extract_refresh_token(acc):
                 continue

@@ -12,6 +12,7 @@
 #include <QSet>
 #include <QHash>
 #include <QRegularExpression>
+#include <QUrl>
 #include <algorithm>
 
 // ============================================================================
@@ -231,6 +232,16 @@ void AccountModel::loadFromDisk() {
         item.id = a.value(QStringLiteral("id")).toString();
         item.isBlocked = a.value(QStringLiteral("validation_blocked")).toBool(false);
         item.validationUrl = a.value(QStringLiteral("validation_url")).toString();
+        item.regionRestricted = a.value(QStringLiteral("region_restricted")).toBool(false);
+        item.regionCode = a.value(QStringLiteral("region_code")).toString().trimmed().toUpper();
+        if (item.regionRestricted && item.regionCode.isEmpty()) {
+            item.regionCode = QStringLiteral("CN");
+        }
+        item.regionChangeUrl = a.value(QStringLiteral("region_change_url")).toString().trimmed();
+        if (item.regionRestricted && item.regionChangeUrl.isEmpty()) {
+            item.regionChangeUrl = QStringLiteral("https://accounts.google.com/AccountChooser?Email=%1&continue=https%3A%2F%2Fpolicies.google.com%2Fcountry-association-form")
+                                       .arg(QString::fromUtf8(QUrl::toPercentEncoding(item.email)));
+        }
 
         const QString overrideTier = a.value(QStringLiteral("tier_override")).toString().trimmed().toUpper();
         const QString tierRaw = a.value(QStringLiteral("tier")).toString().trimmed().toUpper();
@@ -707,6 +718,12 @@ QVariant AccountModel::data(const QModelIndex &index, int role) const {
         return item.isBlocked;
     case ValidationUrlRole:
         return item.validationUrl;
+    case RegionRestrictedRole:
+        return item.regionRestricted;
+    case RegionCodeRole:
+        return item.regionCode;
+    case RegionChangeUrlRole:
+        return item.regionChangeUrl;
     case TierRole:
         return item.tier;
     case TierDisplayRole:
@@ -749,6 +766,9 @@ QHash<int, QByteArray> AccountModel::roleNames() const {
     roles[HasClaude55Role] = "hasClaude55";
     roles[IsBlockedRole] = "isBlocked";
     roles[ValidationUrlRole] = "validationUrl";
+    roles[RegionRestrictedRole] = "regionRestricted";
+    roles[RegionCodeRole] = "regionCode";
+    roles[RegionChangeUrlRole] = "regionChangeUrl";
     roles[TierRole] = "tier";
     roles[TierDisplayRole] = "tierDisplay";
     roles[TierRankRole] = "tierRank";
@@ -786,6 +806,9 @@ QVariantMap AccountModel::getAccount(int row) const {
     map[QStringLiteral("claudeResetW")] = item.claudeResetW;
     map[QStringLiteral("hasClaude55")] = item.hasClaude55;
     map[QStringLiteral("isBlocked")] = item.isBlocked;
+    map[QStringLiteral("regionRestricted")] = item.regionRestricted;
+    map[QStringLiteral("regionCode")] = item.regionCode;
+    map[QStringLiteral("regionChangeUrl")] = item.regionChangeUrl;
     map[QStringLiteral("tier")] = item.tier;
     map[QStringLiteral("tierDisplay")] = item.tierDisplay;
     map[QStringLiteral("tierRank")] = item.tierRank;
@@ -981,6 +1004,8 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
     const double cW = sourceModel()->data(idx, AccountModel::ClaudeQuotaWRole).toDouble();
     const double c5h = sourceModel()->data(idx, AccountModel::ClaudeQuota5hRole).toDouble();
     const bool isBlocked = sourceModel()->data(idx, AccountModel::IsBlockedRole).toBool();
+    const bool isRegionRestricted = sourceModel()->data(idx, AccountModel::RegionRestrictedRole).toBool();
+    const QString regionCode = sourceModel()->data(idx, AccountModel::RegionCodeRole).toString();
     const bool hasC55 = sourceModel()->data(idx, AccountModel::HasClaude55Role).toBool();
     const bool has5h = sourceModel()->data(idx, AccountModel::Has5hRole).toBool();
     const QString tier = sourceModel()->data(idx, AccountModel::TierRole).toString();
@@ -992,11 +1017,11 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
     }
 
     if (m_statusTab == QStringLiteral("usable")) {
-        // 可用: 未风控且拥有可用周配额 (>= 0.5%)
-        if (isBlocked || gW < 0.005) return false;
+        // 可用: 未风控、非地区受限且拥有可用周配额 (>= 0.5%)
+        if (isBlocked || isRegionRestricted || gW < 0.005) return false;
     } else if (m_statusTab == QStringLiteral("plentiful")) {
         // 充足: 综合配额充沛 (Gemini 周度 >= 50% 且 Claude 周度 >= 50%)
-        if (isBlocked) return false;
+        if (isBlocked || isRegionRestricted) return false;
         if (gW < 0.50) return false;
         if (hasC55 && cW < 0.50) return false;
     } else if (m_statusTab == QStringLiteral("warning")) {
@@ -1019,12 +1044,14 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
             shortName.contains(m_filterText, Qt::CaseInsensitive) ||
             name.contains(m_filterText, Qt::CaseInsensitive) ||
             tier.contains(m_filterText, Qt::CaseInsensitive) ||
-            tierDisplay.contains(m_filterText, Qt::CaseInsensitive)) {
+            tierDisplay.contains(m_filterText, Qt::CaseInsensitive) ||
+            (!regionCode.isEmpty() && regionCode.contains(m_filterText, Qt::CaseInsensitive))) {
             return true;
         }
 
         // 标签穿透支持
         const QString lowerFilter = m_filterText.toLower();
+        if ((lowerFilter == QStringLiteral("cn") || lowerFilter == QStringLiteral("中国") || lowerFilter == QStringLiteral("解锁")) && isRegionRestricted) return true;
         if (lowerFilter == QStringLiteral("5.5") && hasC55) return true;
         if (lowerFilter == QStringLiteral("4.6") && !hasC55) return true;
         if (lowerFilter == QStringLiteral("active") && sourceModel()->data(idx, AccountModel::IsActiveRole).toBool()) return true;
