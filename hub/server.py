@@ -34,10 +34,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "4.4.0"
-__canonical_version_tag__ = "20261124-v4.4.0-SCHEME_A_ISOLATION_FOUR_TIER_GOLD_NEON"
-__last_updated__ = "2026-11-24 13:30:00"
-__canonical_doctrine__ = "Antigravity Hub v4.4.0：方案A轻量化强隔离(独立浏览器容器、独立installation_id、低并发错峰防扫池、单账号代理)与四档分级(付费/学生/免费PRO/FREE，能用Gemini 4 Neon一律黄金背景)"
+__version__ = "4.4.1"
+__canonical_version_tag__ = "20261124-v4.4.1-FIX_HYPRLAND_SCROLLING_TILING_LAYOUT_PARTICIPATION"
+__last_updated__ = "2026-11-24 13:46:00"
+__canonical_doctrine__ = "Antigravity Hub v4.4.1：移除窗口级 maximumHeight 防止 Hyprland 强行悬浮置顶，完美参与滚动/平铺/浮动全布局，同时内部表格恒定锁定 15 行高度"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub

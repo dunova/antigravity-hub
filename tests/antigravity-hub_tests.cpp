@@ -94,7 +94,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.4.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.4.1"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1466,10 +1466,10 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*minimumWidth\b)"))), "Main.qml default width must equal minimumWidth");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*720\b)"))), "Main.qml minimumWidth != 720");
     QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth so horizontal resizing stays free");
+    QVERIFY2(!mainContent.contains(QRegularExpression(QStringLiteral(R"((?m)^\s*maximumHeight\s*:)"))), "Main.qml ApplicationWindow must NOT set maximumHeight (minHeight==maxHeight forces Hyprland to float and refuse scrolling/tiling)");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bfixedVisibleRows\s*:\s*15\b)"))), "Main.qml fixedVisibleRows != 15");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*fixedWindowHeight\b)"))), "Main.qml minimumHeight must lock to fixedWindowHeight (814px)");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bmaximumHeight\s*:\s*fixedWindowHeight\b)"))), "Main.qml maximumHeight must lock to fixedWindowHeight (814px)");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*fixedWindowHeight\b)"))), "Main.qml height must lock to fixedWindowHeight (814px)");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*fixedWindowHeight\b)"))), "Main.qml default height must equal fixedWindowHeight (814px)");
+    QVERIFY2(mainContent.contains(QStringLiteral("Layout.maximumHeight: appWindow.fixedListViewHeight")), "AccountListView must lock content height to fixed 15 rows");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*696\b)"))), "Main.qml contentWidth != 696");
     QVERIFY2(!mainContent.contains(QStringLiteral("switchTopGemini")), "v4.2.0: Main.qml must not keep TopG shortcut");
     QVERIFY2(!mainContent.contains(QStringLiteral("triggerPrewarm")), "v4.2.0: Main.qml must not keep manual Prewarm shortcut");
@@ -1535,20 +1535,18 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     QCOMPARE(win->property("minimumWidth").toInt(), 720);
     QCOMPARE(win->property("fixedVisibleRows").toInt(), 15);
     QCOMPARE(win->property("fixedWindowHeight").toInt(), 814);
-    QCOMPARE(win->property("minimumHeight").toInt(), 814);
-    QCOMPARE(win->property("maximumHeight").toInt(), 814);
+    QCOMPARE(win->property("fixedListViewHeight").toInt(), 692);
     QCOMPARE(win->property("contentWidth").toInt(), 696);
     QCOMPARE(win->height(), 814);
 
     win->show();
     QCoreApplication::processEvents();
 
-    // Horizontal-only resize test: width stretches freely while vertical height stays locked at 814px
-    win->resize(1280, 900);
+    // Tiling/scrolling compatibility test: window accepts layout resize freely while table stays locked at 15 rows
+    win->resize(1280, 1040);
     QCoreApplication::processEvents();
     QCOMPARE(win->width(), 1280);
-    QCOMPARE(win->minimumHeight(), 814);
-    QCOMPARE(win->maximumHeight(), 814);
+    QCOMPARE(win->property("fixedListViewHeight").toInt(), 692);
     QCOMPARE(win->property("contentWidth").toInt(), 696);
 }
 
@@ -2529,8 +2527,7 @@ void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
     QCOMPARE(win1->property("minimumWidth").toInt(), 720);
     QCOMPARE(win1->property("fixedVisibleRows").toInt(), 15);
     QCOMPARE(win1->property("fixedWindowHeight").toInt(), 814);
-    QCOMPARE(win1->property("minimumHeight").toInt(), 814);
-    QCOMPARE(win1->property("maximumHeight").toInt(), 814);
+    QCOMPARE(win1->property("fixedListViewHeight").toInt(), 692);
     QCOMPARE(win1->height(), 814);
 
     // Case B: 20 个账号（单页上限），依然锁定 15 行固定高度 814px（右侧滚动条激活）
@@ -2577,8 +2574,8 @@ void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
 
     QQuickWindow *win20 = qobject_cast<QQuickWindow*>(root20.data());
     QVERIFY(win20 != nullptr);
-    QCOMPARE(win20->property("minimumHeight").toInt(), 814);
-    QCOMPARE(win20->property("maximumHeight").toInt(), 814);
+    QCOMPARE(win20->property("fixedWindowHeight").toInt(), 814);
+    QCOMPARE(win20->property("fixedListViewHeight").toInt(), 692);
     QCOMPARE(win20->height(), 814);
 
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
