@@ -94,7 +94,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.4.1"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.4.2"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1465,11 +1465,14 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
 
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*minimumWidth\b)"))), "Main.qml default width must equal minimumWidth");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*720\b)"))), "Main.qml minimumWidth != 720");
-    QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth so horizontal resizing stays free");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*460\b)"))), "Main.qml minimumHeight must align with omarchy-control (460)");
+    QVERIFY2(!mainContent.contains(QRegularExpression(QStringLiteral(R"((?m)^\s*maximumWidth\s*:)"))), "Main.qml ApplicationWindow must NOT set maximumWidth so horizontal resizing stays free");
     QVERIFY2(!mainContent.contains(QRegularExpression(QStringLiteral(R"((?m)^\s*maximumHeight\s*:)"))), "Main.qml ApplicationWindow must NOT set maximumHeight (minHeight==maxHeight forces Hyprland to float and refuse scrolling/tiling)");
+    QVERIFY2(!mainContent.contains(QStringLiteral("mainScrollView")), "Main.qml must use direct root ColumnLayout like omarchy-control instead of outer ScrollView");
+    QVERIFY2(!mainContent.contains(QStringLiteral("Layout.maximumHeight")), "AccountListView must NOT lock Layout.maximumHeight so tall scrolling/tiled windows have zero bottom dead gap");
+    QVERIFY2(mainContent.contains(QStringLiteral("Layout.fillHeight: true")), "AccountListView must fill available window height cleanly");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bfixedVisibleRows\s*:\s*15\b)"))), "Main.qml fixedVisibleRows != 15");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*fixedWindowHeight\b)"))), "Main.qml default height must equal fixedWindowHeight (814px)");
-    QVERIFY2(mainContent.contains(QStringLiteral("Layout.maximumHeight: appWindow.fixedListViewHeight")), "AccountListView must lock content height to fixed 15 rows");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*696\b)"))), "Main.qml contentWidth != 696");
     QVERIFY2(!mainContent.contains(QStringLiteral("switchTopGemini")), "v4.2.0: Main.qml must not keep TopG shortcut");
     QVERIFY2(!mainContent.contains(QStringLiteral("triggerPrewarm")), "v4.2.0: Main.qml must not keep manual Prewarm shortcut");
@@ -1533,21 +1536,32 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
 
     QCOMPARE(win->width(), 720);
     QCOMPARE(win->property("minimumWidth").toInt(), 720);
+    QCOMPARE(win->property("minimumHeight").toInt(), 460);
     QCOMPARE(win->property("fixedVisibleRows").toInt(), 15);
     QCOMPARE(win->property("fixedWindowHeight").toInt(), 814);
-    QCOMPARE(win->property("fixedListViewHeight").toInt(), 692);
     QCOMPARE(win->property("contentWidth").toInt(), 696);
     QCOMPARE(win->height(), 814);
 
     win->show();
     QCoreApplication::processEvents();
 
-    // Tiling/scrolling compatibility test: window accepts layout resize freely while table stays locked at 15 rows
+    auto *listViewObj = rootObj->findChild<QQuickItem*>(QStringLiteral("accountListView"));
+    QVERIFY2(listViewObj != nullptr, "accountListView item not found in Main.qml");
+    QCOMPARE(qRound(listViewObj->height()), 692);
+
+    // Tiling/scrolling stretch test: stretching window to 1280x1040 expands AccountListView all the way down (zero bottom dead space)
     win->resize(1280, 1040);
     QCoreApplication::processEvents();
     QCOMPARE(win->width(), 1280);
-    QCOMPARE(win->property("fixedListViewHeight").toInt(), 692);
-    QCOMPARE(win->property("contentWidth").toInt(), 696);
+    QCOMPARE(win->height(), 1040);
+    QCOMPARE(qRound(listViewObj->height()), 1040 - 122);
+
+    // Floating compact shrink test: shrinking window to minimumHeight 460 keeps layout clean without clipping chrome
+    win->resize(720, 460);
+    QCoreApplication::processEvents();
+    QCOMPARE(win->width(), 720);
+    QCOMPARE(win->height(), 460);
+    QCOMPARE(qRound(listViewObj->height()), 460 - 122);
 }
 
 void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
@@ -2525,9 +2539,9 @@ void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
     QQuickWindow *win1 = qobject_cast<QQuickWindow*>(root1.data());
     QVERIFY(win1 != nullptr);
     QCOMPARE(win1->property("minimumWidth").toInt(), 720);
+    QCOMPARE(win1->property("minimumHeight").toInt(), 460);
     QCOMPARE(win1->property("fixedVisibleRows").toInt(), 15);
     QCOMPARE(win1->property("fixedWindowHeight").toInt(), 814);
-    QCOMPARE(win1->property("fixedListViewHeight").toInt(), 692);
     QCOMPARE(win1->height(), 814);
 
     // Case B: 20 个账号（单页上限），依然锁定 15 行固定高度 814px（右侧滚动条激活）
@@ -2575,8 +2589,15 @@ void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
     QQuickWindow *win20 = qobject_cast<QQuickWindow*>(root20.data());
     QVERIFY(win20 != nullptr);
     QCOMPARE(win20->property("fixedWindowHeight").toInt(), 814);
-    QCOMPARE(win20->property("fixedListViewHeight").toInt(), 692);
     QCOMPARE(win20->height(), 814);
+
+    // 验证 AccountListView 滚动条采用 omarchy-control 视口溢出驱动范式（含 minimumSize: 0.06）
+    QFile listFileCheck(QStringLiteral(":/AccountListView.qml"));
+    QVERIFY(listFileCheck.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString listTextCheck = QString::fromUtf8(listFileCheck.readAll());
+    listFileCheck.close();
+    QVERIFY2(listTextCheck.contains(QStringLiteral("minimumSize: 0.06")), "AccountListView ScrollBar must set minimumSize: 0.06 like omarchy-control");
+    QVERIFY2(!listTextCheck.contains(QStringLiteral("listView.count > 15")), "AccountListView ScrollBar shouldShowScrollBar must be purely viewport-overflow driven");
 
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir.toLocal8Bit());

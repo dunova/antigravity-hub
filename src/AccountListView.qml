@@ -813,15 +813,17 @@ Item {
 
             ScrollBar.vertical: ScrollBar {
                 id: listScrollBar
-                readonly property bool shouldShowScrollBar: (listView.contentHeight > listView.height + 1) || (listView.count > 15)
+                // 对齐 omarchy-control AppScrollBar 范式：严格按真实视口溢出自动显隐，平时极简细轨，悬停与拖拽平滑加粗
+                readonly property bool shouldShowScrollBar: listView.contentHeight > listView.height + 1
                 policy: shouldShowScrollBar ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
                 visible: shouldShowScrollBar
                 active: shouldShowScrollBar
-                width: 8
+                minimumSize: 0.06
+                width: (listScrollBar.hovered || listScrollBar.pressed) ? 9 : 7
                 padding: 1
                 hoverEnabled: true
                 contentItem: Rectangle {
-                    implicitWidth: 6
+                    implicitWidth: (listScrollBar.hovered || listScrollBar.pressed) ? 7 : 5
                     radius: 0
                     visible: listScrollBar.shouldShowScrollBar
                     color: listScrollBar.pressed ?
@@ -831,9 +833,10 @@ Item {
                                ((theme && theme.mode === "light") ?
                                    Qt.alpha((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#64748B", 0.55) :
                                    Qt.alpha((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#94A3B8", 0.58)))
+                    Behavior on implicitWidth { NumberAnimation { duration: 100 } }
                 }
                 background: Rectangle {
-                    implicitWidth: 8
+                    implicitWidth: (listScrollBar.hovered || listScrollBar.pressed) ? 9 : 7
                     radius: 0
                     visible: listScrollBar.shouldShowScrollBar
                     color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#142620"

@@ -7,19 +7,17 @@ import QtQuick.Window 2.15
 ApplicationWindow {
     id: appWindow
     visible: true
-    // 默认宽 720（最窄，允许左右自由拉伸），默认高 814（15 行标准高度）；
-    // 严禁设置 maximumHeight，否则 Hyprland 会将 minHeight==maxHeight 判定为弹窗并强行悬浮置顶、拒绝参与滚动/平铺布局！
-    // 内部表格容器高度严格锁死为 15 行（少于 15 个留白，超过 15 个右侧拉条），确保无论平铺/滚动/浮动均恒定显示 15 行。
+    // 对齐 omarchy-control 窗口几何范式：仅声明首选初始尺寸与最小下限，绝不设置最大宽高上限，
+    // 确保在 Hyprland 滚动窗口（scrolling）、平铺（dwindle）与浮动（floating）三种工作区均可原生参与排版、拉伸与层级调度。
     readonly property int contentWidth: 696
     readonly property int baseChromeHeight: 184
     readonly property int rowHeightPx: 42
     readonly property int fixedVisibleRows: 15
     readonly property int fixedWindowHeight: baseChromeHeight + fixedVisibleRows * rowHeightPx
-    readonly property int fixedListViewHeight: fixedWindowHeight - 122
 
     minimumWidth: 720
     width: minimumWidth
-    minimumHeight: 360
+    minimumHeight: 460
     height: fixedWindowHeight
     title: qsTr("Antigravity Hub")
 
@@ -197,58 +195,39 @@ ApplicationWindow {
         LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
         LayoutMirroring.childrenInherit: true
 
-        ScrollView {
-            id: mainScrollView
+        // 对齐 omarchy-control 根布局范式：直接由顶层 ColumnLayout 填满窗口，
+        // 顶栏与筛选栏固定高度，下方表格视图随窗口任意高度全量自适应伸展（零底部死空白）。
+        ColumnLayout {
+            id: mainColumn
             anchors.fill: parent
-            contentWidth: Math.max(rootContainer.width, appWindow.contentWidth + 24)
-            contentHeight: rootContainer.height
-            clip: true
-            ScrollBar.horizontal.policy: (rootContainer.width < appWindow.contentWidth + 24) ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-            ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+            anchors.margins: 12
+            spacing: 8
 
-            ColumnLayout {
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.leftMargin: Math.max(12, Math.round((mainScrollView.contentWidth - width) / 2))
-                anchors.topMargin: 12
-                anchors.bottomMargin: 12
-                width: Math.max(appWindow.contentWidth, rootContainer.width - 24)
-                spacing: 8
-
-                // 1. Header Bar
-                HeaderBar {
-                    id: headerBar
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 48
-                    onOpenSettings: {
-                        if (settingsDialog && typeof settingsDialog.open === "function") {
-                            settingsDialog.open();
-                        }
+            // 1. Header Bar
+            HeaderBar {
+                id: headerBar
+                Layout.fillWidth: true
+                Layout.preferredHeight: 48
+                onOpenSettings: {
+                    if (settingsDialog && typeof settingsDialog.open === "function") {
+                        settingsDialog.open();
                     }
                 }
+            }
 
-                // 2. Control & Filter Bar
-                FilterBar {
-                    id: filterBar
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 34
-                }
+            // 2. Control & Filter Bar
+            FilterBar {
+                id: filterBar
+                Layout.fillWidth: true
+                Layout.preferredHeight: 34
+            }
 
-                // 3. Account Quota Matrix Table View (永远锁定 15 行标准高度：少于 15 个留白，超过 15 个右侧拉条)
-                AccountListView {
-                    id: accountListView
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: appWindow.fixedListViewHeight
-                    Layout.minimumHeight: Math.min(appWindow.fixedListViewHeight, Math.max(200, rootContainer.height - 122))
-                    Layout.maximumHeight: appWindow.fixedListViewHeight
-                }
-
-                // 底部弹性吸收垫片：当窗口被平铺/滚动工作区拉高超过 814px 时，保持 15 行表格紧凑不变形
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                }
+            // 3. Account Quota Matrix Table View (全高度自适应填满，默认 814px 恰好容纳 15 行，超出自动出现右侧拉条)
+            AccountListView {
+                id: accountListView
+                objectName: "accountListView"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
             }
         }
 
