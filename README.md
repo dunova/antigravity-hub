@@ -1,7 +1,7 @@
 # Antigravity Hub
 
 <p align="center">
-  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v4.3.1 Logo" width="128" height="128" />
+  <img src="docs/assets/antigravity-hub-logo.svg" alt="Antigravity Hub v4.3.2 Logo" width="128" height="128" />
 </p>
 
 <p align="center">
@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v4.3.1-F59E0B?style=flat-square&logo=github" alt="Release v4.3.1" />
+  <img src="https://img.shields.io/badge/Release-v4.3.2-F59E0B?style=flat-square&logo=github" alt="Release v4.3.2" />
   <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-111827?style=flat-square&logo=linux" alt="Linux and macOS" />
   <img src="https://img.shields.io/badge/Desktop-C%2B%2B17%20%2B%20Qt6%20QML-41CD52?style=flat-square&logo=qt" alt="Qt6 QML" />
   <img src="https://img.shields.io/badge/Mode-Zero%20Proxy%20%7C%20Native%20Keychain-0EA5E9?style=flat-square" alt="Zero Proxy" />
@@ -18,20 +18,19 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/preview.png" alt="Antigravity Hub v4.3.1 Omarchy Native Desktop UI Preview" width="100%" />
+  <img src="docs/assets/preview.png" alt="Antigravity Hub v4.3.2 Omarchy Native Desktop UI Preview" width="100%" />
 </p>
 
 <p align="center">
-  <em>图：Antigravity Hub 原生桌面客户端实拍（全合成演示账号）：独立「类别」列一键区分付费 PRO / 免费 PRO / FREE，对齐官方 Gemini 与 Claude 双配额列，FREE 账号单轨周限清爽呈现，支持 720px 最窄默认宽度、最矮自适应与超 15 行同风格滚动条</em>
+  <em>图：Antigravity Hub 原生桌面客户端实拍（全合成演示账号）：独立「类别」列一键区分付费 PRO / 免费 PRO / FREE，对齐官方 Gemini 与 Claude 双配额列，FREE 账号单轨周限清爽呈现，固定 15 行高度锁死、支持顶栏自由拖动与左右拉伸</em>
 </p>
 
 ---
 
-## 🔥 v4.3.1 重要更新（最窄最矮自适应几何 + 最多 15 行贴合与超量同风格拉条 + 单页 20 账号）
+## 🔥 v4.3.2 重要更新（固定 15 行高度锁死 + 仅允许左右拉伸 + 顶栏原生窗口拖动）
 
-- **默认最窄最矮自适应几何（v4.3.1）**：彻底解除历史固定 360px 最小下限与 Math.max(4, ...) 占位，启动默认即最小宽度（`720px`）与最小高度（1 个账号时紧凑贴合至 `226px`，2 个账号 `268px`，每多 1 个账号自适应扩展 `42px`，绝无多余留白）；
-- **最多自适应 15 个账号与超量右侧同风格拉条（v4.3.1）**：高度动态阶梯在 1 至 15 个账号之间自适应伸缩，超过 15 个账号时（例如 16 至 20 个）高度严格封顶锁定在 15 行（`814px`），同时自动显现与 Omarchy 主题一致的平直直角高对比度垂直滚动条（拉条），完全不遮挡操作列，支持顺畅滚阅整页 20 个账号；
-- **单页 20 账号分页与启动防抢占守护（v4.3.1）**：单页分页步长严格设定为 20 个账号（`pageSize: 20`），QML 内部引入启动稳定期防尺寸漂移机制，有效抵御桌面合成器（Hyprland / Omarchy workspace-modes）在启动瞬间强加的初始平铺拉伸，保证无论任何桌面环境打开时均为最窄最矮；
+- **固定 15 行上下高度锁死与仅允许左右拉伸（v4.3.2）**：彻底移除动态高度变化逻辑，窗口上下高度永恒锁定为 15 个账号的标准高度（`814px`，`minimumHeight === maximumHeight === 814`），彻底禁止上下自由缩放；账号少于 15 个时列表下方自然留白，超过 15 个时右侧自动显现 Omarchy 同风格直角滚动条（拉条），默认宽度 `720px` 且仅允许用户自由拉伸左右宽度；
+- **顶栏原生窗口自由拖动（v4.3.2）**：在顶栏底层接入 Wayland / X11 原生 `startSystemMove()` 拖拽支持，按住顶栏任意空白区域或标题文字即可直接自由拖动窗口，彻底解决无外部标题栏时窗口无法移动的问题，同时零拦截顶栏按钮点击；
 - **毫秒级关联地区受限检测与自动复权（v4.3.0）**：刷新配额时并发调用 Google 官方 `v1internal:loadCodeAssist` 探测账号底层关联地区资格；若命中 `UNSUPPORTED_LOCATION`（如关联地区为中国、无法使用 Antigravity 的账号），立即在账号名后标注高对比矢量红旗 🇨🇳，右侧操作按钮切换为红色「**解锁**」（点击直达带账号预选的 Google 官方地区修改申请页 `policies.google.com/country-association-form`），且自动轮转看门狗与后台预热引擎同步隔离受限账号；地区修改审核通过后下次刷新自动移除红旗并恢复切换；
 - **720px 默认最小紧凑宽度与双配额条压缩（v4.2.0）**：删除与「操作」列功能重叠的「状态」列（保留复选框与数字序号 `#`），压缩 Gemini 与 Claude 进度条长度及列宽（单列从 `234px` 降至 `182px`），整体内容宽度从 `896px` 压缩至 `696px`，默认启动宽度锁定最小宽度 **`720px`**（直降 `200px`），同时删除 `TopG` 与手动「预热」按钮并将预热开关收口至「设置」；
 - **周额度不足 0.5% 即时短路「用尽」（v4.1.1）**：针对账号周额度仅余极微小数（如 `0.45%` 在界面四舍五入显示 `W: 0%`）而官方 API 仍返回 `5H: 100%` 并附带 5H 倒计时的矛盾场景，Linux Qt6 桌面端与 macOS Web 端统一步调：凡 `W < 0.5%` 的桶，其 `5H` 行强制短路归零并显示 `用尽`（英文界面 `Depleted`），不再误导展示 `100%` 或 5H 倒计时；预热引擎同步跳过 `< 0.5%` 枯竭周桶（保留同号可用双桶如 Claude 正常预热），轮转器内部仍保留 `EXHAUSTED_EPS = 0.0001` 精确榨干逻辑；

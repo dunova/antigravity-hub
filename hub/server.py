@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "4.3.1"
-__canonical_version_tag__ = "20261124-v4.3.1-MINIMUM_WINDOW_ADAPTIVE_GEOMETRY_15_MAX_20_PAGE_SCROLLBAR"
-__last_updated__ = "2026-11-24 10:25:00"
-__canonical_doctrine__ = "Antigravity Hub v4.3.1：默认最窄最矮极简自适应(1至15行精准贴合)、超15行同风格直角滚动条与20账号分页"
+__version__ = "4.3.2"
+__canonical_version_tag__ = "20261124-v4.3.2-FIXED_15_ROWS_HEIGHT_LOCK_HORIZONTAL_ONLY_HEADER_DRAG"
+__last_updated__ = "2026-11-24 13:16:00"
+__canonical_doctrine__ = "Antigravity Hub v4.3.2：固定 15 行上下高度锁死(仅允许左右拉伸，少于 15 个留白，超出右侧拉条)与顶栏原生拖动移动"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -2881,7 +2881,7 @@ def render_dashboard_html() -> str:
             color: #000000;
         }}
 
-        /* 表格总容器：3px 纯黑外边框 + 4px 硬投影 + 10px 微圆角 + 超 15 行自动显现同风格右侧滚动条 */
+        /* 表格总容器：3px 纯黑外边框 + 4px 硬投影 + 10px 微圆角 + 永远固定 15 行高度（少于 15 个留白，超 15 行自动显现同风格右侧滚动条） */
         .table-wrap {{
             border: var(--border-thick);
             background: #FFFFFF;
@@ -2889,6 +2889,8 @@ def render_dashboard_html() -> str:
             border-radius: var(--radius-card);
             overflow-x: hidden;
             overflow-y: auto;
+            height: calc(15 * 40px + 34px);
+            min-height: calc(15 * 40px + 34px);
             max-height: calc(15 * 40px + 34px);
             width: 100% !important;
             min-width: 100% !important;

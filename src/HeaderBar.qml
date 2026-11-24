@@ -3,6 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Controls.Material 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Controls.impl 2.15
+import QtQuick.Window 2.15
 
 Rectangle {
     id: headerBarRoot
@@ -16,6 +17,21 @@ Rectangle {
 
     signal openSettings()
     signal openAddAccount()
+
+    // 原生顶栏窗口拖拽区（位于按钮下方，不拦截任何按钮点击，按住空白或标题即可自由移动窗口）
+    MouseArea {
+        id: headerDragArea
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        onPressed: function(mouse) {
+            var win = Window.window;
+            if (win && typeof win.startSystemMove === "function") {
+                win.startSystemMove();
+            }
+            mouse.accepted = true;
+        }
+    }
 
     readonly property string currentActiveEmail: (accountModel && accountModel.activeEmail && accountModel.activeEmail.length > 0) ?
                                                  accountModel.activeEmail :

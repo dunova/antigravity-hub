@@ -91,7 +91,7 @@ private slots:
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.3.1"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.3.2"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1462,14 +1462,23 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
 
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bwidth\s*:\s*minimumWidth\b)"))), "Main.qml default width must equal minimumWidth");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*720\b)"))), "Main.qml minimumWidth != 720");
-    QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth to allow manual stretching & dynamic tiling");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*idealHeight\b)"))), "Main.qml default height must be adaptive idealHeight");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*baseChromeHeight\s*\+\s*minAdaptiveRowCount\s*\*\s*rowHeightPx\b)"))), "Main.qml minimumHeight must dynamically bind to baseChromeHeight + minAdaptiveRowCount * rowHeightPx (226px)");
+    QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth so horizontal resizing stays free");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bfixedVisibleRows\s*:\s*15\b)"))), "Main.qml fixedVisibleRows != 15");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*fixedWindowHeight\b)"))), "Main.qml minimumHeight must lock to fixedWindowHeight (814px)");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bmaximumHeight\s*:\s*fixedWindowHeight\b)"))), "Main.qml maximumHeight must lock to fixedWindowHeight (814px)");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*fixedWindowHeight\b)"))), "Main.qml height must lock to fixedWindowHeight (814px)");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*696\b)"))), "Main.qml contentWidth != 696");
     QVERIFY2(!mainContent.contains(QStringLiteral("switchTopGemini")), "v4.2.0: Main.qml must not keep TopG shortcut");
     QVERIFY2(!mainContent.contains(QStringLiteral("triggerPrewarm")), "v4.2.0: Main.qml must not keep manual Prewarm shortcut");
 
-    // 2. Offscreen Dynamic Instantiation of Main.qml with 14 mock accounts (verify exact 720x772 adaptive fit)
+    // Verify HeaderBar.qml supports native window dragging via startSystemMove()
+    QFile headerFile(QStringLiteral(":/HeaderBar.qml"));
+    QVERIFY(headerFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString headerContent = QString::fromUtf8(headerFile.readAll());
+    headerFile.close();
+    QVERIFY2(headerContent.contains(QStringLiteral("startSystemMove()")), "HeaderBar.qml must support native window dragging via startSystemMove()");
+
+    // 2. Offscreen Dynamic Instantiation of Main.qml with 14 mock accounts (fixed 15-row height 814px, 720px default width)
     QQmlEngine engine;
     engine.addImageProvider(QStringLiteral("icons"), new IconProvider());
 
@@ -1521,22 +1530,23 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
 
     QCOMPARE(win->width(), 720);
     QCOMPARE(win->property("minimumWidth").toInt(), 720);
-    QCOMPARE(win->property("minimumHeight").toInt(), 226);
-    QCOMPARE(win->property("minAdaptiveRowCount").toInt(), 1);
-    QCOMPARE(win->property("maxAdaptiveRowCount").toInt(), 15);
+    QCOMPARE(win->property("fixedVisibleRows").toInt(), 15);
+    QCOMPARE(win->property("fixedWindowHeight").toInt(), 814);
+    QCOMPARE(win->property("minimumHeight").toInt(), 814);
+    QCOMPARE(win->property("maximumHeight").toInt(), 814);
     QCOMPARE(win->property("contentWidth").toInt(), 696);
-    QCOMPARE(win->height(), win->property("idealHeight").toInt());
-    QCOMPARE(win->property("rawIdealHeight").toInt(), 772);
-    QVERIFY(win->property("idealHeight").toInt() <= 772 && win->property("idealHeight").toInt() >= 226);
+    QCOMPARE(win->height(), 814);
 
     win->show();
     QCoreApplication::processEvents();
 
-    // Resize stress test: manual stretching works freely while preserving contentWidth baseline
+    // Horizontal-only resize test: width stretches freely while vertical height stays locked at 814px
     win->resize(1280, 900);
     QCoreApplication::processEvents();
+    QCOMPARE(win->width(), 1280);
+    QCOMPARE(win->minimumHeight(), 814);
+    QCOMPARE(win->maximumHeight(), 814);
     QCOMPARE(win->property("contentWidth").toInt(), 696);
-    QCOMPARE(win->property("userResizedManually").toBool(), true);
 }
 
 void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
@@ -2463,13 +2473,13 @@ void AntigravityHubTests::v430RegionRestrictionUnlockAndPaginationInvariants() {
 }
 
 void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
-    // 1. 验证 Main.qml 中 1 到 15 个账号的高度梯队与超 15 个封顶几何
+    // 验证 Main.qml 无论账号数量少于 15 个还是超过 15 个，始终锁死 15 行固定高度 814px（少于 15 个留白，超过 15 个右侧拉条，仅允许左右拉伸）
     const QString prevHubDir = qEnvironmentVariable("ANTIGRAVITY_HUB_DIR");
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     QDir(tempDir.path()).mkpath("data");
 
-    // Case A: 1 个账号，验证最矮极限尺寸 226px
+    // Case A: 1 个账号，依然严格锁定 15 行固定高度 814px（下方自然留白）
     QJsonObject accs1;
     QJsonObject a1;
     a1["email"] = "single@example.com";
@@ -2514,15 +2524,13 @@ void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
     QQuickWindow *win1 = qobject_cast<QQuickWindow*>(root1.data());
     QVERIFY(win1 != nullptr);
     QCOMPARE(win1->property("minimumWidth").toInt(), 720);
-    QCOMPARE(win1->property("minimumHeight").toInt(), 226);
-    QCOMPARE(win1->property("minAdaptiveRowCount").toInt(), 1);
-    QCOMPARE(win1->property("maxAdaptiveRowCount").toInt(), 15);
-    QCOMPARE(win1->property("currentAccountCount").toInt(), 1);
-    QCOMPARE(win1->property("adaptiveRowCount").toInt(), 1);
-    QCOMPARE(win1->property("rawIdealHeight").toInt(), 226);
-    QCOMPARE(win1->height(), 226);
+    QCOMPARE(win1->property("fixedVisibleRows").toInt(), 15);
+    QCOMPARE(win1->property("fixedWindowHeight").toInt(), 814);
+    QCOMPARE(win1->property("minimumHeight").toInt(), 814);
+    QCOMPARE(win1->property("maximumHeight").toInt(), 814);
+    QCOMPARE(win1->height(), 814);
 
-    // Case B: 20 个账号（单页上限），验证 15 行高度封顶（814px）与滚动条激活
+    // Case B: 20 个账号（单页上限），依然锁定 15 行固定高度 814px（右侧滚动条激活）
     QJsonObject accs20;
     for (int i = 1; i <= 20; ++i) {
         QJsonObject a;
@@ -2566,12 +2574,9 @@ void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
 
     QQuickWindow *win20 = qobject_cast<QQuickWindow*>(root20.data());
     QVERIFY(win20 != nullptr);
-    QCOMPARE(win20->property("currentAccountCount").toInt(), 20);
-    // 高度上限锁定为 15 行 (rawIdealHeight = 184 + 15 * 42 = 814)
-    QCOMPARE(win20->property("adaptiveRowCount").toInt(), 15);
-    QCOMPARE(win20->property("rawIdealHeight").toInt(), 814);
-    QCOMPARE(win20->height(), win20->property("idealHeight").toInt());
-    QVERIFY(win20->property("idealHeight").toInt() <= 814 && win20->property("idealHeight").toInt() >= 226);
+    QCOMPARE(win20->property("minimumHeight").toInt(), 814);
+    QCOMPARE(win20->property("maximumHeight").toInt(), 814);
+    QCOMPARE(win20->height(), 814);
 
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir.toLocal8Bit());

@@ -7,107 +7,19 @@ import QtQuick.Window 2.15
 ApplicationWindow {
     id: appWindow
     visible: true
-    // 默认即最小紧凑宽度（内容 696 + 左右边距 24 = 720），高度按账号数量精准自适应（最矮 1 行 226px，最长 15 行 814px，超 15 行右侧自动显现拉条），允许用户自由拉伸
+    // 固定 15 行上下高度（内容宽 696 + 左右边距 24 = 720 默认最窄；上下彻底锁死 814px，少于 15 个留白，超过 15 个右侧拉条，仅允许左右拉伸）
     readonly property int contentWidth: 696
     readonly property int baseChromeHeight: 184
     readonly property int rowHeightPx: 42
-    readonly property int minAdaptiveRowCount: 1
-    readonly property int maxAdaptiveRowCount: 15
-    readonly property int currentAccountCount: {
-        if (typeof proxyModel !== "undefined" && proxyModel) {
-            if (typeof proxyModel.filteredCount !== "undefined") return proxyModel.filteredCount;
-            if (typeof proxyModel.count !== "undefined") return proxyModel.count;
-            if (typeof proxyModel.rowCount === "function") return proxyModel.rowCount();
-        }
-        if (accountModel) {
-            if (typeof accountModel.count !== "undefined") return accountModel.count;
-            if (typeof accountModel.rowCount === "function") return accountModel.rowCount();
-        }
-        return 0;
-    }
-    readonly property int adaptiveRowCount: Math.max(minAdaptiveRowCount, Math.min(maxAdaptiveRowCount, currentAccountCount || 1))
-    readonly property int rawIdealHeight: baseChromeHeight + adaptiveRowCount * rowHeightPx
-    readonly property int idealHeight: {
-        var maxH = (Screen && Screen.desktopAvailableHeight > 400) ? (Screen.desktopAvailableHeight - 80) : 860;
-        return Math.max(minimumHeight, Math.min(maxH, rawIdealHeight));
-    }
-    property bool userResizedManually: false
-    property bool applyingAutoGeometry: false
-    property bool initialGeometryApplied: false
+    readonly property int fixedVisibleRows: 15
+    readonly property int fixedWindowHeight: baseChromeHeight + fixedVisibleRows * rowHeightPx
 
     minimumWidth: 720
     width: minimumWidth
-    minimumHeight: baseChromeHeight + minAdaptiveRowCount * rowHeightPx
-    height: idealHeight
+    minimumHeight: fixedWindowHeight
+    maximumHeight: fixedWindowHeight
+    height: fixedWindowHeight
     title: qsTr("Antigravity Hub")
-
-    function applyAdaptiveGeometry(forceMinimumWidth) {
-        if (userResizedManually) return;
-        applyingAutoGeometry = true;
-        if (forceMinimumWidth && Math.abs(width - minimumWidth) > 1) {
-            width = minimumWidth;
-        }
-        var targetH = idealHeight;
-        if (Math.abs(height - targetH) > 1) {
-            height = targetH;
-        }
-        applyingAutoGeometry = false;
-    }
-
-    function applyAdaptiveHeight() {
-        applyAdaptiveGeometry(false);
-    }
-
-    Component.onCompleted: {
-        applyAdaptiveGeometry(true);
-        Qt.callLater(function() {
-            applyAdaptiveGeometry(true);
-        });
-    }
-
-    Timer {
-        id: startupGeometryTimer
-        interval: 180
-        repeat: true
-        property int tickCount: 0
-        running: true
-        onTriggered: {
-            tickCount++;
-            applyAdaptiveGeometry(true);
-            if (tickCount >= 5) {
-                running = false;
-                initialGeometryApplied = true;
-            }
-        }
-    }
-
-    onHeightChanged: {
-        if (initialGeometryApplied && !applyingAutoGeometry && visible && Math.abs(height - idealHeight) > 4) {
-            userResizedManually = true;
-        }
-    }
-
-    onWidthChanged: {
-        if (initialGeometryApplied && !applyingAutoGeometry && visible && Math.abs(width - minimumWidth) > 4) {
-            userResizedManually = true;
-        }
-    }
-
-    Connections {
-        target: accountModel
-        ignoreUnknownSignals: true
-        function onCountChanged() {
-            appWindow.applyAdaptiveHeight();
-        }
-    }
-
-    Connections {
-        target: (typeof proxyModel !== "undefined") ? proxyModel : null
-        ignoreUnknownSignals: true
-        function onCountsChanged() {
-            appWindow.applyAdaptiveHeight();
-        }
-    }
 
     // Dynamic Omarchy Design System & Typography
     color: (theme && theme.canvas) ? theme.canvas : ((theme && theme.background) ? theme.background : "#142620")
