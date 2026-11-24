@@ -39,9 +39,9 @@ Item {
         Rectangle {
             id: searchBox
             Layout.fillWidth: true
-            Layout.minimumWidth: 108
-            Layout.preferredWidth: 124
-            Layout.maximumWidth: 184
+            Layout.minimumWidth: 82
+            Layout.preferredWidth: 96
+            Layout.maximumWidth: 168
             Layout.preferredHeight: 30
             radius: 0
             color: (theme && theme.surface2 && theme.surface2.charAt(0) === '#') ? theme.surface2 : "#1a1b26"
@@ -238,14 +238,15 @@ Item {
         }
 
         // -------------------------------------------------------------
-        // 2.5. 三档账号类别快筛胶囊组 (付费 PRO / 免费 PRO / FREE)
+        // 2.5. 四档账号类别快筛胶囊组 (付费 PRO / 学生 PRO / 免费 PRO / FREE)
         // -------------------------------------------------------------
         RowLayout {
-            spacing: 3
+            spacing: 2
 
             Repeater {
                 model: [
                     { key: "PAID_PRO", label: qsTr("Paid Pro"), color: (theme && theme.mode === "light") ? "#D97706" : "#F59E0B", textCol: (theme && theme.mode === "light") ? "#B45309" : "#FBBF24" },
+                    { key: "STUDENT_PRO", label: qsTr("Student Pro"), color: (theme && theme.mode === "light") ? "#D97706" : "#F59E0B", textCol: (theme && theme.mode === "light") ? "#B45309" : "#FBBF24" },
                     { key: "FREE_PRO", label: qsTr("Free Pro"), color: (theme && theme.mode === "light") ? "#0284C7" : "#22D3EE", textCol: (theme && theme.mode === "light") ? "#0369A1" : "#67E8F9" },
                     { key: "FREE", label: qsTr("Free"), color: (theme && theme.mode === "light") ? "#6B7280" : "#9CA3AF", textCol: (theme && theme.mode === "light") ? "#4B5563" : "#D1D5DB" }
                 ]
@@ -255,7 +256,7 @@ Item {
                     required property var modelData
                     property bool isSelected: proxyModel ? (proxyModel.tierFilter === modelData.key) : false
 
-                    implicitWidth: tierPillRow.implicitWidth + 10
+                    implicitWidth: tierPillRow.implicitWidth + 8
                     implicitHeight: 28
                     radius: 0
                     color: isSelected ? Qt.alpha(modelData.color, 0.22) :

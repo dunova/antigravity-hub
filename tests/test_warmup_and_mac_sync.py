@@ -436,6 +436,77 @@ class TestWarmupAndMacSync(unittest.TestCase):
         self.assertIsNone(rec["gemini"]["quota_5h"])
         self.assertIsNone(rec["claude"]["quota_5h"])
 
+    def test_v440_four_tier_and_gold_neon_badge(self):
+        """v4.4.0 四档来源分类 + 满血 Gemini 4 Neon 一律黄金背景渲染与满血轮转归池"""
+        from hub.server import classify_account_tier, detect_account_has_neon, render_tier_badge_html
+        from core.rotator import _is_paid_pro_account
+
+        stu_acc = {"email": "stu@example.com", "tier_override": "STUDENT_PRO", "has_5h": True, "claude_version": "5.5"}
+        gold_free_acc = {"email": "goldfree@example.com", "tier_override": "FREE_PRO", "has_5h": True, "claude_version": "5.5"}
+        normal_free_acc = {"email": "normfree@example.com", "tier": "FREE_PRO", "has_5h": True, "claude_version": "4.6"}
+
+        self.assertEqual(classify_account_tier(stu_acc)[:2], ("STUDENT_PRO", "学生 PRO"))
+        self.assertTrue(detect_account_has_neon(stu_acc))
+        self.assertTrue(_is_paid_pro_account(stu_acc))
+
+        self.assertEqual(classify_account_tier(gold_free_acc)[:2], ("FREE_PRO", "免费 PRO"))
+        self.assertTrue(detect_account_has_neon(gold_free_acc))
+        self.assertTrue(_is_paid_pro_account(gold_free_acc))
+
+        self.assertEqual(classify_account_tier(normal_free_acc)[:2], ("FREE_PRO", "免费 PRO"))
+        self.assertFalse(detect_account_has_neon(normal_free_acc))
+        self.assertFalse(_is_paid_pro_account(normal_free_acc))
+
+        # 黄金背景断言：18 个月满血免费 PRO 与学生 PRO 均为 #FEF3C7 黄金背景，普通免费 PRO 为 #E0F2FE 青蓝背景
+        html_stu = render_tier_badge_html("STUDENT_PRO", "学生 PRO", has_neon=True, email="stu@example.com")
+        html_gold_free = render_tier_badge_html("FREE_PRO", "免费 PRO", has_neon=True, email="goldfree@example.com")
+        html_norm_free = render_tier_badge_html("FREE_PRO", "免费 PRO", has_neon=False, email="normfree@example.com")
+        self.assertIn("#FEF3C7", html_stu)
+        self.assertIn("学生 PRO", html_stu)
+        self.assertIn("#FEF3C7", html_gold_free)
+        self.assertIn("免费 PRO", html_gold_free)
+        self.assertIn("#E0F2FE", html_norm_free)
+
+    def test_v440_scheme_a_isolation_invariants(self):
+        """v4.4.0 方案 A 强隔离：独立浏览器容器、永久独立 installation_id、低并发错峰与独立代理"""
+        import inspect
+        from core.switcher import ensure_account_installation_id, build_account_opener
+        from hub.server import get_account_browser_profile, launch_browser_for_auth
+
+        # 1. 每个账号永久分配独立的 UUID installation_id
+        acc_a = {"email": "alpha@example.com"}
+        acc_b = {"email": "beta@example.com"}
+        id_a1 = ensure_account_installation_id(acc_a)
+        id_a2 = ensure_account_installation_id(acc_a)
+        id_b1 = ensure_account_installation_id(acc_b)
+        self.assertEqual(id_a1, id_a2)
+        self.assertNotEqual(id_a1, id_b1)
+        self.assertEqual(len(id_a1), 36)
+
+        # 2. 独立浏览器容器名稳定、唯一且脱敏
+        p_a = get_account_browser_profile("alpha@example.com")
+        p_b = get_account_browser_profile("beta@example.com")
+        self.assertNotEqual(p_a, p_b)
+        self.assertTrue(p_a.startswith("acc_"))
+        self.assertNotIn("alpha", p_a)
+
+        # 3. launch_browser_for_auth 默认 isolated=True
+        sig = inspect.signature(launch_browser_for_auth)
+        self.assertTrue(sig.parameters["isolated"].default)
+
+        # 4. 单账号代理 opener 可安全构造
+        opener = build_account_opener("http://127.0.0.1:17890")
+        self.assertIsNotNone(opener)
+
+        # 5. server.py 源码中禁止 6 线程瞬间齐射与解封 isolated=False
+        with open(os.path.join(os.path.dirname(__file__), "..", "hub", "server.py"), encoding="utf-8") as sf:
+            server_src = sf.read()
+        self.assertNotIn("max_workers=6", server_src)
+        self.assertIn("max_workers=2", server_src)
+        self.assertNotIn("launch_browser_for_auth(smart_url, isolated=False", server_src)
+        self.assertIn('elif parsed.path == "/api/region_unlock":', server_src)
+        self.assertIn('elif parsed.path == "/api/set_tier":', server_src)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

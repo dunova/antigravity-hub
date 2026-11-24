@@ -24,9 +24,10 @@ struct AccountItem {
     QString maskedName;
     QString tier;
     QString tierDisplay;
-    int tierRank = 2;           // 0 = PAID_PRO, 1 = FREE_PRO, 2 = FREE
+    int tierRank = 4;           // 0 = PAID_PRO, 1 = STUDENT_PRO, 2 = GOLD FREE_PRO, 3 = FREE_PRO, 4 = FREE
     bool pro = false;
     bool has5h = false;
+    bool hasNeon = false;       // 底层是否具备 Gemini 4 Neon / Claude 5.5 满血能力（黄金背景真源）
     bool isActive = false;
     bool isBlocked = false;
     QString validationUrl;
@@ -69,9 +70,11 @@ class AccountModel : public QAbstractListModel {
     Q_PROPERTY(QString activeEmail READ activeEmail NOTIFY activeEmailChanged)
     Q_PROPERTY(QString activeTier READ activeTier NOTIFY activeEmailChanged)
     Q_PROPERTY(QString activeTierDisplay READ activeTierDisplay NOTIFY activeEmailChanged)
+    Q_PROPERTY(bool activeHasNeon READ activeHasNeon NOTIFY activeEmailChanged)
     Q_PROPERTY(int totalAccounts READ totalAccounts NOTIFY countChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int paidProCount READ paidProCount NOTIFY countChanged)
+    Q_PROPERTY(int studentProCount READ studentProCount NOTIFY countChanged)
     Q_PROPERTY(int freeProCount READ freeProCount NOTIFY countChanged)
     Q_PROPERTY(int freeCount READ freeCount NOTIFY countChanged)
     Q_PROPERTY(bool isMasked READ isMasked WRITE setIsMasked NOTIFY isMaskedChanged)
@@ -110,6 +113,7 @@ public:
         TierDisplayRole,
         TierRankRole,
         Has5hRole,
+        HasNeonRole,
         IdRole
     };
     Q_ENUM(AccountRoles)
@@ -121,6 +125,7 @@ public:
     int totalAccounts() const { return rowCount(); }
     Q_INVOKABLE int count() const { return rowCount(); }
     int paidProCount() const;
+    int studentProCount() const;
     int freeProCount() const;
     int freeCount() const;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -129,6 +134,7 @@ public:
     QString activeEmail() const { return m_activeEmail; }
     QString activeTier() const;
     QString activeTierDisplay() const;
+    bool activeHasNeon() const;
     bool isMasked() const { return m_isMasked; }
     Q_INVOKABLE void setIsMasked(bool masked);
 

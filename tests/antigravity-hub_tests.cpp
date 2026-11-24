@@ -86,12 +86,15 @@ private slots:
     // v4.3.1 Minimum Adaptive Window Geometry (1-15 rows) & Overflow Scrollbar Invariants
     void v431AdaptiveHeightAndScrollbarInvariants();
 
+    // v4.4.0 Four-Tier (Paid/Student/FreePro/Free) Gold Neon & Scheme A Isolation Invariants
+    void v440FourTierGoldNeonAndIsolationInvariants();
+
     void cleanupTestCase();
 };
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.3.2"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.4.0"));
 }
 
 // -----------------------------------------------------------------------------
@@ -2577,6 +2580,106 @@ void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
     QCOMPARE(win20->property("minimumHeight").toInt(), 814);
     QCOMPARE(win20->property("maximumHeight").toInt(), 814);
     QCOMPARE(win20->height(), 814);
+
+    if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
+    else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir.toLocal8Bit());
+}
+
+void AntigravityHubTests::v440FourTierGoldNeonAndIsolationInvariants() {
+    const QString prevHubDir = qEnvironmentVariable("ANTIGRAVITY_HUB_DIR");
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QDir(tempDir.path()).mkpath("data");
+
+    QJsonObject accs;
+
+    // 1. 学生 PRO (具备满血 Claude 5.5 / Gemini 4 Neon -> 黄金背景)
+    QJsonObject aStu;
+    aStu["email"] = "student_demo@example.com";
+    aStu["tier_override"] = "STUDENT_PRO";
+    aStu["has_5h"] = true;
+    aStu["claude_version"] = "5.5";
+    accs["student_demo@example.com"] = aStu;
+
+    // 2. 付费 PRO (正规订阅 -> 黄金背景)
+    QJsonObject aPaid;
+    aPaid["email"] = "paid_demo@example.com";
+    aPaid["tier_override"] = "PAID_PRO";
+    aPaid["has_5h"] = true;
+    aPaid["claude_version"] = "5.5";
+    accs["paid_demo@example.com"] = aPaid;
+
+    // 3. 18 个月满血免费 PRO (来源为 FREE_PRO，但具备 Neon 满血能力 -> 黄金背景)
+    QJsonObject aGoldFree;
+    aGoldFree["email"] = "gold_free_demo@example.com";
+    aGoldFree["tier_override"] = "FREE_PRO";
+    aGoldFree["has_5h"] = true;
+    aGoldFree["has_neon"] = true;
+    aGoldFree["claude_version"] = "5.5";
+    accs["gold_free_demo@example.com"] = aGoldFree;
+
+    // 4. 普通免费 PRO (仅 4.6 / 3.8 -> 青蓝背景)
+    QJsonObject aNormalFreePro;
+    aNormalFreePro["email"] = "normal_freepro@example.com";
+    aNormalFreePro["tier"] = "FREE_PRO";
+    aNormalFreePro["has_5h"] = true;
+    aNormalFreePro["claude_version"] = "4.6";
+    accs["normal_freepro@example.com"] = aNormalFreePro;
+
+    // 5. 普通 FREE (无 5H -> 灰白背景)
+    QJsonObject aFree;
+    aFree["email"] = "free_demo@example.com";
+    aFree["tier"] = "FREE";
+    aFree["has_5h"] = false;
+    accs["free_demo@example.com"] = aFree;
+
+    QJsonObject doc;
+    doc["active_email"] = "gold_free_demo@example.com";
+    doc["accounts"] = accs;
+
+    QFile f(tempDir.filePath("data/accounts_hub.json"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QJsonDocument(doc).toJson());
+    f.close();
+
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    AccountModel model;
+    QCOMPARE(model.rowCount(), 5);
+    QCOMPARE(model.paidProCount(), 1);
+    QCOMPARE(model.studentProCount(), 1);
+    QCOMPARE(model.freeProCount(), 2);
+    QCOMPARE(model.freeCount(), 1);
+    QCOMPARE(model.activeTier(), QStringLiteral("FREE_PRO"));
+    QCOMPARE(model.activeHasNeon(), true);
+
+    const int rStu = model.findIndexByEmail("student_demo@example.com");
+    const int rGoldFree = model.findIndexByEmail("gold_free_demo@example.com");
+    const int rNormalFreePro = model.findIndexByEmail("normal_freepro@example.com");
+    const int rFree = model.findIndexByEmail("free_demo@example.com");
+    QVERIFY(rStu >= 0 && rGoldFree >= 0 && rNormalFreePro >= 0 && rFree >= 0);
+
+    QCOMPARE(model.data(model.index(rStu, 0), AccountModel::TierRole).toString(), QStringLiteral("STUDENT_PRO"));
+    QCOMPARE(model.data(model.index(rStu, 0), AccountModel::HasNeonRole).toBool(), true);
+    QCOMPARE(model.data(model.index(rGoldFree, 0), AccountModel::TierRole).toString(), QStringLiteral("FREE_PRO"));
+    QCOMPARE(model.data(model.index(rGoldFree, 0), AccountModel::HasNeonRole).toBool(), true);
+    QCOMPARE(model.data(model.index(rNormalFreePro, 0), AccountModel::TierRole).toString(), QStringLiteral("FREE_PRO"));
+    QCOMPARE(model.data(model.index(rNormalFreePro, 0), AccountModel::HasNeonRole).toBool(), false);
+    QCOMPARE(model.data(model.index(rFree, 0), AccountModel::HasNeonRole).toBool(), false);
+
+    // 校验 QML 黄金满血视觉与四档筛选静态不变量
+    QFile listFile(QStringLiteral(":/AccountListView.qml"));
+    QVERIFY(listFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString listText = QString::fromUtf8(listFile.readAll());
+    listFile.close();
+    QVERIFY2(listText.contains(QStringLiteral("isGoldNeon")), "AccountListView.qml missing isGoldNeon gold badge rule");
+    QVERIFY2(listText.contains(QStringLiteral("setAccountTier")), "AccountListView.qml missing click-to-cycle setAccountTier");
+
+    QFile filterFile(QStringLiteral(":/FilterBar.qml"));
+    QVERIFY(filterFile.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString filterText = QString::fromUtf8(filterFile.readAll());
+    filterFile.close();
+    QVERIFY2(filterText.contains(QStringLiteral("STUDENT_PRO")), "FilterBar.qml missing STUDENT_PRO filter capsule");
 
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir.toLocal8Bit());

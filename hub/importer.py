@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import time
+import uuid
 import base64
 import random
 import logging
@@ -62,7 +63,7 @@ OAUTH_SCOPES = [
     "https://www.googleapis.com/auth/cclog",
     "https://www.googleapis.com/auth/experimentsandconfigs"
 ]
-NATIVE_OAUTH_USER_AGENT = "vscode/1.X.X (Antigravity/4.3.0)"
+NATIVE_OAUTH_USER_AGENT = "vscode/1.X.X (Antigravity/4.4.0)"
 
 
 def _atomic_write_json(file_path: str, data: Any, indent: int = 2) -> bool:
@@ -120,7 +121,9 @@ def normalize_account_record(raw: Dict[str, Any], default_email: str = "") -> Op
         has_5h = False
     else:
         has_5h = True
-    is_pro = tier in ("PAID_PRO", "FREE_PRO", "PRO")
+    is_pro = tier in ("PAID_PRO", "STUDENT_PRO", "FREE_PRO", "PRO")
+    inst_id = str(raw.get("installation_id") or "").strip() or str(uuid.uuid4())
+    proxy_url = str(raw.get("proxy_url") or "").strip()
 
     # 配额对象归一化
     gemini_data = raw.get("gemini", {})
@@ -140,6 +143,9 @@ def normalize_account_record(raw: Dict[str, Any], default_email: str = "") -> Op
         "tier": tier,
         "pro": is_pro,
         "has_5h": has_5h,
+        "has_neon": bool(raw.get("has_neon", tier in ("PAID_PRO", "STUDENT_PRO"))),
+        "installation_id": inst_id,
+        "proxy_url": proxy_url,
         "refresh_token": refresh_token,
         "access_token": access_token,
         "expiry_timestamp": int(raw.get("expiry_timestamp") or token_obj.get("expiry_timestamp") or (now_ts + 3600)),

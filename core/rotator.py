@@ -46,15 +46,19 @@ def _has_usable_refresh_token(acc: Dict[str, Any]) -> bool:
 
 
 def _is_paid_pro_account(acc: Dict[str, Any]) -> bool:
-    """判断账号是否为付费 PRO (PAID_PRO，具备 Gemini 4 / Claude 5.5 权限)"""
+    """判断账号是否为黄金满血 PRO 账号（能用 Gemini 4 Neon / Claude 5.5：涵盖付费 PRO、学生 PRO、满血 18 个月免费 PRO）"""
     if not isinstance(acc, dict):
         return False
+    if acc.get("has_neon") is True:
+        return True
     override = str(acc.get("tier_override") or "").strip().upper()
-    if override:
-        return override == "PAID_PRO"
+    if override == "FREE":
+        return False
+    if override in ("PAID_PRO", "STUDENT_PRO"):
+        return True
     tier = str(acc.get("tier") or "").strip().upper()
-    if tier in ("PAID_PRO", "FREE_PRO", "FREE"):
-        return tier == "PAID_PRO"
+    if tier in ("PAID_PRO", "STUDENT_PRO"):
+        return True
     raw_has_5h = acc.get("has_5h")
     if isinstance(raw_has_5h, bool):
         has_5h = raw_has_5h
@@ -62,9 +66,11 @@ def _is_paid_pro_account(acc: Dict[str, Any]) -> bool:
         g_q5h = (acc.get("gemini") or {}).get("quota_5h")
         c_q5h = (acc.get("claude") or {}).get("quota_5h")
         has_5h = (g_q5h is not None) or (c_q5h is not None)
+    if not has_5h:
+        return False
     c_mods = acc.get("claude_models") or []
     if c_mods:
-        has_55 = any(("5-5" in str(m) or "5.5" in str(m)) for m in c_mods)
+        has_55 = any(("5-5" in str(m) or "5.5" in str(m) or "neon" in str(m).lower()) for m in c_mods)
     else:
         has_55 = (str(acc.get("claude_version") or "").strip() == "5.5")
     return bool(has_5h and has_55)

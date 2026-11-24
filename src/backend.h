@@ -71,6 +71,7 @@ public:
     Q_INVOKABLE void triggerPrewarm();
     Q_INVOKABLE void unblockAccount(const QString &email);
     Q_INVOKABLE void openRegionChange(const QString &email, const QString &customUrl = QString());
+    Q_INVOKABLE void setAccountTier(const QString &email, const QString &tierOverride);
     Q_INVOKABLE void saveSettings(const QJsonObject &settings);
     Q_INVOKABLE void unlockManualOverride();
     Q_INVOKABLE void copyToClipboard(const QString &text);

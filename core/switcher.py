@@ -16,6 +16,7 @@ import os
 import sys
 import time
 import json
+import uuid
 import base64
 import random
 import logging
@@ -45,7 +46,30 @@ QUOTA_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveU
 MODELS_ENDPOINT = "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
 
 TOKEN_REFRESH_SKEW_SECONDS = 900  # 15分钟安全偏置
-NATIVE_OAUTH_USER_AGENT = "vscode/1.X.X (Antigravity/4.3.0)"
+NATIVE_OAUTH_USER_AGENT = "vscode/1.X.X (Antigravity/4.4.0)"
+INSTALLATION_ID_PATH = os.path.expanduser("~/.gemini/antigravity/installation_id")
+
+
+def ensure_account_installation_id(acc: Dict[str, Any]) -> str:
+    """为账号分配并持久化专属独立的 installation_id (UUIDv4)，防止多账号共用同一设备安装 ID"""
+    if not isinstance(acc, dict):
+        return ""
+    existing = str(acc.get("installation_id") or "").strip()
+    if existing and len(existing) >= 32:
+        return existing
+    new_id = str(uuid.uuid4())
+    acc["installation_id"] = new_id
+    return new_id
+
+
+def build_account_opener(proxy_url: str = "", ssl_ctx: Optional[ssl.SSLContext] = None):
+    """按账号可选 proxy_url 构造独立 HTTP Opener，未配置代理时复用默认环境通道"""
+    ctx = ssl_ctx or ssl.create_default_context()
+    handlers: List[Any] = [urllib.request.HTTPSHandler(context=ctx)]
+    p_url = str(proxy_url or "").strip()
+    if p_url:
+        handlers.insert(0, urllib.request.ProxyHandler({"http": p_url, "https": p_url}))
+    return urllib.request.build_opener(*handlers)
 
 # 基础目录与存储配置
 BASE_DATA_DIR = os.environ.get("ANTIGRAVITY_HUB_DIR", os.path.expanduser("~/.antigravity_hub"))
@@ -223,7 +247,8 @@ class AntigravityPhysicalManager:
             logger.warning(f"账号 {email} 缺少 refresh_token，无法执行刷新")
             return None, False
 
-        tok = self.refresh_google_token(rt)
+        proxy_url = str(account.get("proxy_url") or "").strip()
+        tok = self.refresh_google_token(rt, proxy_url=proxy_url)
         if tok and "access_token" in tok:
             new_at = tok["access_token"]
             expires_in = tok.get("expires_in", 3600)
@@ -236,19 +261,20 @@ class AntigravityPhysicalManager:
                 tok_sub["expiry_timestamp"] = new_exp
                 tok_sub["expires_in"] = expires_in
 
-            # 核心机制：若为当前活跃账号，立即无感同步至系统钥匙串与 ~/.gemini/ 文件凭据
+            # 核心机制：若为当前活跃账号，立即无感同步至系统钥匙串与 ~/.gemini/ 凭据池
             try:
                 hub_data = self.load_hub_accounts()
                 if email and email == hub_data.get("active_email"):
-                    self.sync_all_active_credentials(email, new_at, rt, new_exp)
+                    inst_id = ensure_account_installation_id(account)
+                    self.sync_all_active_credentials(email, new_at, rt, new_exp, installation_id=inst_id)
             except Exception as se:
                 logger.warning(f"同步活跃账号凭据至系统异常 ({email}): {se}")
 
             return new_at, True
         return None, False
 
-    def refresh_google_token(self, refresh_token: str) -> Optional[Dict[str, Any]]:
-        """向 Google OAuth 端点发起 refresh_token 续签"""
+    def refresh_google_token(self, refresh_token: str, proxy_url: str = "") -> Optional[Dict[str, Any]]:
+        """向 Google OAuth 端点发起 refresh_token 续签（支持单账号独立代理出口）"""
         if not refresh_token:
             return None
 
@@ -274,14 +300,19 @@ class AntigravityPhysicalManager:
         )
         ctx = ssl.create_default_context()
         try:
-            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            if proxy_url:
+                opener = build_account_opener(proxy_url, ctx)
+                resp_cm = opener.open(req, timeout=10)
+            else:
+                resp_cm = urllib.request.urlopen(req, timeout=10, context=ctx)
+            with resp_cm as resp:
                 body_str = _safe_decode_resp(resp.read())
                 data = json.loads(body_str)
                 logger.info(f"✅ Google OAuth Token 续签成功！有效期: {data.get('expires_in', 3600)}s")
                 return data
         except urllib.error.HTTPError as e:
             err_body = _safe_decode_resp(e.read())
-            logger.error(f"❌ Google OAuth 续签失败: HTTP {e.code} - {e.reason} - {err_body}")
+            logger.error(f"❌ Google OAuth 续签失败: HTTP {e.code}: {e.reason}: {err_body}")
             return None
         except Exception as e:
             logger.error(f"❌ Google OAuth 续签网络异常: {e}")
@@ -499,7 +530,7 @@ class AntigravityPhysicalManager:
                     time.sleep(0.1 * attempt)
             return False
 
-    def sync_all_active_credentials(self, email: str, access_token: str, refresh_token: str, expiry_ts: float) -> bool:
+    def sync_all_active_credentials(self, email: str, access_token: str, refresh_token: str, expiry_ts: float, installation_id: str = "") -> bool:
         """
         【活跃账号全端凭据强一致性同步 · 物理对齐 Mac 原版与 Linux Secret Service】
         将最新签发的 access_token 同步至：
@@ -507,7 +538,8 @@ class AntigravityPhysicalManager:
         2. ~/.gemini/oauth_creds.json (保证 agy CLI 与扩展不过期)
         3. ~/.gemini/jetski-standalone-oauth-token (语言服务优先回退凭据)
         4. ~/.gemini/google_accounts.json (活跃指针)
-        5. ~/.config/Antigravity/app_storage.json (防止 Electron 掉登录页)
+        5. ~/.config/Antigravity/app_storage.json (仅更新登录名指针，绝不清空对话缓存)
+        6. ~/.gemini/antigravity/installation_id (按账号专属独立 UUID 隔离设备指纹)
         """
         exp_rfc = format_rfc3339(expiry_ts or (time.time() + 3600))
         ok_sec = False
@@ -515,17 +547,21 @@ class AntigravityPhysicalManager:
             ok_sec = self.write_to_macos_keychain(access_token, refresh_token, expiry_str=exp_rfc)
         elif sys.platform.startswith("linux"):
             ok_sec = self.write_to_linux_secret(access_token, refresh_token, email=email, expiry_str=exp_rfc)
-        self.sync_local_credentials(email, access_token, refresh_token, expiry_ts)
+        if installation_id:
+            self.sync_local_credentials(email, access_token, refresh_token, expiry_ts, installation_id=installation_id)
+        else:
+            self.sync_local_credentials(email, access_token, refresh_token, expiry_ts)
         logger.info(f"🔄 [活跃凭据原子同步] 账号 {email} 最新 Token 已原子同步至系统钥匙串与 ~/.gemini/ 凭据池！")
         return ok_sec
 
-    def sync_local_credentials(self, email: str, access_token: str, refresh_token: str, expiry_ts: float):
+    def sync_local_credentials(self, email: str, access_token: str, refresh_token: str, expiry_ts: float, installation_id: str = ""):
         """
-        同步本地文件凭据 (对齐官方 Standalone 架构与上游 v5.0.3 规范):
+        同步本地文件凭据 (对齐官方 Standalone 架构与方案 A 设备指纹隔离，100% 保留对话缓存):
         1. ~/.gemini/jetski-standalone-oauth-token (语言服务优先回退凭据，0o600 权限)；
         2. ~/.gemini/oauth_creds.json (Gemini 官方标准凭据，毫秒时间戳保底正数，0o600 权限)；
         3. ~/.gemini/google_accounts.json (活跃指针，0o600 权限)；
-        4. ~/.config/Antigravity/app_storage.json (注入 agy.onboarding.lastLoginUsername 杜绝掉登录页)。
+        4. ~/.config/Antigravity/app_storage.json (仅更新 lastLoginUsername，绝不抛弃对话 cache)；
+        5. ~/.gemini/antigravity/installation_id (写入该账号专属独立 UUID)。
         """
         now_ts = time.time()
         safe_expiry_ms = _safe_i64(expiry_ts * 1000)
@@ -589,7 +625,7 @@ class AntigravityPhysicalManager:
         except Exception as e:
             logger.error(f"❌ 同步 google_accounts.json 失败: {e}")
 
-        # 4. 同步 Electron app_storage.json 的 lastLoginUsername 锁定
+        # 4. 同步 Electron app_storage.json 的 lastLoginUsername 锁定（绝不清理任何对话缓存）
         try:
             app_storage_path = os.path.expanduser("~/.config/Antigravity/app_storage.json")
             if os.path.isfile(app_storage_path):
@@ -601,6 +637,26 @@ class AntigravityPhysicalManager:
                     logger.info(f"✅ Electron 登录指针已成功注入: {app_storage_path} -> {email}")
         except Exception as e:
             logger.warning(f"⚠️ 同步 app_storage.json 登录指针异常: {e}")
+
+        # 5. 写入该账号专属独立 installation_id（36 字节 UUID，隔离跨账号设备指纹，保留对话缓存）
+        inst_id = str(installation_id or "").strip()
+        if inst_id:
+            try:
+                inst_path = INSTALLATION_ID_PATH
+                os.makedirs(os.path.dirname(inst_path), exist_ok=True)
+                tmp_inst = f"{inst_path}.tmp.{os.getpid()}.{time.time()}"
+                with open(tmp_inst, "w", encoding="utf-8") as f:
+                    f.write(inst_id)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_inst, inst_path)
+                try:
+                    os.chmod(inst_path, 0o600)
+                except Exception:
+                    pass
+                logger.info(f"🛡️ [独立设备指纹] 已原子切换账号专属 installation_id: {inst_id[:8]}...")
+            except Exception as e:
+                logger.warning(f"⚠️ 同步账号专属 installation_id 异常: {e}")
 
     def fetch_available_models(self, access_token: str) -> Tuple[str, List[str], Optional[Dict[str, Any]]]:
         """
@@ -686,12 +742,13 @@ class AntigravityPhysicalManager:
                         t_at = target_account.get("access_token", "")
                         t_rt = target_account.get("refresh_token", "")
                         t_exp = target_account.get("expiry_timestamp", 0)
+                        t_inst = str(target_account.get("installation_id") or "")
                         t_exp_rfc = format_rfc3339(t_exp)
                         if sys.platform == "darwin":
                             self.write_to_macos_keychain(t_at, t_rt, expiry_str=t_exp_rfc)
                         elif sys.platform.startswith("linux"):
                             self.write_to_linux_secret(t_at, t_rt, email=t_email, expiry_str=t_exp_rfc)
-                        self.sync_local_credentials(t_email, t_at, t_rt, t_exp)
+                        self.sync_local_credentials(t_email, t_at, t_rt, t_exp, installation_id=t_inst)
                         logger.info(f"🛡️ [Post-Kill Re-assert] 凭据权威二次补写断言成功: {t_email}")
                     except Exception as rex:
                         logger.warning(f"⚠️ [Post-Kill Re-assert] 补写告警: {rex}")
@@ -750,12 +807,18 @@ class AntigravityPhysicalManager:
         at = tok.get("access_token") or target_acc.get("access_token", "")
         exp = tok.get("expiry_timestamp") or target_acc.get("expiry_timestamp", 0)
 
+        # 确保每个账号拥有永久专属的独立 installation_id
+        inst_id = ensure_account_installation_id(target_acc)
+        proxy_url = str(target_acc.get("proxy_url") or "").strip()
+
         # 确保 Token 新鲜
         fresh_acc = {
             "email": target_email,
             "access_token": at,
             "refresh_token": rt,
-            "expiry_timestamp": exp
+            "expiry_timestamp": exp,
+            "installation_id": inst_id,
+            "proxy_url": proxy_url,
         }
         live_at, refreshed = self.ensure_fresh_token(fresh_acc)
         final_at = live_at or at
@@ -771,8 +834,8 @@ class AntigravityPhysicalManager:
         elif sys.platform.startswith("linux"):
             self.write_to_linux_secret(final_at, rt, email=target_email, expiry_str=exp_rfc)
 
-        # 2. 同步本地凭据文件
-        self.sync_local_credentials(target_email, final_at, rt, fresh_acc.get("expiry_timestamp", 0))
+        # 2. 同步本地凭据文件与账号专属 installation_id（绝不清理对话缓存）
+        self.sync_local_credentials(target_email, final_at, rt, fresh_acc.get("expiry_timestamp", 0), installation_id=inst_id)
 
         # 3. 更新 Hub 活跃标记与最近使用时间戳 (供 least-used 策略排序)
         now_epoch = int(time.time())
@@ -850,12 +913,12 @@ class AntigravityPhysicalManager:
         if isinstance(raw_has_5h, bool):
             return raw_has_5h
         override = str(acc.get("tier_override") or "").strip().upper()
-        if override in ("PAID_PRO", "FREE_PRO"):
+        if override in ("PAID_PRO", "STUDENT_PRO", "FREE_PRO"):
             return True
         if override == "FREE":
             return False
         tier = str(acc.get("tier") or "").strip().upper()
-        if tier in ("PAID_PRO", "FREE_PRO"):
+        if tier in ("PAID_PRO", "STUDENT_PRO", "FREE_PRO"):
             return True
         if tier == "FREE":
             return False
@@ -919,10 +982,11 @@ class AntigravityPhysicalManager:
         self,
         access_token: str,
         model: str = "gemini-3.8-flash-low",
-        project: str = "aicode-consumers"
+        project: str = "aicode-consumers",
+        proxy_url: str = "",
     ) -> Dict[str, Any]:
         """
-        单账号官方原生 1-token 真实生成预热（严格携带 project 字段与指定模型 ID）。
+        单账号官方原生 1-token 真实生成预热（严格携带 project 字段与指定模型 ID，支持单账号独立代理出口）。
         """
         target_model = str(model or "gemini-3.8-flash-low").strip()
         payload = {
@@ -949,7 +1013,12 @@ class AntigravityPhysicalManager:
                     },
                     method="POST"
                 )
-                with urllib.request.urlopen(req, timeout=12, context=ctx) as resp:
+                if proxy_url:
+                    opener = build_account_opener(proxy_url, ctx)
+                    resp_cm = opener.open(req, timeout=12)
+                else:
+                    resp_cm = urllib.request.urlopen(req, timeout=12, context=ctx)
+                with resp_cm as resp:
                     if resp.status == 200:
                         resp_data = json.loads(_safe_decode_resp(resp.read()) or "{}")
                         tokens = resp_data.get("response", {}).get("usageMetadata", {})

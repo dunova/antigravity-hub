@@ -27,16 +27,17 @@ import concurrent.futures
 import logging
 import datetime
 import uuid
+import hashlib
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from typing import Dict, Any, List, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "4.3.2"
-__canonical_version_tag__ = "20261124-v4.3.2-FIXED_15_ROWS_HEIGHT_LOCK_HORIZONTAL_ONLY_HEADER_DRAG"
-__last_updated__ = "2026-11-24 13:16:00"
-__canonical_doctrine__ = "Antigravity Hub v4.3.2：固定 15 行上下高度锁死(仅允许左右拉伸，少于 15 个留白，超出右侧拉条)与顶栏原生拖动移动"
+__version__ = "4.4.0"
+__canonical_version_tag__ = "20261124-v4.4.0-SCHEME_A_ISOLATION_FOUR_TIER_GOLD_NEON"
+__last_updated__ = "2026-11-24 13:30:00"
+__canonical_doctrine__ = "Antigravity Hub v4.4.0：方案A轻量化强隔离(独立浏览器容器、独立installation_id、低并发错峰防扫池、单账号代理)与四档分级(付费/学生/免费PRO/FREE，能用Gemini 4 Neon一律黄金背景)"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -175,9 +176,36 @@ def get_installed_browser_candidates() -> List[Dict[str, Any]]:
     return candidates
 
 
-def launch_browser_for_auth(url: str, isolated: bool = False, profile_name: str = "") -> bool:
+def get_account_browser_profile(email: str) -> str:
     """
-    为解封或 OAuth 授权拉起浏览器 (跨平台兼容 macOS / Linux)：
+    为每个账号分配永久专属的独立浏览器容器目录名（位于 ~/.antigravity_hub/browser_profiles/ 下）：
+    1. 优先复用历史已存在且非空的 <safe_name> 目录避免丢登录态；
+    2. 否则分配脱敏稳定的 acc_<sha256[:12]> 独立容器目录，彻底斩断跨账号 Cookie 串号。
+    """
+    clean = str(email or "").strip().lower()
+    if not clean:
+        return f"guest_{uuid.uuid4().hex[:8]}"
+    safe_legacy = clean.replace("@", "_").replace(".", "_")
+    legacy_dir = os.path.join(BASE_DATA_DIR, "browser_profiles", safe_legacy)
+    if os.path.isdir(legacy_dir) and any(os.scandir(legacy_dir)):
+        return safe_legacy
+    digest = hashlib.sha256(clean.encode("utf-8")).hexdigest()[:12]
+    return f"acc_{digest}"
+
+
+def build_account_opener(proxy_url: str = "", ssl_ctx: Optional[ssl.SSLContext] = None):
+    """按账号独立 proxy_url 构造 HTTP Opener，支持为重点 PRO 号绑定独立出口 IP"""
+    ctx = ssl_ctx or ssl.create_default_context()
+    handlers: List[Any] = [urllib.request.HTTPSHandler(context=ctx)]
+    p_url = str(proxy_url or "").strip()
+    if p_url:
+        handlers.insert(0, urllib.request.ProxyHandler({"http": p_url, "https": p_url}))
+    return urllib.request.build_opener(*handlers)
+
+
+def launch_browser_for_auth(url: str, isolated: bool = True, profile_name: str = "") -> bool:
+    """
+    为解封、地区解锁或 OAuth 授权拉起独立容器浏览器 (默认强制 isolated=True，杜绝多账号 Cookie 串号)：
     - macOS: 优先 ego lite / Chrome，支持 --user-data-dir 独立容器；
     - Linux: 优先 Brave / Chromium / Chrome，支持 --user-data-dir 独立容器，兜底 xdg-open；
     """
@@ -296,18 +324,48 @@ def _safe_float(val: Any, default: float = 0.0) -> float:
         return default
 
 
+def detect_account_has_neon(acc: Dict[str, Any]) -> bool:
+    """
+    判定账号底层是否具备 Gemini 4 Neon / Claude 5.5 满血权限（决定是否呈现黄金背景）：
+    无论来源是付费 PRO、学生 PRO 还是 18 个月免费 PRO，凡能用 Gemini 4 Neon 一律返回 True。
+    """
+    if not isinstance(acc, dict):
+        return False
+    raw_has_5h = acc.get("has_5h")
+    if isinstance(raw_has_5h, bool):
+        has_5h = raw_has_5h
+    else:
+        g_q5h = (acc.get("gemini") or {}).get("quota_5h")
+        c_q5h = (acc.get("claude") or {}).get("quota_5h")
+        has_5h = (g_q5h is not None) or (c_q5h is not None)
+    if not has_5h:
+        return False
+    c_mods = acc.get("claude_models") or []
+    if c_mods:
+        if any(("5-5" in str(m) or "5.5" in str(m) or "neon" in str(m).lower()) for m in c_mods):
+            return True
+    if str(acc.get("claude_version") or "").strip() == "5.5":
+        return True
+    if acc.get("has_neon") is True:
+        return True
+    return False
+
+
 def classify_account_tier(acc: Dict[str, Any]) -> Tuple[str, str, bool, bool]:
     """
-    权威三档账号分类判定（100% 基于 Google 官方 API 事实，零硬编码邮箱）：
-      1. PAID_PRO (付费 PRO): 具备 5H 滑动窗口且开通 Claude 5.5 / Gemini 4 满血模型矩阵
-      2. FREE_PRO (免费 PRO): 具备 5H 滑动窗口但仅限 Claude 4.6 / Gemini 3.8 模型矩阵
-      3. FREE     (FREE):     无 5H 滑动窗口，仅有周总配额限制
-    支持可选 tier_override 手工覆写。
+    权威四档账号来源分类判定（100% 零硬编码邮箱）：
+      1. PAID_PRO    (付费 PRO): 常规付费订阅 PRO
+      2. STUDENT_PRO (学生 PRO): 学生教育订阅 PRO
+      3. FREE_PRO    (免费 PRO): 活动白嫖满血 PRO（黄金背景）或普通免费 PRO（青蓝背景）
+      4. FREE        (FREE):     无 5H 滑动窗口，仅有周总配额限制
+    支持 tier_override 手工覆写来源标签，同时底层保留 detect_account_has_neon(acc) 决定黄金满血渲染。
     返回: (tier, tier_display, is_pro, has_5h)
     """
     override = str(acc.get("tier_override") or "").strip().upper()
     if override == "PAID_PRO":
         return "PAID_PRO", "付费 PRO", True, True
+    if override == "STUDENT_PRO":
+        return "STUDENT_PRO", "学生 PRO", True, True
     if override == "FREE_PRO":
         return "FREE_PRO", "免费 PRO", True, True
     if override == "FREE":
@@ -321,13 +379,12 @@ def classify_account_tier(acc: Dict[str, Any]) -> Tuple[str, str, bool, bool]:
         c_q5h = (acc.get("claude") or {}).get("quota_5h")
         has_5h = (g_q5h is not None) or (c_q5h is not None)
 
-    c_mods = acc.get("claude_models") or []
-    if c_mods:
-        has_real_55 = any(("5-5" in str(m) or "5.5" in str(m)) for m in c_mods)
-    else:
-        has_real_55 = (str(acc.get("claude_version") or "").strip() == "5.5")
+    has_neon = detect_account_has_neon(acc)
 
-    if has_5h and has_real_55:
+    tier_raw = str(acc.get("tier") or "").strip().upper()
+    if has_5h and tier_raw == "STUDENT_PRO":
+        return "STUDENT_PRO", "学生 PRO", True, True
+    if has_5h and has_neon:
         return "PAID_PRO", "付费 PRO", True, True
     if has_5h:
         return "FREE_PRO", "免费 PRO", True, True
@@ -1321,7 +1378,7 @@ class HubEngine:
             logger.error(f"Google Token 刷新失败: {e}")
             return None
 
-    def fetch_live_quota(self, access_token: str) -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
+    def fetch_live_quota(self, access_token: str, proxy_url: str = "") -> Tuple[Dict[str, float], Dict[str, str], Optional[str]]:
         """
         拉取配额，返回: (quotas, resets, validation_url)
         若触发 403 VALIDATION_REQUIRED，validation_url 会携带解封链接
@@ -1342,7 +1399,12 @@ class HubEngine:
         quotas: Dict[str, float] = {}
         resets: Dict[str, str] = {}
         try:
-            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
+            if proxy_url:
+                opener = build_account_opener(proxy_url, ctx)
+                resp_cm = opener.open(req, timeout=10)
+            else:
+                resp_cm = urllib.request.urlopen(req, timeout=10, context=ctx)
+            with resp_cm as resp:
                 body_str = _safe_decode_resp(resp.read())
                 data = json.loads(body_str)
             for group in data.get("groups", []):
@@ -1378,9 +1440,9 @@ class HubEngine:
             logger.warning(f"获取官方配额失败: {e}")
             return {}, {}, None
 
-    def fetch_available_models(self, access_token: str) -> Tuple[str, List[str]]:
+    def fetch_available_models(self, access_token: str, proxy_url: str = "") -> Tuple[str, List[str]]:
         """
-        探测账号支持的模型矩阵，精准区分 Claude 5.5 (付费Pro) 与 Claude 4.6 (未付费Pro·预计11月下架)
+        探测账号支持的模型矩阵，精准区分满血 Gemini 4 Neon / Claude 5.5 与普通 Claude 4.6
         返回: (claude_version: "5.5" | "4.6", claude_models: List[str])
         """
         req = urllib.request.Request(
@@ -1395,7 +1457,12 @@ class HubEngine:
         )
         ctx = ssl.create_default_context()
         try:
-            with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+            if proxy_url:
+                opener = build_account_opener(proxy_url, ctx)
+                resp_cm = opener.open(req, timeout=8)
+            else:
+                resp_cm = urllib.request.urlopen(req, timeout=8, context=ctx)
+            with resp_cm as resp:
                 body_str = _safe_decode_resp(resp.read())
                 data = json.loads(body_str)
             c_models = []
@@ -1416,7 +1483,7 @@ class HubEngine:
             logger.debug(f"探测模型矩阵失败: {e}")
             return "4.6", []
 
-    def check_account_region_eligibility(self, access_token: str) -> Tuple[Optional[bool], str, str]:
+    def check_account_region_eligibility(self, access_token: str, proxy_url: str = "") -> Tuple[Optional[bool], str, str]:
         """
         调用 Google 官方 v1internal:loadCodeAssist 毫秒级探测账号关联地区是否受限 (UNSUPPORTED_LOCATION)。
         返回: (is_restricted: True | False | None, region_code: "CN" | "", reason_code: str)
@@ -1445,7 +1512,12 @@ class HubEngine:
         )
         ctx = ssl.create_default_context()
         try:
-            with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+            if proxy_url:
+                opener = build_account_opener(proxy_url, ctx)
+                resp_cm = opener.open(req, timeout=8)
+            else:
+                resp_cm = urllib.request.urlopen(req, timeout=8, context=ctx)
+            with resp_cm as resp:
                 body_str = _safe_decode_resp(resp.read())
                 data = json.loads(body_str)
             inelig = data.get("ineligibleTiers") or []
@@ -1610,15 +1682,20 @@ class HubEngine:
             logger.warning(f"账号 {email} 无法获取有效 access_token，跳过配额刷新")
             return False
 
-        # 2. 向端点发起探测
-        quotas, resets, val_url = self.fetch_live_quota(at)
+        # 2. 向端点发起探测（有配置独立代理时透传 proxy_url，否则保持纯净单参调用）
+        proxy_url = str(acc.get("proxy_url") or "").strip()
+        quotas, resets, val_url = (
+            self.fetch_live_quota(at, proxy_url=proxy_url) if proxy_url else self.fetch_live_quota(at)
+        )
         if not quotas and not val_url and rt:
             # 捕获 401 或无效 Token，启动强制刷新一次性自愈
             logger.warning(f"⚠️ 账号 {email} 探测配额返回空或 401，立即启动强制 Token 续签自愈...")
             new_at, ok = self.ensure_fresh_token(acc, force=True)
             if ok and new_at:
                 at = new_at
-                quotas, resets, val_url = self.fetch_live_quota(at)
+                quotas, resets, val_url = (
+                    self.fetch_live_quota(at, proxy_url=proxy_url) if proxy_url else self.fetch_live_quota(at)
+                )
         if val_url is not None:
             # 捕获到 Google 风控拦截，立即熔断
             acc["validation_blocked"] = True
@@ -1699,27 +1776,33 @@ class HubEngine:
                 if resets.get("gemini4-weekly"):
                     acc["gemini4"]["reset_time_weekly"] = resets["gemini4-weekly"]
 
-        # 3. 探测模型矩阵并按权威规则校准三档等级 (付费 PRO / 免费 PRO / FREE)
+        # 3. 探测模型矩阵并按权威四档规则校准（同时持久化独立 installation_id 与 has_neon 满血能力）
         try:
+            proxy_url = str(acc.get("proxy_url") or "").strip()
+            if not str(acc.get("installation_id") or "").strip():
+                acc["installation_id"] = str(uuid.uuid4())
             g4_from_summary = (quotas.get("gemini4-weekly") is not None) if quotas else False
-            c_ver, c_mods = self.fetch_available_models(at)
+            c_ver, c_mods = self.fetch_available_models(at, proxy_url=proxy_url)
             if c_mods:
                 acc["claude_models"] = c_mods
                 acc["claude_version"] = c_ver
+            has_neon = detect_account_has_neon(acc) or g4_from_summary
+            acc["has_neon"] = bool(has_neon)
             tier, tier_display, is_pro, has_5h = classify_account_tier(acc)
             acc["tier"] = tier
             acc["tier_display"] = tier_display
             acc["pro"] = is_pro
             acc["has_5h"] = has_5h
-            acc["gemini4_supported"] = (tier == "PAID_PRO") or g4_from_summary
-            if tier != "PAID_PRO" and not g4_from_summary:
+            acc["gemini4_supported"] = bool(has_neon or tier in ("PAID_PRO", "STUDENT_PRO"))
+            if not has_neon and tier not in ("PAID_PRO", "STUDENT_PRO") and not g4_from_summary:
                 acc["gemini4"] = None
         except Exception:
             pass
 
         # 3.5 探测账号关联地区是否受限 (Google loadCodeAssist UNSUPPORTED_LOCATION)
         try:
-            is_reg_blocked, reg_code, reg_reason = self.check_account_region_eligibility(at)
+            proxy_url = str(acc.get("proxy_url") or "").strip()
+            is_reg_blocked, reg_code, reg_reason = self.check_account_region_eligibility(at, proxy_url=proxy_url)
             if is_reg_blocked is True:
                 was_reg = bool(acc.get("region_restricted", False))
                 acc["region_restricted"] = True
@@ -1750,25 +1833,31 @@ class HubEngine:
             data = self.load_accounts()
             accounts = data.get("accounts", {})
             success_count = 0
+            items = list(accounts.items())
+            # 方案 A 防扫池关联：随机乱序 + 低并发(max_workers=2) + 轻量随机错峰抖动，彻底消除 6 路瞬间齐射指纹
+            random.shuffle(items)
+            enable_jitter = (os.environ.get("ANTIGRAVITY_FAST_TEST", "") != "1")
 
             def _worker(item):
                 email, acc = item
                 try:
+                    if enable_jitter and len(items) > 1:
+                        time.sleep(random.uniform(0.12, 0.38))
                     ok = self.refresh_single_account_quota(email, acc)
                     return (email, ok)
                 except Exception as e:
-                    logger.error(f"并发刷新账号 {email} 配额失败: {e}")
+                    logger.error(f"错峰刷新账号 {email} 配额失败: {e}")
                     return (email, False)
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-                results = executor.map(_worker, list(accounts.items()))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                results = executor.map(_worker, items)
                 for email, ok in results:
                     if ok:
                         success_count += 1
 
             self.sync_from_local_language_server(data)
             self.save_accounts(data)
-            logger.info(f"✅ 全池配额极速并发刷新完成！成功: {success_count}/{len(accounts)}")
+            logger.info(f"✅ 全池配额低并发错峰刷新完成！成功: {success_count}/{len(accounts)}")
             return success_count
         finally:
             self.refreshing_now = False
@@ -1992,12 +2081,27 @@ def render_gemini4_cell(weekly_pct: Optional[float], reset_weekly_info: str = ""
     """
 
 
-def render_tier_badge_html(tier: str, tier_display: str) -> str:
-    """渲染三档账号类别徽标 (付费 PRO / 免费 PRO / FREE)"""
-    if tier == "PAID_PRO":
-        return f'<span class="badge font-mono" style="background:#FEF3C7;color:#B45309;border:2px solid #D97706;padding:1px 6px;font-weight:900;" title="付费 PRO：Gemini 4 + Claude 5.5 + 5H/周双限">{tier_display}</span>'
-    if tier == "FREE_PRO":
-        return f'<span class="badge font-mono" style="background:#E0F2FE;color:#0369A1;border:2px solid #0284C7;padding:1px 6px;font-weight:900;" title="免费 PRO：Gemini 3.8 + Claude 4.6 + 5H/周双限">{tier_display}</span>'
+def render_tier_badge_html(tier: str, tier_display: str, has_neon: bool = False, email: str = "") -> str:
+    """
+    渲染四档账号类别徽标 (付费 PRO / 学生 PRO / 免费 PRO / FREE)：
+    颜色铁律：凡能用 Gemini 4 Neon / Claude 5.5 满血权限（has_neon=True）一律黄金背景；
+    普通非满血免费 PRO 为青蓝背景；FREE 为中性灰。支持点击循环切换来源类别。
+    """
+    is_gold = bool(has_neon or tier == "PAID_PRO")
+    click_attr = ""
+    cursor_css = ""
+    if email and tier in ("PAID_PRO", "STUDENT_PRO", "FREE_PRO"):
+        cycle_map = {"PAID_PRO": "STUDENT_PRO", "STUDENT_PRO": "FREE_PRO", "FREE_PRO": "PAID_PRO"}
+        nxt = cycle_map.get(tier, "PAID_PRO")
+        click_attr = f""" onclick="doCycleTier('{email}', '{nxt}'); event.preventDefault(); event.stopPropagation();" """
+        cursor_css = "cursor:pointer;"
+
+    if is_gold and tier != "FREE":
+        tip = f"{tier_display}（满血 Gemini 4 Neon + Claude 5.5，点击切换来源类别）"
+        return f'<span class="badge font-mono" style="background:#FEF3C7;color:#B45309;border:2px solid #D97706;padding:1px 6px;font-weight:900;{cursor_css}" title="{tip}"{click_attr}>{tier_display}</span>'
+    if tier in ("FREE_PRO", "STUDENT_PRO"):
+        tip = f"{tier_display}（Gemini 3.8 + Claude 4.6 + 5H/周双限，点击切换来源类别）"
+        return f'<span class="badge font-mono" style="background:#E0F2FE;color:#0369A1;border:2px solid #0284C7;padding:1px 6px;font-weight:900;{cursor_css}" title="{tip}"{click_attr}>{tier_display}</span>'
     return f'<span class="badge font-mono" style="background:#F3F4F6;color:#4B5563;border:2px solid #9CA3AF;padding:1px 6px;font-weight:700;" title="FREE 免费账号：仅周限制（无 5H 滑动限制）">{tier_display}</span>'
 
 
@@ -2088,6 +2192,7 @@ def render_active_pill_html(
     oob: bool = False,
     active_tier: str = "",
     active_tier_display: str = "",
+    active_has_neon: bool = False,
 ) -> str:
     oob_attr = ' hx-swap-oob="true"' if oob else ""
     short_name = active_email.split("@")[0] if "@" in active_email else (active_email or "未激活")
@@ -2095,14 +2200,19 @@ def render_active_pill_html(
     now_ts = time.time()
 
     tier_badge_inline = ""
-    if active_tier == "PAID_PRO":
-        tier_badge_inline = '<span class="active-tier-tag active-tier-paid font-mono">付费 PRO</span>'
-    elif active_tier == "FREE_PRO":
-        tier_badge_inline = '<span class="active-tier-tag active-tier-freepro font-mono">免费 PRO</span>'
-    elif active_tier == "FREE":
-        tier_badge_inline = '<span class="active-tier-tag active-tier-free font-mono">FREE</span>'
-    elif active_tier_display:
-        tier_badge_inline = f'<span class="active-tier-tag active-tier-free font-mono">{active_tier_display}</span>'
+    is_gold = bool(active_has_neon or active_tier == "PAID_PRO")
+    lbl_text = active_tier_display or (
+        "付费 PRO" if active_tier == "PAID_PRO" else
+        ("学生 PRO" if active_tier == "STUDENT_PRO" else
+        ("免费 PRO" if active_tier == "FREE_PRO" else ("FREE" if active_tier == "FREE" else "")))
+    )
+    if lbl_text:
+        if is_gold and active_tier != "FREE":
+            tier_badge_inline = f'<span class="active-tier-tag active-tier-paid font-mono">{lbl_text}</span>'
+        elif active_tier in ("FREE_PRO", "STUDENT_PRO"):
+            tier_badge_inline = f'<span class="active-tier-tag active-tier-freepro font-mono">{lbl_text}</span>'
+        else:
+            tier_badge_inline = f'<span class="active-tier-tag active-tier-free font-mono">{lbl_text}</span>'
 
     shield_svg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
     zap_svg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px; margin-right:3px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
@@ -2196,10 +2306,11 @@ def render_table_rows(include_oob: bool = False) -> str:
         is_region_restricted = bool(acc.get("region_restricted"))
         region_change_url = acc.get("region_change_url") or build_region_change_url(email)
 
-        # 三档账号类别与真实模型判定
+        # 四档账号类别与黄金满血 Neon 能力判定
         acc_tier, acc_tier_display, _is_pro, acc_has_5h = classify_account_tier(acc)
-        tier_rank = 0 if acc_tier == "PAID_PRO" else (1 if acc_tier == "FREE_PRO" else 2)
-        tier_badge_html = render_tier_badge_html(acc_tier, acc_tier_display)
+        acc_has_neon = detect_account_has_neon(acc)
+        tier_rank = 0 if acc_tier == "PAID_PRO" else (1 if acc_tier == "STUDENT_PRO" else (2 if (acc_tier == "FREE_PRO" and acc_has_neon) else (3 if acc_tier == "FREE_PRO" else 4)))
+        tier_badge_html = render_tier_badge_html(acc_tier, acc_tier_display, has_neon=acc_has_neon, email=email)
 
         region_flag_html = (
             f"""<a class="region-flag-cn" href="{region_change_url}" target="_blank" rel="noopener" onclick="event.stopPropagation();" title="关联地区受限 (中国 / UNSUPPORTED_LOCATION)，无法使用 Antigravity。点击前往 Google 地区修改申请页"><svg viewBox="0 0 30 20" width="16" height="11" aria-label="CN"><rect width="30" height="20" fill="#DE2910"/><polygon fill="#FFDE00" points="5,2 5.88,4.71 8.73,4.71 6.43,6.38 7.31,9.09 5,7.42 2.69,9.09 3.57,6.38 1.27,4.71 4.12,4.71"/><polygon fill="#FFDE00" points="10,1.2 10.29,2.1 11.24,2.1 10.47,2.66 10.76,3.56 10,3.0 9.24,3.56 9.53,2.66 8.76,2.1 9.71,2.1"/><polygon fill="#FFDE00" points="12,3.2 12.29,4.1 13.24,4.1 12.47,4.66 12.76,5.56 12,5.0 11.24,5.56 11.53,4.66 10.76,4.1 11.71,4.1"/><polygon fill="#FFDE00" points="12,6.2 12.29,7.1 13.24,7.1 12.47,7.66 12.76,8.56 12,8.0 11.24,8.56 11.53,7.66 10.76,7.1 11.71,7.1"/><polygon fill="#FFDE00" points="10,8.2 10.29,9.1 11.24,9.1 10.47,9.66 10.76,10.56 10,10.0 9.24,10.56 9.53,9.66 8.76,9.1 9.71,9.1"/></svg></a>"""
@@ -2298,12 +2409,14 @@ def render_table_rows(include_oob: bool = False) -> str:
 
     output = "\n".join(rows)
     if include_oob:
+        active_acc_obj = accounts.get(active_email, {}) if active_email else {}
         output += "\n" + render_top_bar_stats_html(total_count, pro_count, avg_g, avg_c, cur_time, oob=True)
         output += "\n" + render_active_pill_html(
             active_email,
             oob=True,
             active_tier=active_tier,
             active_tier_display=active_tier_disp,
+            active_has_neon=detect_account_has_neon(active_acc_obj),
         )
         output += "\n" + render_rotation_button_html(oob=True)
         output += "\n" + render_version_marker_html(oob=True)
@@ -2360,11 +2473,13 @@ def render_dashboard_html() -> str:
     rot_btn_html = render_rotation_button_html(oob=False)
     table_rows = render_table_rows(include_oob=False)
     stats_html = render_top_bar_stats_html(total_count, pro_count, avg_g, avg_c, cur_time, oob=False)
+    active_acc_obj = accounts.get(active_email, {}) if active_email else {}
     active_pill_html = render_active_pill_html(
         active_email,
         oob=False,
         active_tier=active_tier,
         active_tier_display=active_tier_disp,
+        active_has_neon=detect_account_has_neon(active_acc_obj),
     )
 
     return f"""<!DOCTYPE html>
@@ -4277,6 +4392,7 @@ def render_dashboard_html() -> str:
                 <button class="filter-tab" data-filter="exhausted" onclick="setFilter('exhausted', this)"><span class="filter-dot dot-gray"></span>枯竭</button>
                 <span class="filter-divider" aria-hidden="true"></span>
                 <button class="filter-tab tier-tab" data-tier-filter="PAID_PRO" onclick="toggleTierFilter('PAID_PRO', this)" title="筛选付费 PRO 账号"><span class="filter-dot dot-amber"></span>付费 PRO</button>
+                <button class="filter-tab tier-tab" data-tier-filter="STUDENT_PRO" onclick="toggleTierFilter('STUDENT_PRO', this)" title="筛选学生 PRO 账号"><span class="filter-dot dot-amber"></span>学生 PRO</button>
                 <button class="filter-tab tier-tab" data-tier-filter="FREE_PRO" onclick="toggleTierFilter('FREE_PRO', this)" title="筛选免费 PRO 账号"><span class="filter-dot dot-blue"></span>免费 PRO</button>
                 <button class="filter-tab tier-tab" data-tier-filter="FREE" onclick="toggleTierFilter('FREE', this)" title="筛选 FREE 账号"><span class="filter-dot dot-gray"></span>FREE</button>
             </div>
@@ -5291,7 +5407,27 @@ def render_dashboard_html() -> str:
             }}
         }}
 
-        // 🛡️ 一键解封向导：拉起现役 ego lite 浏览器并自动定向对应账号，彻底防500！
+        // 🏷️ 一键切换账号来源类别（付费 PRO / 学生 PRO / 免费 PRO）
+        async function doCycleTier(email, nextTier) {{
+            try {{
+                const resp = await fetch('/api/set_tier', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ email: email, tier_override: nextTier }})
+                }});
+                const j = await resp.json();
+                if (j && j.ok) {{
+                    showToast(j.message || "类别已更新", "success");
+                    const tb = document.getElementById('account-tbody');
+                    if (tb && window.htmx) htmx.ajax('GET', '/api/table', {{ target: '#account-tbody', swap: 'innerHTML' }});
+                    else location.reload();
+                }}
+            }} catch (e) {{
+                showToast("切换类别失败: " + e, "error");
+            }}
+        }}
+
+        // 🛡️ 一键解封向导：拉起独立容器浏览器并自动定向对应账号，彻底杜绝 Cookie 串号！
         async function doUnblockAccount(email) {{
             showToast("🚀 正在获取最新令牌并拉起 ego 浏览器解封页面...", "info");
             try {{
@@ -6451,10 +6587,11 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
                         else:
                             fixed_raw = f"{raw_url}&authuser={urllib.parse.quote(email)}"
                         smart_url = f"https://accounts.google.com/AccountChooser?Email={urllib.parse.quote(email)}&continue={urllib.parse.quote(fixed_raw)}"
-                        safe_name = email.replace("@", "_").replace(".", "_")
+                        profile_name = get_account_browser_profile(email)
 
-                        launch_browser_for_auth(smart_url, isolated=False, profile_name=safe_name)
-                        logger.info(f"🚀 [一键解封] 已为 {email} 在 ego 浏览器中拉起解封页面: {smart_url}")
+                        # 方案 A 强隔离：强制使用该账号专属独立浏览器容器 (--user-data-dir)，彻底杜绝 Cookie 串号
+                        launch_browser_for_auth(smart_url, isolated=True, profile_name=profile_name)
+                        logger.info(f"🚀 [一键解封·独立容器] 已为 {email} 拉起独立容器 ({profile_name}): {smart_url}")
 
                         def _watch_unblock(target_email: str, target_id: str, token: str):
                             for _ in range(45):
@@ -6480,14 +6617,105 @@ body {{ background:#F4F0EA; font-family:ui-monospace,SFMono-Regular,Menlo,monosp
             self.end_headers()
             self.wfile.write(html.encode("utf-8"))
 
+        elif parsed.path == "/api/region_unlock":
+            target_email = ""
+            custom_url = ""
+            try:
+                if post_data.strip().startswith("{"):
+                    req_j = json.loads(post_data)
+                    target_email = str(req_j.get("email") or "").strip().lower()
+                    custom_url = str(req_j.get("url") or "").strip()
+                else:
+                    params = urllib.parse.parse_qs(post_data)
+                    target_email = (params.get("email", [""])[0] or "").strip().lower()
+                    custom_url = (params.get("url", [""])[0] or "").strip()
+            except Exception:
+                pass
+            target_url = custom_url if custom_url.startswith("https://") else build_region_change_url(target_email)
+            profile_name = get_account_browser_profile(target_email)
+            ok = launch_browser_for_auth(target_url, isolated=True, profile_name=profile_name)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": ok, "email": target_email, "profile": profile_name, "url": target_url}, ensure_ascii=False).encode("utf-8"))
+
+        elif parsed.path == "/api/set_tier":
+            target_email = ""
+            tier_override = ""
+            try:
+                if post_data.strip().startswith("{"):
+                    req_j = json.loads(post_data)
+                    target_email = str(req_j.get("email") or "").strip().lower()
+                    tier_override = str(req_j.get("tier_override") or req_j.get("tier") or "").strip().upper()
+                else:
+                    params = urllib.parse.parse_qs(post_data)
+                    target_email = (params.get("email", [""])[0] or "").strip().lower()
+                    tier_override = (params.get("tier_override", params.get("tier", [""]))[0] or "").strip().upper()
+            except Exception:
+                pass
+            allowed = ("", "AUTO", "PAID_PRO", "STUDENT_PRO", "FREE_PRO", "FREE")
+            ok = False
+            msg = "invalid parameters"
+            if target_email and tier_override in allowed:
+                data = ENGINE.load_accounts()
+                acc = data.get("accounts", {}).get(target_email)
+                if isinstance(acc, dict):
+                    if tier_override in ("", "AUTO"):
+                        acc.pop("tier_override", None)
+                    else:
+                        acc["tier_override"] = tier_override
+                    t_code, t_disp, is_pro, has_5h = classify_account_tier(acc)
+                    acc["tier"] = t_code
+                    acc["tier_display"] = t_disp
+                    acc["pro"] = is_pro
+                    acc["has_5h"] = has_5h
+                    acc["has_neon"] = detect_account_has_neon(acc)
+                    ENGINE.save_accounts(data)
+                    ok = True
+                    msg = f"已切换 {target_email} 类别为 {t_disp}"
+            self.send_response(200 if ok else 400)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": ok, "message": msg}, ensure_ascii=False).encode("utf-8"))
+
+        elif parsed.path == "/api/set_proxy":
+            target_email = ""
+            proxy_url = ""
+            try:
+                if post_data.strip().startswith("{"):
+                    req_j = json.loads(post_data)
+                    target_email = str(req_j.get("email") or "").strip().lower()
+                    proxy_url = str(req_j.get("proxy_url") or "").strip()
+                else:
+                    params = urllib.parse.parse_qs(post_data)
+                    target_email = (params.get("email", [""])[0] or "").strip().lower()
+                    proxy_url = (params.get("proxy_url", [""])[0] or "").strip()
+            except Exception:
+                pass
+            ok = False
+            msg = "invalid email"
+            if target_email:
+                data = ENGINE.load_accounts()
+                acc = data.get("accounts", {}).get(target_email)
+                if isinstance(acc, dict):
+                    acc["proxy_url"] = proxy_url
+                    ENGINE.save_accounts(data)
+                    ok = True
+                    msg = f"已更新 {target_email} 独立代理配置"
+            self.send_response(200 if ok else 400)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": ok, "message": msg}, ensure_ascii=False).encode("utf-8"))
+
         elif parsed.path == "/api/oauth/start":
             from hub.importer import build_google_oauth_url
-            isolated = False
+            # 方案 A 强隔离：OAuth 登录默认强制启用独立浏览器容器，避免日常浏览器 Cookie 串号
+            isolated = True
             open_browser = True
             try:
                 if post_data.strip().startswith("{"):
                     req_j = json.loads(post_data)
-                    isolated = bool(req_j.get("isolated", False))
+                    isolated = bool(req_j.get("isolated", True))
                     open_browser = bool(req_j.get("open_browser", True))
             except Exception:
                 pass

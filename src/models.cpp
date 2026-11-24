@@ -254,7 +254,8 @@ void AccountModel::loadFromDisk() {
         if (!cModels.isEmpty()) {
             for (const auto &mv : cModels) {
                 const QString ms = mv.toString();
-                if (ms.contains(QStringLiteral("5-5")) || ms.contains(QStringLiteral("5.5"))) {
+                if (ms.contains(QStringLiteral("5-5")) || ms.contains(QStringLiteral("5.5")) ||
+                    ms.contains(QStringLiteral("neon"), Qt::CaseInsensitive)) {
                     hasReal55 = true;
                     break;
                 }
@@ -267,7 +268,7 @@ void AccountModel::loadFromDisk() {
         bool has5h = false;
         if (a.contains(QStringLiteral("has_5h")) && a.value(QStringLiteral("has_5h")).isBool()) {
             has5h = a.value(QStringLiteral("has_5h")).toBool();
-        } else if (tierRaw == QStringLiteral("PAID_PRO") || tierRaw == QStringLiteral("FREE_PRO")) {
+        } else if (tierRaw == QStringLiteral("PAID_PRO") || tierRaw == QStringLiteral("STUDENT_PRO") || tierRaw == QStringLiteral("FREE_PRO")) {
             has5h = true;
         } else if (tierRaw == QStringLiteral("FREE")) {
             has5h = false;
@@ -277,33 +278,53 @@ void AccountModel::loadFromDisk() {
             has5h = (!g5Val.isUndefined() && !g5Val.isNull()) || (!c5Val.isUndefined() && !c5Val.isNull());
         }
 
-        // 权威三档分类（零硬编码邮箱）：
-        // 1. PAID_PRO (付费 PRO): 有 5H 且开通 Claude 5.5 / Gemini 4 满血权限
-        // 2. FREE_PRO (免费 PRO): 有 5H 但仅 Claude 4.6 / Gemini 3.8
-        // 3. FREE     (FREE):     无 5H，仅周限制
+        // 底层满血能力 hasNeon 独立于来源标签：凡能用 Gemini 4 Neon / Claude 5.5 一律渲染黄金背景
+        const bool hasValidG4Field = (a.contains(QStringLiteral("gemini4")) && a.value(QStringLiteral("gemini4")).isObject()) ||
+                                     (a.contains(QStringLiteral("gemini_4")) && a.value(QStringLiteral("gemini_4")).isObject());
+        bool hasNeon = false;
+        if (a.contains(QStringLiteral("has_neon")) && a.value(QStringLiteral("has_neon")).isBool()) {
+            hasNeon = a.value(QStringLiteral("has_neon")).toBool();
+        } else if (has5h) {
+            hasNeon = hasReal55 || (explicitVer != QStringLiteral("4.6") && hasValidG4Field);
+        }
+
+        // 权威四档来源分类（零硬编码邮箱）：
+        // 1. PAID_PRO    (付费 PRO): 正规付费订阅 PRO
+        // 2. STUDENT_PRO (学生 PRO): 学生教育订阅 PRO
+        // 3. FREE_PRO    (免费 PRO): 18个月满血免费 PRO(黄金背景) 或 普通免费 PRO(青蓝背景)
+        // 4. FREE        (FREE):     无 5H，仅周限制
         bool isPaidPro = false;
+        bool isStudentPro = false;
         bool isFreePro = false;
 
         if (overrideTier == QStringLiteral("PAID_PRO")) {
             isPaidPro = true;
+            has5h = true;
+            hasNeon = hasNeon || hasReal55 || (explicitVer != QStringLiteral("4.6"));
+        } else if (overrideTier == QStringLiteral("STUDENT_PRO")) {
+            isStudentPro = true;
             has5h = true;
         } else if (overrideTier == QStringLiteral("FREE_PRO")) {
             isFreePro = true;
             has5h = true;
         } else if (overrideTier == QStringLiteral("FREE")) {
             has5h = false;
+            hasNeon = false;
         } else if (tierRaw == QStringLiteral("PAID_PRO")) {
             isPaidPro = true;
+            has5h = true;
+            hasNeon = hasNeon || (explicitVer != QStringLiteral("4.6"));
+        } else if (tierRaw == QStringLiteral("STUDENT_PRO")) {
+            isStudentPro = true;
             has5h = true;
         } else if (tierRaw == QStringLiteral("FREE_PRO")) {
             isFreePro = true;
             has5h = true;
         } else if (tierRaw == QStringLiteral("FREE")) {
             has5h = false;
+            hasNeon = false;
         } else if (has5h) {
-            const bool hasValidG4Field = (a.contains(QStringLiteral("gemini4")) && a.value(QStringLiteral("gemini4")).isObject()) ||
-                                         (a.contains(QStringLiteral("gemini_4")) && a.value(QStringLiteral("gemini_4")).isObject());
-            if (hasReal55 || (explicitVer != QStringLiteral("4.6") && hasValidG4Field)) {
+            if (hasNeon) {
                 isPaidPro = true;
             } else {
                 isFreePro = true;
@@ -316,20 +337,31 @@ void AccountModel::loadFromDisk() {
             item.tierRank = 0;
             item.pro = true;
             item.has5h = true;
-            item.hasClaude55 = true;
-        } else if (isFreePro) {
-            item.tier = QStringLiteral("FREE_PRO");
-            item.tierDisplay = QStringLiteral("免费 PRO");
+            item.hasNeon = hasNeon;
+            item.hasClaude55 = hasNeon;
+        } else if (isStudentPro) {
+            item.tier = QStringLiteral("STUDENT_PRO");
+            item.tierDisplay = QStringLiteral("学生 PRO");
             item.tierRank = 1;
             item.pro = true;
             item.has5h = true;
-            item.hasClaude55 = false;
+            item.hasNeon = hasNeon;
+            item.hasClaude55 = hasNeon;
+        } else if (isFreePro) {
+            item.tier = QStringLiteral("FREE_PRO");
+            item.tierDisplay = QStringLiteral("免费 PRO");
+            item.tierRank = hasNeon ? 2 : 3;
+            item.pro = true;
+            item.has5h = true;
+            item.hasNeon = hasNeon;
+            item.hasClaude55 = hasNeon;
         } else {
             item.tier = QStringLiteral("FREE");
             item.tierDisplay = QStringLiteral("FREE");
-            item.tierRank = 2;
+            item.tierRank = 4;
             item.pro = false;
             item.has5h = false;
+            item.hasNeon = false;
             item.hasClaude55 = false;
         }
 
@@ -345,8 +377,8 @@ void AccountModel::loadFromDisk() {
         item.shortName = item.username;
         item.maskedName = computeMaskedName(item.shortName);
 
-        // Gemini 4 专享解析 (仅付费pro账号具备 Gemini 4 权限；免费pro和免费账号严格显示为无权限)
-        if (isPaidPro) {
+        // Gemini 4 专享解析 (凡具备满血 hasNeon 权限的付费/学生/满血免费 PRO 均支持 Gemini 4；普通免费与 FREE 无权限)
+        if (item.hasNeon) {
             QJsonObject g4Obj = a.value(QStringLiteral("gemini4")).toObject();
             if (g4Obj.isEmpty()) {
                 g4Obj = a.value(QStringLiteral("gemini_4")).toObject();
@@ -625,6 +657,14 @@ int AccountModel::paidProCount() const {
     return n;
 }
 
+int AccountModel::studentProCount() const {
+    int n = 0;
+    for (const auto &a : m_accounts) {
+        if (a.tier == QStringLiteral("STUDENT_PRO")) ++n;
+    }
+    return n;
+}
+
 int AccountModel::freeProCount() const {
     int n = 0;
     for (const auto &a : m_accounts) {
@@ -653,6 +693,13 @@ QString AccountModel::activeTierDisplay() const {
         if (a.isActive) return a.tierDisplay;
     }
     return QString();
+}
+
+bool AccountModel::activeHasNeon() const {
+    for (const auto &a : m_accounts) {
+        if (a.isActive) return a.hasNeon;
+    }
+    return false;
 }
 
 QVariant AccountModel::data(const QModelIndex &index, int role) const {
@@ -732,6 +779,8 @@ QVariant AccountModel::data(const QModelIndex &index, int role) const {
         return item.tierRank;
     case Has5hRole:
         return item.has5h;
+    case HasNeonRole:
+        return item.hasNeon;
     case IdRole:
         return item.id;
     default:
@@ -773,6 +822,7 @@ QHash<int, QByteArray> AccountModel::roleNames() const {
     roles[TierDisplayRole] = "tierDisplay";
     roles[TierRankRole] = "tierRank";
     roles[Has5hRole] = "has5h";
+    roles[HasNeonRole] = "hasNeon";
     roles[IdRole] = "id";
     return roles;
 }
@@ -1056,7 +1106,9 @@ bool AccountFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex 
         if (lowerFilter == QStringLiteral("4.6") && !hasC55) return true;
         if (lowerFilter == QStringLiteral("active") && sourceModel()->data(idx, AccountModel::IsActiveRole).toBool()) return true;
         if ((lowerFilter == QStringLiteral("paid") || lowerFilter == QStringLiteral("付费")) && tier == QStringLiteral("PAID_PRO")) return true;
-        if ((lowerFilter == QStringLiteral("pro")) && (tier == QStringLiteral("PAID_PRO") || tier == QStringLiteral("FREE_PRO"))) return true;
+        if ((lowerFilter == QStringLiteral("student") || lowerFilter == QStringLiteral("学生")) && tier == QStringLiteral("STUDENT_PRO")) return true;
+        if ((lowerFilter == QStringLiteral("neon") || lowerFilter == QStringLiteral("黄金")) && sourceModel()->data(idx, AccountModel::HasNeonRole).toBool()) return true;
+        if ((lowerFilter == QStringLiteral("pro")) && (tier == QStringLiteral("PAID_PRO") || tier == QStringLiteral("STUDENT_PRO") || tier == QStringLiteral("FREE_PRO"))) return true;
 
         return false;
     }

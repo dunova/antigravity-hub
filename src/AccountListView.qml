@@ -1063,7 +1063,7 @@ Item {
                     }
 
                     // -------------------------------------------------
-                    // Col 3: 独立显著账号类别列 (付费 PRO / 免费 PRO / FREE)
+                    // Col 3: 独立显著账号类别列 (付费 PRO / 学生 PRO / 免费 PRO / FREE；能用 Gemini 4 Neon 一律黄金背景)
                     // -------------------------------------------------
                     Item {
                         Layout.preferredWidth: colTierWidth
@@ -1074,19 +1074,21 @@ Item {
 
                         Rectangle {
                             id: tierBadge
+                            readonly property bool isGoldNeon: Boolean(model.hasNeon) || model.tier === "PAID_PRO"
+                            readonly property bool isProRow: model.tier === "PAID_PRO" || model.tier === "STUDENT_PRO" || model.tier === "FREE_PRO"
                             anchors.centerIn: parent
                             width: 64
                             height: 20
                             radius: 0
-                            color: model.tier === "PAID_PRO" ?
-                                   ((theme && theme.mode === "light") ? "#FEF3C7" : Qt.alpha("#F59E0B", 0.20)) :
-                                   (model.tier === "FREE_PRO" ?
+                            color: (isGoldNeon && model.tier !== "FREE") ?
+                                   ((theme && theme.mode === "light") ? "#FEF3C7" : Qt.alpha("#F59E0B", 0.22)) :
+                                   (isProRow ?
                                        ((theme && theme.mode === "light") ? "#E0F2FE" : Qt.alpha("#06B6D4", 0.18)) :
                                        ((theme && theme.mode === "light") ? "#F3F4F6" : Qt.alpha("#9CA3AF", 0.10)))
                             border.width: 1
-                            border.color: model.tier === "PAID_PRO" ?
+                            border.color: (isGoldNeon && model.tier !== "FREE") ?
                                           ((theme && theme.mode === "light") ? "#D97706" : "#F59E0B") :
-                                          (model.tier === "FREE_PRO" ?
+                                          (isProRow ?
                                               ((theme && theme.mode === "light") ? "#0284C7" : "#22D3EE") :
                                               ((theme && theme.mode === "light") ? "#D1D5DB" : "#4B5563"))
 
@@ -1098,20 +1100,21 @@ Item {
                                     width: 4
                                     height: 4
                                     radius: 0
-                                    visible: model.tier === "PAID_PRO" || model.tier === "FREE_PRO"
-                                    color: model.tier === "PAID_PRO" ? "#F59E0B" : "#22D3EE"
+                                    visible: tierBadge.isProRow
+                                    color: tierBadge.isGoldNeon ? "#F59E0B" : "#22D3EE"
                                 }
 
                                 Text {
                                     text: model.tier === "PAID_PRO" ? qsTr("Paid Pro") :
-                                          (model.tier === "FREE_PRO" ? qsTr("Free Pro") : qsTr("Free"))
+                                          (model.tier === "STUDENT_PRO" ? qsTr("Student Pro") :
+                                          (model.tier === "FREE_PRO" ? qsTr("Free Pro") : qsTr("Free")))
                                     font.family: theme.monoFont
                                     font.pixelSize: 10
                                     font.weight: (model.tier === "FREE") ? Font.DemiBold : Font.Bold
                                     renderType: Text.NativeRendering
-                                    color: model.tier === "PAID_PRO" ?
+                                    color: (tierBadge.isGoldNeon && model.tier !== "FREE") ?
                                            ((theme && theme.mode === "light") ? "#B45309" : "#FBBF24") :
-                                           (model.tier === "FREE_PRO" ?
+                                           (tierBadge.isProRow ?
                                                ((theme && theme.mode === "light") ? "#0369A1" : "#67E8F9") :
                                                ((theme && theme.mode === "light") ? "#6B7280" : "#9CA3AF"))
                                 }
@@ -1121,14 +1124,26 @@ Item {
                                 id: tierBadgeMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                cursorShape: tierBadge.isProRow ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 ToolTip.visible: containsMouse
-                                ToolTip.text: model.tier === "PAID_PRO" ?
-                                              qsTr("Paid Pro: Gemini 4 + Claude 5.5 + 5H & Weekly quota") :
-                                              (model.tier === "FREE_PRO" ?
-                                                  qsTr("Free Pro: Gemini 3.8 + Claude 4.6 + 5H & Weekly quota") :
-                                                  qsTr("Free account: Weekly quota only (no 5H limit)"))
+                                ToolTip.text: {
+                                    if (model.tier === "FREE") {
+                                        return qsTr("Free account: Weekly quota only (no 5H limit)");
+                                    }
+                                    var baseLbl = model.tier === "PAID_PRO" ? qsTr("Paid Pro") :
+                                                  (model.tier === "STUDENT_PRO" ? qsTr("Student Pro") : qsTr("Free Pro"));
+                                    if (tierBadge.isGoldNeon) {
+                                        return qsTr("%1 (Gemini 4 Neon + Claude 5.5, click to cycle tier)").arg(baseLbl);
+                                    }
+                                    return qsTr("%1 (Gemini 3.8 + Claude 4.6, click to cycle tier)").arg(baseLbl);
+                                }
                                 onClicked: {
                                     listView.currentIndex = index;
+                                    if (tierBadge.isProRow && backend && typeof backend.setAccountTier === "function") {
+                                        var nextTier = (model.tier === "PAID_PRO") ? "STUDENT_PRO" :
+                                                       ((model.tier === "STUDENT_PRO") ? "FREE_PRO" : "PAID_PRO");
+                                        backend.setAccountTier(model.email, nextTier);
+                                    }
                                 }
                             }
                         }
@@ -1904,15 +1919,22 @@ Item {
                 anchors.rightMargin: 10
                 spacing: 8
 
-                // 左侧: 全池三档统计信息
+                // 左侧: 全池四档统计信息（付费 / 学生 / 免费PRO / FREE）
                 Text {
                     Layout.fillWidth: true
-                    text: qsTr("共 %1 个账号 · 付费PRO %2 · 免费PRO %3 · FREE %4 · 显示 %5")
-                          .arg((accountModel && typeof accountModel.count !== "undefined") ? accountModel.count : (accountModel ? accountModel.rowCount() : 0))
-                          .arg(accountModel ? (accountModel.paidProCount || 0) : 0)
-                          .arg(accountModel ? (accountModel.freeProCount || 0) : 0)
-                          .arg(accountModel ? (accountModel.freeCount || 0) : 0)
-                          .arg(accountListView.displayedCount)
+                    text: {
+                        var totalN = (accountModel && typeof accountModel.count !== "undefined") ? accountModel.count : (accountModel ? accountModel.rowCount() : 0);
+                        var paidN = accountModel ? (accountModel.paidProCount || 0) : 0;
+                        var stuN = accountModel ? (accountModel.studentProCount || 0) : 0;
+                        var freeProN = accountModel ? (accountModel.freeProCount || 0) : 0;
+                        var freeN = accountModel ? (accountModel.freeCount || 0) : 0;
+                        if (stuN > 0) {
+                            return qsTr("共 %1 个 · 付费 %2 · 学生 %3 · 免费PRO %4 · FREE %5 · 显示 %6")
+                                   .arg(totalN).arg(paidN).arg(stuN).arg(freeProN).arg(freeN).arg(accountListView.displayedCount);
+                        }
+                        return qsTr("共 %1 个账号 · 付费PRO %2 · 免费PRO %3 · FREE %4 · 显示 %5")
+                               .arg(totalN).arg(paidN).arg(freeProN).arg(freeN).arg(accountListView.displayedCount);
+                    }
                     font.family: theme.uiFont
                     font.pixelSize: 11
                     elide: Text.ElideRight

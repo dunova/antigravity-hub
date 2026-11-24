@@ -281,12 +281,38 @@ void BackendController::openRegionChange(const QString &email, const QString &cu
     }
 
     if (qEnvironmentVariable("QT_QPA_PLATFORM") != QStringLiteral("offscreen")) {
-        QDesktopServices::openUrl(QUrl(targetUrl));
+        // 方案 A 强隔离：优先通过后端在账号专属独立浏览器容器中拉起地区申请页，杜绝 Cookie 串号
+        QJsonObject payload;
+        payload.insert(QStringLiteral("email"), trimmed);
+        payload.insert(QStringLiteral("url"), targetUrl);
+        executePost(QStringLiteral("/api/region_unlock"),
+                    QJsonDocument(payload).toJson(QJsonDocument::Compact),
+                    QStringLiteral("application/json; charset=utf-8"),
+                    tr("Region Unlock"),
+                    [](const QByteArray &, int) {});
     }
     emit notificationRequested(
         tr("Region Unlock"),
         tr("Opened Google country association change form for %1").arg(trimmed.isEmpty() ? QStringLiteral("account") : trimmed),
         false);
+}
+
+void BackendController::setAccountTier(const QString &email, const QString &tierOverride)
+{
+    const QString trimmed = email.trimmed();
+    if (trimmed.isEmpty()) return;
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("email"), trimmed);
+    payload.insert(QStringLiteral("tier_override"), tierOverride.trimmed().toUpper());
+    executePost(QStringLiteral("/api/set_tier"),
+                QJsonDocument(payload).toJson(QJsonDocument::Compact),
+                QStringLiteral("application/json; charset=utf-8"),
+                tr("Update Tier"),
+                [this](const QByteArray &, int) {
+        if (m_accountModel) m_accountModel->reload();
+        emit accountsReloadRequested();
+    });
 }
 
 void BackendController::saveSettings(const QJsonObject &settings)
