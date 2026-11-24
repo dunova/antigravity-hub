@@ -813,27 +813,29 @@ Item {
 
             ScrollBar.vertical: ScrollBar {
                 id: listScrollBar
-                policy: ScrollBar.AsNeeded
-                visible: size < 0.999
+                readonly property bool shouldShowScrollBar: (listView.contentHeight > listView.height + 1) || (listView.count > 15)
+                policy: shouldShowScrollBar ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                visible: shouldShowScrollBar
+                active: shouldShowScrollBar
                 width: 8
                 padding: 1
                 hoverEnabled: true
                 contentItem: Rectangle {
                     implicitWidth: 6
                     radius: 0
-                    visible: listScrollBar.size < 0.999
+                    visible: listScrollBar.shouldShowScrollBar
                     color: listScrollBar.pressed ?
                            ((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3") :
                            (listScrollBar.hovered ?
-                               Qt.alpha((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3", 0.78) :
+                               Qt.alpha((theme && theme.accent && theme.accent.charAt(0) === '#') ? theme.accent : "#7daea3", 0.85) :
                                ((theme && theme.mode === "light") ?
-                                   Qt.alpha((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#64748B", 0.48) :
-                                   Qt.alpha((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#94A3B8", 0.52)))
+                                   Qt.alpha((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#64748B", 0.55) :
+                                   Qt.alpha((theme && theme.text3 && theme.text3.charAt(0) === '#') ? theme.text3 : "#94A3B8", 0.58)))
                 }
                 background: Rectangle {
                     implicitWidth: 8
                     radius: 0
-                    visible: listScrollBar.size < 0.999
+                    visible: listScrollBar.shouldShowScrollBar
                     color: (theme && theme.surface1 && theme.surface1.charAt(0) === '#') ? theme.surface1 : "#142620"
                     Rectangle {
                         anchors.left: parent.left

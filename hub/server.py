@@ -33,10 +33,10 @@ from typing import Dict, Any, List, Optional, Tuple
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-__version__ = "4.3.0"
-__canonical_version_tag__ = "20261123-v4.3.0-REGION_CN_DETECT_UNLOCK_20_PER_PAGE_SCROLLBAR"
-__last_updated__ = "2026-11-23 14:10:00"
-__canonical_doctrine__ = "Antigravity Hub v4.3.0：自动探测底层受限地区(UNSUPPORTED_LOCATION)并标注红旗与一键解锁入口、20账号分页与同风格滚动条"
+__version__ = "4.3.1"
+__canonical_version_tag__ = "20261124-v4.3.1-MINIMUM_WINDOW_ADAPTIVE_GEOMETRY_15_MAX_20_PAGE_SCROLLBAR"
+__last_updated__ = "2026-11-24 10:25:00"
+__canonical_doctrine__ = "Antigravity Hub v4.3.1：默认最窄最矮极简自适应(1至15行精准贴合)、超15行同风格直角滚动条与20账号分页"
 
 # 纳管并注册导入引擎兼容别名，彻底根除跨平台模块丢失隐患
 from hub import importer as import_accounts_hub
@@ -728,7 +728,9 @@ class HubEngine:
                 acc_obj["tier_display"] = tier_display
                 acc_obj["pro"] = is_pro
                 acc_obj["has_5h"] = has_5h
-                acc_obj["gemini4_supported"] = (tier == "PAID_PRO")
+                # 全账号兼容：付费 PRO 默认支持，或只要官方返回有效 gemini4 配额即标定支持
+                has_valid_g4 = bool(acc_obj.get("gemini4") and isinstance(acc_obj.get("gemini4"), dict) and acc_obj.get("gemini4", {}).get("quota_weekly") is not None)
+                acc_obj["gemini4_supported"] = (tier == "PAID_PRO") or has_valid_g4
 
                 if not has_5h:
                     # FREE 账号仅有周配额，物理杜绝 5H 虚显 100% 满额
@@ -739,7 +741,8 @@ class HubEngine:
                     c_obj["quota_5h"] = None
                     c_obj["reset_time_5h"] = ""
 
-                if tier != "PAID_PRO" and acc_obj.get("gemini4") is not None:
+                # 尊重官方真实配额：仅在非付费且未包含有效周配额时清理脏数据，绝不误杀官方下发的 Gemini 4
+                if tier != "PAID_PRO" and not has_valid_g4 and acc_obj.get("gemini4") is not None:
                     acc_obj["gemini4"] = None
 
             if incoming_accounts:
@@ -1055,7 +1058,7 @@ class HubEngine:
                 ls_has_55 = any(("5-5" in cm or "5.5" in cm) for cm in c_models)
                 # 只有在 RetrieveUserQuotaSummary 未明确抓取到 Argon 时，才采用 GetUserStatus 进行兜底判定
                 if not g4_from_ls_summary:
-                    if (argon_disabled and argon_found is None) or (c_models and not ls_has_55):
+                    if (argon_disabled and argon_found is None) or (c_models and not ls_has_55 and argon_found is None):
                         if acc.get("gemini4") is not None:
                             acc["gemini4"] = None
                             updated_any = True
@@ -1708,7 +1711,7 @@ class HubEngine:
             acc["tier_display"] = tier_display
             acc["pro"] = is_pro
             acc["has_5h"] = has_5h
-            acc["gemini4_supported"] = (tier == "PAID_PRO")
+            acc["gemini4_supported"] = (tier == "PAID_PRO") or g4_from_summary
             if tier != "PAID_PRO" and not g4_from_summary:
                 acc["gemini4"] = None
         except Exception:

@@ -83,12 +83,15 @@ private slots:
     // v4.3.0 Region Restriction CN Flag, Unlock Action, 20/page & Styled Scrollbar Invariants
     void v430RegionRestrictionUnlockAndPaginationInvariants();
 
+    // v4.3.1 Minimum Adaptive Window Geometry (1-15 rows) & Overflow Scrollbar Invariants
+    void v431AdaptiveHeightAndScrollbarInvariants();
+
     void cleanupTestCase();
 };
 
 void AntigravityHubTests::initTestCase() {
     qDebug() << "Initializing Antigravity Hub Milestone 1 & 2 test suite...";
-    QCoreApplication::setApplicationVersion(QStringLiteral("4.3.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("4.3.1"));
 }
 
 // -----------------------------------------------------------------------------
@@ -1461,7 +1464,7 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumWidth\s*:\s*720\b)"))), "Main.qml minimumWidth != 720");
     QVERIFY2(!mainContent.contains(QStringLiteral("maximumWidth")), "Main.qml must not restrict maximumWidth to allow manual stretching & dynamic tiling");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bheight\s*:\s*idealHeight\b)"))), "Main.qml default height must be adaptive idealHeight");
-    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*360\b)"))), "Main.qml minimumHeight != 360");
+    QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bminimumHeight\s*:\s*baseChromeHeight\s*\+\s*minAdaptiveRowCount\s*\*\s*rowHeightPx\b)"))), "Main.qml minimumHeight must dynamically bind to baseChromeHeight + minAdaptiveRowCount * rowHeightPx (226px)");
     QVERIFY2(mainContent.contains(QRegularExpression(QStringLiteral(R"(\bcontentWidth\s*:\s*696\b)"))), "Main.qml contentWidth != 696");
     QVERIFY2(!mainContent.contains(QStringLiteral("switchTopGemini")), "v4.2.0: Main.qml must not keep TopG shortcut");
     QVERIFY2(!mainContent.contains(QStringLiteral("triggerPrewarm")), "v4.2.0: Main.qml must not keep manual Prewarm shortcut");
@@ -1518,11 +1521,13 @@ void AntigravityHubTests::v250WindowGeometryLockInvariants() {
 
     QCOMPARE(win->width(), 720);
     QCOMPARE(win->property("minimumWidth").toInt(), 720);
-    QCOMPARE(win->property("minimumHeight").toInt(), 360);
+    QCOMPARE(win->property("minimumHeight").toInt(), 226);
+    QCOMPARE(win->property("minAdaptiveRowCount").toInt(), 1);
+    QCOMPARE(win->property("maxAdaptiveRowCount").toInt(), 15);
     QCOMPARE(win->property("contentWidth").toInt(), 696);
     QCOMPARE(win->height(), win->property("idealHeight").toInt());
     QCOMPARE(win->property("rawIdealHeight").toInt(), 772);
-    QVERIFY(win->property("idealHeight").toInt() <= 772 && win->property("idealHeight").toInt() >= 360);
+    QVERIFY(win->property("idealHeight").toInt() <= 772 && win->property("idealHeight").toInt() >= 226);
 
     win->show();
     QCoreApplication::processEvents();
@@ -1556,6 +1561,10 @@ void AntigravityHubTests::v250TableColumnsFixedGeometryInvariants() {
     // Exact arithmetic base sum check: 24 + 24 + 74 + 128 + 182 + 182 + 60 == 674 (+ 22px overhead = 696px)
     const int baseColumnWidth = 24 + 24 + 74 + 128 + 182 + 182 + 60;
     QCOMPARE(baseColumnWidth, 674);
+
+    // Verify v4.3.1 paging (20 per page) and adaptive scrollbar (shows when > 15 accounts)
+    QVERIFY2(content.contains(QStringLiteral("pageSize: 20")), "AccountListView.qml must enforce 20 accounts per page");
+    QVERIFY2(content.contains(QStringLiteral("shouldShowScrollBar")), "AccountListView.qml must contain shouldShowScrollBar guard");
 
     // Verify interactive & collision-prevention guards in AccountListView.qml
     QVERIFY2(content.contains(QStringLiteral("isRowHovered")), "Combined row hover guard isRowHovered missing");
@@ -2451,6 +2460,121 @@ void AntigravityHubTests::v430RegionRestrictionUnlockAndPaginationInvariants() {
 
     if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
     else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir);
+}
+
+void AntigravityHubTests::v431AdaptiveHeightAndScrollbarInvariants() {
+    // 1. 验证 Main.qml 中 1 到 15 个账号的高度梯队与超 15 个封顶几何
+    const QString prevHubDir = qEnvironmentVariable("ANTIGRAVITY_HUB_DIR");
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QDir(tempDir.path()).mkpath("data");
+
+    // Case A: 1 个账号，验证最矮极限尺寸 226px
+    QJsonObject accs1;
+    QJsonObject a1;
+    a1["email"] = "single@example.com";
+    a1["tier"] = "PAID_PRO";
+    a1["has_5h"] = true;
+    accs1["single@example.com"] = a1;
+
+    QJsonObject doc1;
+    doc1["active_email"] = "single@example.com";
+    doc1["accounts"] = accs1;
+
+    QFile f1(tempDir.filePath("data/accounts_hub.json"));
+    QVERIFY(f1.open(QIODevice::WriteOnly));
+    f1.write(QJsonDocument(doc1).toJson());
+    f1.close();
+
+    qputenv("ANTIGRAVITY_HUB_DIR", tempDir.path().toLocal8Bit());
+
+    QQmlEngine engine1;
+    engine1.addImageProvider(QStringLiteral("icons"), new IconProvider());
+    Theme theme1(tempDir.path());
+    Translator trans1(tempDir.filePath("lang"), ":/i18n");
+    BackendController backend1;
+    AccountModel model1;
+    AccountFilterProxyModel proxy1;
+    proxy1.setSourceModel(&model1);
+
+    QQmlContext *ctx1 = engine1.rootContext();
+    ctx1->setContextProperty(QStringLiteral("theme"), &theme1);
+    ctx1->setContextProperty(QStringLiteral("translator"), &trans1);
+    ctx1->setContextProperty(QStringLiteral("backend"), &backend1);
+    ctx1->setContextProperty(QStringLiteral("backendController"), &backend1);
+    ctx1->setContextProperty(QStringLiteral("accountModel"), &model1);
+    ctx1->setContextProperty(QStringLiteral("proxyModel"), &proxy1);
+    ctx1->setContextProperty(QStringLiteral("accountFilterProxyModel"), &proxy1);
+
+    QQmlComponent comp1(&engine1, QUrl(QStringLiteral("qrc:/Main.qml")));
+    QVERIFY2(!comp1.isError(), qPrintable(comp1.errorString()));
+    QScopedPointer<QObject> root1(comp1.create());
+    QVERIFY(root1 != nullptr);
+
+    QQuickWindow *win1 = qobject_cast<QQuickWindow*>(root1.data());
+    QVERIFY(win1 != nullptr);
+    QCOMPARE(win1->property("minimumWidth").toInt(), 720);
+    QCOMPARE(win1->property("minimumHeight").toInt(), 226);
+    QCOMPARE(win1->property("minAdaptiveRowCount").toInt(), 1);
+    QCOMPARE(win1->property("maxAdaptiveRowCount").toInt(), 15);
+    QCOMPARE(win1->property("currentAccountCount").toInt(), 1);
+    QCOMPARE(win1->property("adaptiveRowCount").toInt(), 1);
+    QCOMPARE(win1->property("rawIdealHeight").toInt(), 226);
+    QCOMPARE(win1->height(), 226);
+
+    // Case B: 20 个账号（单页上限），验证 15 行高度封顶（814px）与滚动条激活
+    QJsonObject accs20;
+    for (int i = 1; i <= 20; ++i) {
+        QJsonObject a;
+        const QString em = QStringLiteral("acc%1@example.com").arg(i);
+        a["email"] = em;
+        a["tier"] = (i <= 3) ? QStringLiteral("PAID_PRO") : QStringLiteral("FREE");
+        a["has_5h"] = (i <= 3);
+        accs20[em] = a;
+    }
+    QJsonObject doc20;
+    doc20["active_email"] = "acc1@example.com";
+    doc20["accounts"] = accs20;
+
+    QFile f20(tempDir.filePath("data/accounts_hub.json"));
+    QVERIFY(f20.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f20.write(QJsonDocument(doc20).toJson());
+    f20.close();
+
+    QQmlEngine engine20;
+    engine20.addImageProvider(QStringLiteral("icons"), new IconProvider());
+    Theme theme20(tempDir.path());
+    Translator trans20(tempDir.filePath("lang"), ":/i18n");
+    BackendController backend20;
+    AccountModel model20;
+    AccountFilterProxyModel proxy20;
+    proxy20.setSourceModel(&model20);
+
+    QQmlContext *ctx20 = engine20.rootContext();
+    ctx20->setContextProperty(QStringLiteral("theme"), &theme20);
+    ctx20->setContextProperty(QStringLiteral("translator"), &trans20);
+    ctx20->setContextProperty(QStringLiteral("backend"), &backend20);
+    ctx20->setContextProperty(QStringLiteral("backendController"), &backend20);
+    ctx20->setContextProperty(QStringLiteral("accountModel"), &model20);
+    ctx20->setContextProperty(QStringLiteral("proxyModel"), &proxy20);
+    ctx20->setContextProperty(QStringLiteral("accountFilterProxyModel"), &proxy20);
+
+    QQmlComponent comp20(&engine20, QUrl(QStringLiteral("qrc:/Main.qml")));
+    QVERIFY2(!comp20.isError(), qPrintable(comp20.errorString()));
+    QScopedPointer<QObject> root20(comp20.create());
+    QVERIFY(root20 != nullptr);
+
+    QQuickWindow *win20 = qobject_cast<QQuickWindow*>(root20.data());
+    QVERIFY(win20 != nullptr);
+    QCOMPARE(win20->property("currentAccountCount").toInt(), 20);
+    // 高度上限锁定为 15 行 (rawIdealHeight = 184 + 15 * 42 = 814)
+    QCOMPARE(win20->property("adaptiveRowCount").toInt(), 15);
+    QCOMPARE(win20->property("rawIdealHeight").toInt(), 814);
+    QCOMPARE(win20->height(), win20->property("idealHeight").toInt());
+    QVERIFY(win20->property("idealHeight").toInt() <= 814 && win20->property("idealHeight").toInt() >= 226);
+
+    if (prevHubDir.isEmpty()) qunsetenv("ANTIGRAVITY_HUB_DIR");
+    else qputenv("ANTIGRAVITY_HUB_DIR", prevHubDir.toLocal8Bit());
 }
 
 void AntigravityHubTests::cleanupTestCase() {
